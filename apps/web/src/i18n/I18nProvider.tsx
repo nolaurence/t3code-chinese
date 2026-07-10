@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import {
+  DEFAULT_LOCALE,
   readLocalePreference,
   syncDocumentLocale,
   writeLocalePreference,
@@ -23,7 +24,13 @@ export interface I18nValue {
   readonly t: Translate;
 }
 
-const I18nContext = createContext<I18nValue | null>(null);
+const DEFAULT_I18N_VALUE: I18nValue = {
+  locale: DEFAULT_LOCALE,
+  setLocale: () => undefined,
+  t: createTranslator(DEFAULT_LOCALE),
+};
+
+const I18nContext = createContext<I18nValue>(DEFAULT_I18N_VALUE);
 
 export function I18nProvider({
   children,
@@ -53,9 +60,5 @@ export function I18nProvider({
 }
 
 export function useI18n(): I18nValue {
-  const value = use(I18nContext);
-  if (!value) {
-    throw new Error("useI18n must be used inside I18nProvider");
-  }
-  return value;
+  return use(I18nContext);
 }

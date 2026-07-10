@@ -9,6 +9,12 @@ function CancelLabel() {
 }
 
 describe("I18nProvider", () => {
+  it("falls back to English when rendered outside the application provider", () => {
+    const markup = renderToStaticMarkup(<CancelLabel />);
+
+    expect(markup).toContain("Cancel");
+  });
+
   it("renders English messages", () => {
     const markup = renderToStaticMarkup(
       <I18nProvider initialLocale="en">

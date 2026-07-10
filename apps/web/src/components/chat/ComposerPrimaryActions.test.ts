@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vite-plus/test";
+import { createTranslator } from "../../i18n/messages";
 
 import { formatPendingPrimaryActionLabel } from "./ComposerPrimaryActions";
 
 describe("formatPendingPrimaryActionLabel", () => {
+  it("returns a Simplified Chinese pending action label", () => {
+    expect(
+      formatPendingPrimaryActionLabel(
+        {
+          compact: false,
+          isLastQuestion: true,
+          isResponding: false,
+          questionIndex: 1,
+        },
+        createTranslator("zh-CN"),
+      ),
+    ).toBe("提交答案");
+  });
+
   it("returns 'Submitting...' while responding", () => {
     expect(
       formatPendingPrimaryActionLabel({

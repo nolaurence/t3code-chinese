@@ -125,31 +125,34 @@ import { formatProviderSkillDisplayName } from "../../providerSkillPresentation"
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
+import { useI18n } from "../../i18n/I18nProvider";
+import type { Translate } from "../../i18n/messages";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 
-const runtimeModeConfig: Record<
-  RuntimeMode,
-  { label: string; description: string; icon: LucideIcon }
-> = {
-  "approval-required": {
-    label: "Supervised",
-    description: "Ask before commands and file changes.",
-    icon: LockIcon,
-  },
-  "auto-accept-edits": {
-    label: "Auto-accept edits",
-    description: "Auto-approve edits, ask before other actions.",
-    icon: PenLineIcon,
-  },
-  "full-access": {
-    label: "Full access",
-    description: "Allow commands and edits without prompts.",
-    icon: LockOpenIcon,
-  },
-};
+function getRuntimeModeConfig(
+  t: Translate,
+): Record<RuntimeMode, { label: string; description: string; icon: LucideIcon }> {
+  return {
+    "approval-required": {
+      label: t("chat.access.supervised"),
+      description: t("chat.runtime.supervisedDescription"),
+      icon: LockIcon,
+    },
+    "auto-accept-edits": {
+      label: t("chat.access.autoAccept"),
+      description: t("chat.runtime.autoAcceptDescription"),
+      icon: PenLineIcon,
+    },
+    "full-access": {
+      label: t("chat.access.full"),
+      description: t("chat.runtime.fullDescription"),
+      icon: LockOpenIcon,
+    },
+  };
+}
 
-const runtimeModeOptions = Object.keys(runtimeModeConfig) as RuntimeMode[];
+const runtimeModeOptions: RuntimeMode[] = ["approval-required", "auto-accept-edits", "full-access"];
 const COMPOSER_FLOATING_LAYER_SELECTOR = [
   '[data-slot="popover-popup"]',
   '[data-slot="menu-popup"]',
@@ -201,15 +204,17 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
   onRuntimeModeChange: (mode: RuntimeMode) => void;
   onTogglePlanSidebar: () => void;
 }) {
+  const { t } = useI18n();
+  const runtimeModeConfig = getRuntimeModeConfig(t);
   const runtimeModeOption = runtimeModeConfig[props.runtimeMode];
   const RuntimeModeIcon = runtimeModeOption.icon;
   const interactionModeTooltip =
     props.interactionMode === "plan"
-      ? "Plan mode — click to return to normal build mode"
-      : "Default mode — click to enter plan mode";
+      ? t("chat.interaction.planTooltip")
+      : t("chat.interaction.buildTooltip");
   const planSidebarTooltip = props.planSidebarOpen
-    ? `Hide ${props.planSidebarLabel.toLowerCase()} sidebar`
-    : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`;
+    ? t("chat.sidebar.hide", { label: props.planSidebarLabel.toLowerCase() })
+    : t("chat.sidebar.show", { label: props.planSidebarLabel.toLowerCase() });
 
   const interactionModeToggle = props.showInteractionModeToggle ? (
     <>
@@ -238,7 +243,9 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
             <BotIcon />
           )}
           <span className="sr-only sm:not-sr-only">
-            {props.interactionMode === "plan" ? "Plan" : "Build"}
+            {props.interactionMode === "plan"
+              ? t("chat.interaction.plan")
+              : t("chat.interaction.build")}
           </span>
         </TooltipTrigger>
         <TooltipPopup side="top">{interactionModeTooltip}</TooltipPopup>
@@ -261,7 +268,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
                 variant="ghost"
                 size="sm"
                 className="font-medium"
-                aria-label="Runtime mode"
+                aria-label={t("chat.composer.runtimeMode")}
               />
             }
           >
@@ -351,6 +358,7 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
   onInterrupt: () => void;
   onImplementPlanInNewThread: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <>
       {props.activeContextWindow ? (
@@ -360,7 +368,9 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
         />
       ) : null}
       {props.isPreparingWorktree ? (
-        <span className="text-muted-foreground/70 text-xs">Preparing worktree...</span>
+        <span className="text-muted-foreground/70 text-xs">
+          {t("chat.composer.preparingWorktree")}
+        </span>
       ) : null}
       <ComposerPrimaryActions
         compact={props.compact}
@@ -541,6 +551,7 @@ export interface ChatComposerProps {
 // --------------------------------------------------------------------------
 
 export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps) {
+  const { t } = useI18n();
   const {
     composerDraftTarget,
     environmentId,
@@ -1136,7 +1147,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
   const collapsedComposerPrimaryActionDisabled =
     phase === "running" || isSendBusy || isConnecting || !composerSendState.hasSendableContent;
-  const collapsedComposerPrimaryActionLabel = "Send message";
+  const collapsedComposerPrimaryActionLabel = t("chat.action.send");
   const showMobilePendingAnswerActions =
     isMobileViewport && !isComposerCollapsedMobile && pendingPrimaryAction !== null;
 
@@ -1765,7 +1776,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     if (pendingUserInputs.length > 0) {
       toastManager.add({
         type: "error",
-        title: "Attach images after answering plan questions.",
+        title: t("chat.composer.attachAfterPlan"),
       });
       return;
     }
@@ -1774,7 +1785,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     let error: string | null = null;
     for (const file of files) {
       if (!file.type.startsWith("image/")) {
-        error = `Unsupported file type for '${file.name}'. Please attach image files only.`;
+        error = t("chat.composer.unsupportedImage", { name: file.name });
         continue;
       }
       if (file.size > PROVIDER_SEND_TURN_MAX_IMAGE_BYTES) {
@@ -1782,7 +1793,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         continue;
       }
       if (nextImageCount >= PROVIDER_SEND_TURN_MAX_ATTACHMENTS) {
-        error = `You can attach up to ${PROVIDER_SEND_TURN_MAX_ATTACHMENTS} images per message.`;
+        error = t("chat.composer.maxImages", { count: PROVIDER_SEND_TURN_MAX_ATTACHMENTS });
         break;
       }
       const previewUrl = URL.createObjectURL(file);
@@ -2162,9 +2173,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     )}
                     onPointerDown={(event) => event.preventDefault()}
                     onClick={expandMobileComposer}
-                    aria-label="Write custom answer"
+                    aria-label={t("chat.composer.writeAnswer")}
                   >
-                    {activePendingProgress?.customAnswer || "Write custom answer"}
+                    {activePendingProgress?.customAnswer || t("chat.composer.writeAnswer")}
                   </button>
                   {activePendingProgress?.activeQuestion?.multiSelect ? (
                     <ComposerPrimaryActions
@@ -2201,12 +2212,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 )}
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={expandMobileComposer}
-                aria-label="Expand composer"
+                aria-label={t("chat.composer.expand")}
               >
                 {activePendingProgress
-                  ? activePendingProgress.customAnswer ||
-                    "Type your own answer, or leave this blank to use the selected option"
-                  : prompt.trim() || "Ask anything..."}
+                  ? activePendingProgress.customAnswer || t("chat.composer.answerPlaceholder")
+                  : prompt.trim() || t("chat.composer.askAnything")}
               </button>
               <button
                 type="button"
@@ -2404,18 +2414,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 onPaste={onComposerPaste}
                 placeholder={
                   isComposerApprovalState
-                    ? (activePendingApproval?.detail ?? "Resolve this approval request to continue")
+                    ? (activePendingApproval?.detail ?? t("chat.composer.resolveApproval"))
                     : activePendingProgress
-                      ? "Type your own answer, or leave this blank to use the selected option"
+                      ? t("chat.composer.answerPlaceholder")
                       : showPlanFollowUpPrompt && activeProposedPlan
-                        ? "Add feedback to refine the plan, or leave this blank to implement it"
+                        ? t("chat.composer.planFeedback")
                         : environmentUnavailable
                           ? `${environmentUnavailable.label}: ${connectionStatusText(
                               environmentUnavailable.connection,
                             )}`
                           : phase === "disconnected"
-                            ? "Ask for follow-up changes or attach images"
-                            : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                            ? t("chat.composer.followUp")
+                            : t("chat.composer.defaultPlaceholder")
                 }
                 disabled={
                   isConnecting ||
