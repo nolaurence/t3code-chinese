@@ -1,5 +1,7 @@
 # T3 Code
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 T3 Code is a minimal web GUI for coding agents (currently Codex, Claude, Cursor, and OpenCode, more coming soon).
 
 ## Installation
@@ -23,7 +25,7 @@ Tip: Use `npx t3@latest --help` for the full CLI reference.
 
 ### Desktop app
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
+Install the latest version of the desktop app from [GitHub Releases](https://github.com/nolaurence/t3code-chinese/releases), or from your favorite package registry:
 
 #### Windows (`winget`)
 
