@@ -18,10 +18,7 @@ import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
 } from "@t3tools/contracts";
-import {
-  connectionStatusText,
-  type EnvironmentConnectionPresentation,
-} from "@t3tools/client-runtime/connection";
+import type { EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
 import {
@@ -125,7 +122,7 @@ import { formatProviderSkillDisplayName } from "../../providerSkillPresentation"
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
-import { useI18n } from "../../i18n/I18nProvider";
+import { localizedConnectionStatusText, useI18n } from "../../i18n";
 import type { Translate } from "../../i18n/messages";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
@@ -2336,7 +2333,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                           <button
                             type="button"
                             className="h-full w-full cursor-zoom-in"
-                            aria-label={`Preview ${image.name}`}
+                            aria-label={t("chat.image.previewNamed", { name: image.name })}
                             onClick={() => {
                               const preview = buildExpandedImagePreview(composerImages, image.id);
                               if (!preview) return;
@@ -2360,7 +2357,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                               render={
                                 <span
                                   role="img"
-                                  aria-label="Draft attachment may not persist"
+                                  aria-label={t("chat.attachment.mayNotPersist")}
                                   className="absolute left-1 top-1 inline-flex items-center justify-center rounded bg-background/85 p-0.5 text-amber-600"
                                 >
                                   <CircleAlertIcon className="size-3" />
@@ -2371,8 +2368,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                               side="top"
                               className="max-w-64 whitespace-normal leading-tight"
                             >
-                              Draft attachment could not be saved locally and may be lost on
-                              navigation.
+                              {t("chat.attachment.mayNotPersistDescription")}
                             </TooltipPopup>
                           </Tooltip>
                         )}
@@ -2381,7 +2377,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                           size="icon-xs"
                           className="absolute right-1 top-1 bg-background/80 hover:bg-background/90"
                           onClick={() => removeComposerImage(image.id)}
-                          aria-label={`Remove ${image.name}`}
+                          aria-label={t("chat.attachment.removeNamed", { name: image.name })}
                         >
                           <XIcon />
                         </Button>
@@ -2420,8 +2416,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : showPlanFollowUpPrompt && activeProposedPlan
                         ? t("chat.composer.planFeedback")
                         : environmentUnavailable
-                          ? `${environmentUnavailable.label}: ${connectionStatusText(
+                          ? `${environmentUnavailable.label}: ${localizedConnectionStatusText(
                               environmentUnavailable.connection,
+                              t,
                             )}`
                           : phase === "disconnected"
                             ? t("chat.composer.followUp")

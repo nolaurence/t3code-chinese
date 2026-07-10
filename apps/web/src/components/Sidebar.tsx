@@ -2353,18 +2353,20 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       >
         <DialogPopup className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Rename project</DialogTitle>
+            <DialogTitle>{t("sidebar.renameProject")}</DialogTitle>
             <DialogDescription>
               {projectRenameTarget
-                ? `Update the title for ${projectRenameTarget.workspaceRoot}.`
-                : "Update the project title."}
+                ? t("sidebar.renameProjectPath", { path: projectRenameTarget.workspaceRoot })
+                : t("sidebar.renameProjectDescription")}
             </DialogDescription>
           </DialogHeader>
           <DialogPanel className="space-y-4">
             <div className="grid gap-1.5">
-              <span className="text-xs font-medium text-foreground">Project title</span>
+              <span className="text-xs font-medium text-foreground">
+                {t("sidebar.projectTitle")}
+              </span>
               <Input
-                aria-label="Project title"
+                aria-label={t("sidebar.projectTitle")}
                 value={projectRenameTitle}
                 onChange={(event) => setProjectRenameTitle(event.target.value)}
                 onKeyDown={(event) => {
@@ -2377,15 +2379,17 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             </div>
             {projectRenameTarget?.environmentLabel ? (
               <p className="text-xs text-muted-foreground">
-                Environment: {projectRenameTarget.environmentLabel}
+                {t("sidebar.environmentLabel", {
+                  environment: projectRenameTarget.environmentLabel,
+                })}
               </p>
             ) : null}
           </DialogPanel>
           <DialogFooter>
             <Button variant="outline" onClick={closeProjectRenameDialog}>
-              Cancel
+              {t("common.cancel")}
             </Button>
-            <Button onClick={() => void submitProjectRename()}>Save</Button>
+            <Button onClick={() => void submitProjectRename()}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>
@@ -2400,16 +2404,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       >
         <DialogPopup className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Project grouping</DialogTitle>
+            <DialogTitle>{t("sidebar.projectGrouping")}</DialogTitle>
             <DialogDescription>
               {projectGroupingTarget
-                ? `Choose how ${projectGroupingTarget.workspaceRoot} should be grouped in the sidebar.`
-                : "Choose how this project should be grouped in the sidebar."}
+                ? t("sidebar.projectGroupingPath", { path: projectGroupingTarget.workspaceRoot })
+                : t("sidebar.projectGroupingDescription")}
             </DialogDescription>
           </DialogHeader>
           <DialogPanel className="space-y-4">
             <div className="grid gap-1.5">
-              <span className="text-xs font-medium text-foreground">Grouping rule</span>
+              <span className="text-xs font-medium text-foreground">
+                {t("sidebar.groupingRule")}
+              </span>
               <Select
                 value={projectGroupingSelection}
                 onValueChange={(value) => {
@@ -2423,7 +2429,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                   }
                 }}
               >
-                <SelectTrigger className="w-full" aria-label="Project grouping rule">
+                <SelectTrigger className="w-full" aria-label={t("sidebar.groupingRule")}>
                   <SelectValue>
                     {projectGroupingSelection === "inherit"
                       ? `Use global default (${PROJECT_GROUPING_MODE_LABELS[projectGroupingSettings.sidebarProjectGroupingMode]})`
@@ -2432,7 +2438,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   <SelectItem hideIndicator value="inherit">
-                    Use global default
+                    {t("sidebar.useGlobalDefault")}
                   </SelectItem>
                   <SelectItem hideIndicator value="repository">
                     {PROJECT_GROUPING_MODE_LABELS.repository}
@@ -2454,9 +2460,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           </DialogPanel>
           <DialogFooter>
             <Button variant="outline" onClick={closeProjectGroupingDialog}>
-              Cancel
+              {t("common.cancel")}
             </Button>
-            <Button onClick={saveProjectGroupingPreference}>Save</Button>
+            <Button onClick={saveProjectGroupingPreference}>{t("common.save")}</Button>
           </DialogFooter>
         </DialogPopup>
       </Dialog>

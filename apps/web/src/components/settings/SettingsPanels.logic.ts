@@ -6,7 +6,9 @@ import type {
   UnifiedSettings,
 } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
-import type { Translate } from "../../i18n/messages";
+import { createTranslator, type Translate } from "../../i18n/messages";
+
+const DEFAULT_TRANSLATE = createTranslator("en");
 
 export function getThemeOptions(t: Translate) {
   return [
@@ -43,33 +45,38 @@ function collapseOtelSignalsUrl(input: {
   return `${tracesBase}/{traces,metrics}`;
 }
 
-export function formatDiagnosticsDescription(input: {
-  readonly localTracingEnabled: boolean;
-  readonly otlpTracesEnabled: boolean;
-  readonly otlpTracesUrl?: string | undefined;
-  readonly otlpMetricsEnabled: boolean;
-  readonly otlpMetricsUrl?: string | undefined;
-}): string {
-  const mode = input.localTracingEnabled ? "Local trace file" : "Terminal logs only";
+export function formatDiagnosticsDescription(
+  input: {
+    readonly localTracingEnabled: boolean;
+    readonly otlpTracesEnabled: boolean;
+    readonly otlpTracesUrl?: string | undefined;
+    readonly otlpMetricsEnabled: boolean;
+    readonly otlpMetricsUrl?: string | undefined;
+  },
+  t: Translate = DEFAULT_TRANSLATE,
+): string {
+  const mode = input.localTracingEnabled
+    ? t("settings.diagnostics.localTrace")
+    : t("settings.diagnostics.terminalLogs");
   const tracesUrl = input.otlpTracesEnabled ? input.otlpTracesUrl : undefined;
   const metricsUrl = input.otlpMetricsEnabled ? input.otlpMetricsUrl : undefined;
 
   if (tracesUrl && metricsUrl) {
     const collapsedUrl = collapseOtelSignalsUrl({ tracesUrl, metricsUrl });
     return collapsedUrl
-      ? `${mode}. Exporting OTEL to ${collapsedUrl}.`
-      : `${mode}. Exporting OTEL traces to ${tracesUrl} and metrics to ${metricsUrl}.`;
+      ? t("settings.diagnostics.exportCombined", { mode, url: collapsedUrl })
+      : t("settings.diagnostics.exportSeparate", { mode, tracesUrl, metricsUrl });
   }
 
   if (tracesUrl) {
-    return `${mode}. Exporting OTEL traces to ${tracesUrl}.`;
+    return t("settings.diagnostics.exportTraces", { mode, url: tracesUrl });
   }
 
   if (metricsUrl) {
-    return `${mode}. Exporting OTEL metrics to ${metricsUrl}.`;
+    return t("settings.diagnostics.exportMetrics", { mode, url: metricsUrl });
   }
 
-  return `${mode}.`;
+  return t("settings.diagnostics.modeOnly", { mode });
 }
 
 export function buildProviderInstanceUpdatePatch(input: {

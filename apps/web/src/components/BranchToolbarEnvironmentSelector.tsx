@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { useI18n } from "../i18n";
 
 interface BranchToolbarEnvironmentSelectorProps {
   envLocked: boolean;
@@ -26,6 +27,7 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
   availableEnvironments,
   onEnvironmentChange,
 }: BranchToolbarEnvironmentSelectorProps) {
+  const { t } = useI18n();
   const activeEnvironment = useMemo(() => {
     return availableEnvironments.find((env) => env.environmentId === environmentId) ?? null;
   }, [availableEnvironments, environmentId]);
@@ -47,7 +49,7 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
         ) : (
           <CloudIcon className="size-3" />
         )}
-        {activeEnvironment?.label ?? "Run on"}
+        {activeEnvironment?.label ?? t("branch.runOn")}
       </span>
     );
   }
@@ -59,7 +61,12 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
       onValueChange={(value) => onEnvironmentChange(value as EnvironmentId)}
       items={environmentItems}
     >
-      <SelectTrigger variant="ghost" size="xs" className="font-medium" aria-label="Run on">
+      <SelectTrigger
+        variant="ghost"
+        size="xs"
+        className="font-medium"
+        aria-label={t("branch.runOn")}
+      >
         {activeEnvironment?.isPrimary ? (
           <MonitorIcon className="size-3" />
         ) : (
@@ -69,7 +76,7 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
       </SelectTrigger>
       <SelectPopup>
         <SelectGroup>
-          <SelectGroupLabel>Run on</SelectGroupLabel>
+          <SelectGroupLabel>{t("branch.runOn")}</SelectGroupLabel>
           {availableEnvironments.map((env) => (
             <SelectItem key={env.environmentId} value={env.environmentId}>
               <span className="inline-flex items-center gap-1.5">

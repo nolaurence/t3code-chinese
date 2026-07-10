@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import { createTranslator } from "../../i18n";
 
 import {
   buildKeybindingRows,
@@ -8,6 +9,7 @@ import {
   commandLabel,
   keybindingConflictLabels,
   keybindingFromKeyboardEvent,
+  localizedCommandLabel,
   parseWhenExpressionDraft,
   shortcutToKeybindingInput,
   unknownWhenVariables,
@@ -123,6 +125,14 @@ describe("KeybindingsSettings.logic", () => {
   it("formats static and project script command labels", () => {
     expect(commandLabel("commandPalette.toggle")).toBe("Command Palette: Toggle");
     expect(commandLabel("script.setup-db.run")).toBe("Run Script: Setup Db");
+  });
+
+  it("localizes command labels without changing command identifiers", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(localizedCommandLabel("terminal.toggle", t)).toBe("终端：切换");
+    expect(localizedCommandLabel("thread.jump.3", t)).toBe("任务：跳转到第 3 项");
+    expect(localizedCommandLabel("script.setup-db.run", t)).toBe("运行脚本：Setup Db");
   });
 
   it("builds known when variable options from defaults without frontend labels", () => {

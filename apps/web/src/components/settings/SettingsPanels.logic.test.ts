@@ -62,6 +62,23 @@ describe("formatDiagnosticsDescription", () => {
       }),
     ).toBe("Local trace file.");
   });
+
+  it("localizes the diagnostics summary while preserving endpoint URLs", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(
+      formatDiagnosticsDescription(
+        {
+          localTracingEnabled: true,
+          otlpTracesEnabled: true,
+          otlpTracesUrl: "http://localhost:4318/v1/traces",
+          otlpMetricsEnabled: true,
+          otlpMetricsUrl: "http://localhost:4318/v1/metrics",
+        },
+        t,
+      ),
+    ).toBe("本地 Trace 文件。正在将 OTEL 导出到 http://localhost:4318/v1/{traces,metrics}。");
+  });
 });
 
 describe("buildProviderInstanceUpdatePatch", () => {

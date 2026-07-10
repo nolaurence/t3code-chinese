@@ -57,6 +57,7 @@ import {
 } from "./ui/combobox";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { useI18n, type Translate } from "../i18n";
 
 interface BranchToolbarBranchSelectorProps {
   className?: string;
@@ -73,21 +74,24 @@ interface BranchToolbarBranchSelectorProps {
   onComposerFocusRequest?: () => void;
 }
 
-function toBranchActionErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "An error occurred.";
+function toBranchActionErrorMessage(error: unknown, t: Translate): string {
+  return error instanceof Error ? error.message : t("common.errorGeneric");
 }
 
-function getBranchTriggerLabel(input: {
-  activeWorktreePath: string | null;
-  effectiveEnvMode: "local" | "worktree";
-  resolvedActiveBranch: string | null;
-}): string {
+function getBranchTriggerLabel(
+  input: {
+    activeWorktreePath: string | null;
+    effectiveEnvMode: "local" | "worktree";
+    resolvedActiveBranch: string | null;
+  },
+  t: Translate,
+): string {
   const { activeWorktreePath, effectiveEnvMode, resolvedActiveBranch } = input;
   if (!resolvedActiveBranch) {
-    return "Select ref";
+    return t("branch.selectRef");
   }
   if (effectiveEnvMode === "worktree" && !activeWorktreePath) {
-    return `From ${resolvedActiveBranch}`;
+    return t("branch.fromRef", { ref: resolvedActiveBranch });
   }
   return resolvedActiveBranch;
 }
@@ -106,6 +110,7 @@ export function BranchToolbarBranchSelector({
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
 }: BranchToolbarBranchSelectorProps) {
+  const { t } = useI18n();
   const startFromOriginSwitchId = useId();
   const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, "thread session stop");
   const updateThreadMetadata = useAtomCommand(
@@ -379,7 +384,7 @@ export function BranchToolbarBranchSelector({
           stackedThreadToast({
             type: "error",
             title: "Failed to switch ref.",
-            description: toBranchActionErrorMessage(squashAtomCommandFailure(checkoutResult)),
+            description: toBranchActionErrorMessage(squashAtomCommandFailure(checkoutResult), t),
           }),
         );
       }
@@ -415,7 +420,10 @@ export function BranchToolbarBranchSelector({
           stackedThreadToast({
             type: "error",
             title: "Failed to create and switch ref.",
-            description: toBranchActionErrorMessage(squashAtomCommandFailure(createBranchResult)),
+            description: toBranchActionErrorMessage(
+              squashAtomCommandFailure(createBranchResult),
+              t,
+            ),
           }),
         );
       }
@@ -525,11 +533,14 @@ export function BranchToolbarBranchSelector({
     maybeFetchNextBranchPage();
   }, [refs.length, maybeFetchNextBranchPage]);
 
-  const triggerLabel = getBranchTriggerLabel({
-    activeWorktreePath,
-    effectiveEnvMode,
-    resolvedActiveBranch,
-  });
+  const triggerLabel = getBranchTriggerLabel(
+    {
+      activeWorktreePath,
+      effectiveEnvMode,
+      resolvedActiveBranch,
+    },
+    t,
+  );
 
   // PR pill shown next to the branch selector when the active branch has one.
   const branchPr = resolveThreadPr(resolvedActiveBranch, branchStatusQuery.data ?? null);
@@ -679,7 +690,7 @@ export function BranchToolbarBranchSelector({
             <ComboboxInput
               className="[&_input]:h-6.5 [&_input]:ps-5 [&_input]:font-sans [&_input]:leading-6.5"
               inputClassName="rounded-none bg-transparent text-sm"
-              placeholder="Search refs..."
+              placeholder={t("diff.searchRefs")}
               showTrigger={false}
               size="sm"
               unstyled
@@ -689,7 +700,7 @@ export function BranchToolbarBranchSelector({
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ComboboxEmpty>No refs found.</ComboboxEmpty>
+          <ComboboxEmpty>{t("branch.noRefs")}</ComboboxEmpty>
           <div className="relative min-h-0 w-full max-h-56 flex-1 overflow-hidden">
             <ComboboxListVirtualized className="size-full min-w-0 p-0">
               <LegendList<string>
@@ -738,21 +749,20 @@ export function BranchToolbarBranchSelector({
                   >
                     <span className="flex min-w-0 items-center gap-1.5 font-medium text-muted-foreground">
                       <RefreshCwIcon aria-hidden="true" className="size-3 shrink-0 opacity-70" />
-                      <span className="truncate">Start from origin</span>
+                      <span className="truncate">{t("branch.startOrigin")}</span>
                     </span>
                     <Switch
                       id={startFromOriginSwitchId}
                       checked={startFromOrigin}
                       className="[--thumb-size:--spacing(3.5)]"
-                      aria-label="Start worktree from origin"
+                      aria-label={t("branch.startOriginAria")}
                       onCheckedChange={(checked) => onStartFromOriginChange(Boolean(checked))}
                     />
                   </label>
                 }
               />
               <TooltipPopup side="top" className="max-w-72 whitespace-normal leading-tight">
-                Creates the worktree from the latest matching branch on origin instead of your local
-                branch.
+                {t("branch.startOriginDescription")}
               </TooltipPopup>
             </Tooltip>
           ) : null}

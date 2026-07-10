@@ -11,6 +11,7 @@ import {
 } from "@t3tools/shared/keybindings";
 
 import { isMacPlatform } from "../../lib/utils";
+import type { MessageKey, Translate } from "../../i18n";
 
 export type KeybindingSource = "Default" | "Custom" | "Project";
 
@@ -138,6 +139,7 @@ function conflictsWithWhen(leftWhen: string, rightWhen: string): boolean {
 export function keybindingConflictLabels(
   rows: ReadonlyArray<KeybindingRow>,
   input: { readonly rowId: string; readonly key: string; readonly when: string },
+  formatCommand: (command: KeybindingCommand) => string = commandLabel,
 ): ReadonlyArray<string> {
   if (input.key.trim().length === 0) return [];
   const conflicts: Array<string> = [];
@@ -147,7 +149,7 @@ export function keybindingConflictLabels(
       candidate.key === input.key &&
       conflictsWithWhen(candidate.when, input.when)
     ) {
-      conflicts.push(commandLabel(candidate.command));
+      conflicts.push(formatCommand(candidate.command));
     }
   }
   return [...new Set(conflicts)].toSorted();
@@ -273,6 +275,52 @@ export function commandLabel(command: KeybindingCommand): string {
     return `Run Script: ${titleCaseCommandSegment(raw.slice("script.".length, -".run".length))}`;
   }
   return raw.split(".").map(titleCaseCommandSegment).join(": ");
+}
+
+const STATIC_COMMAND_LABEL_KEYS = {
+  "sidebar.toggle": "keybindings.command.sidebarToggle",
+  "terminal.toggle": "keybindings.command.terminalToggle",
+  "terminal.split": "keybindings.command.terminalSplit",
+  "terminal.splitVertical": "keybindings.command.terminalSplitVertical",
+  "terminal.new": "keybindings.command.terminalNew",
+  "terminal.close": "keybindings.command.terminalClose",
+  "rightPanel.toggle": "keybindings.command.rightPanelToggle",
+  "diff.toggle": "keybindings.command.diffToggle",
+  "preview.toggle": "keybindings.command.previewToggle",
+  "preview.refresh": "keybindings.command.previewRefresh",
+  "preview.focusUrl": "keybindings.command.previewFocusUrl",
+  "preview.zoomIn": "keybindings.command.previewZoomIn",
+  "preview.zoomOut": "keybindings.command.previewZoomOut",
+  "preview.resetZoom": "keybindings.command.previewResetZoom",
+  "commandPalette.toggle": "keybindings.command.commandPaletteToggle",
+  "chat.new": "keybindings.command.chatNew",
+  "chat.newLocal": "keybindings.command.chatNewLocal",
+  "modelPicker.toggle": "keybindings.command.modelPickerToggle",
+  "editor.openFavorite": "keybindings.command.editorOpenFavorite",
+  "thread.previous": "keybindings.command.threadPrevious",
+  "thread.next": "keybindings.command.threadNext",
+} as const satisfies Readonly<Record<string, MessageKey>>;
+
+export function localizedCommandLabel(command: KeybindingCommand, t: Translate): string {
+  const raw = String(command);
+  if (raw.startsWith("script.") && raw.endsWith(".run")) {
+    return t("keybindings.command.runScript", {
+      name: titleCaseCommandSegment(raw.slice("script.".length, -".run".length)),
+    });
+  }
+
+  const threadJumpMatch = /^thread\.jump\.(\d+)$/u.exec(raw);
+  if (threadJumpMatch) {
+    return t("keybindings.command.threadJump", { number: threadJumpMatch[1] ?? "" });
+  }
+
+  const modelJumpMatch = /^modelPicker\.jump\.(\d+)$/u.exec(raw);
+  if (modelJumpMatch) {
+    return t("keybindings.command.modelPickerJump", { number: modelJumpMatch[1] ?? "" });
+  }
+
+  const key = STATIC_COMMAND_LABEL_KEYS[raw as keyof typeof STATIC_COMMAND_LABEL_KEYS];
+  return key ? t(key) : commandLabel(command);
 }
 
 function titleCaseCommandSegment(segment: string): string {

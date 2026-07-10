@@ -20,10 +20,13 @@ import {
   type TerminalContextDraft,
 } from "../lib/terminalContext";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
+import { createTranslator, type Translate } from "../i18n/messages";
 
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "t3code:last-invoked-script-by-project";
 export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
 export const MAX_HIDDEN_MOUNTED_PREVIEW_THREADS = 3;
+
+const DEFAULT_TRANSLATE = createTranslator("en");
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
 
@@ -31,12 +34,13 @@ export function buildLocalDraftThread(
   threadId: ThreadId,
   draftThread: DraftThreadState,
   fallbackModelSelection: ModelSelection,
+  t: Translate = DEFAULT_TRANSLATE,
 ): Thread {
   return {
     id: threadId,
     environmentId: draftThread.environmentId,
     projectId: draftThread.projectId,
-    title: "New thread",
+    title: t("sidebar.newThread"),
     modelSelection: fallbackModelSelection,
     runtimeMode: draftThread.runtimeMode,
     interactionMode: draftThread.interactionMode,
@@ -245,18 +249,18 @@ export function deriveComposerSendState(options: {
 export function buildExpiredTerminalContextToastCopy(
   expiredTerminalContextCount: number,
   variant: "omitted" | "empty",
+  t: Translate = DEFAULT_TRANSLATE,
 ): { title: string; description: string } {
   const count = Math.max(1, Math.floor(expiredTerminalContextCount));
-  const noun = count === 1 ? "Expired terminal context" : "Expired terminal contexts";
   if (variant === "empty") {
     return {
-      title: `${noun} won't be sent`,
-      description: "Remove it or re-add it to include terminal output.",
+      title: t(count === 1 ? "chat.terminalContext.emptyOne" : "chat.terminalContext.emptyMany"),
+      description: t("chat.terminalContext.emptyDescription"),
     };
   }
   return {
-    title: `${noun} omitted from message`,
-    description: "Re-add it if you want that terminal output included.",
+    title: t(count === 1 ? "chat.terminalContext.omittedOne" : "chat.terminalContext.omittedMany"),
+    description: t("chat.terminalContext.omittedDescription"),
   };
 }
 
@@ -301,13 +305,18 @@ export function deriveLockedProvider(input: {
   return narrowedThreadProvider ?? narrowedSelectedProvider ?? null;
 }
 
-export function getStartedThreadModelChangeBlockReason(input: {
-  providers: ReadonlyArray<Pick<ServerProvider, "instanceId" | "requiresNewThreadForModelChange">>;
-  hasStartedSession: boolean;
-  currentModelSelection: ModelSelection;
-  currentProviderInstanceId?: ModelSelection["instanceId"] | null | undefined;
-  nextModelSelection: ModelSelection;
-}): { title: string; description: string } | null {
+export function getStartedThreadModelChangeBlockReason(
+  input: {
+    providers: ReadonlyArray<
+      Pick<ServerProvider, "instanceId" | "requiresNewThreadForModelChange">
+    >;
+    hasStartedSession: boolean;
+    currentModelSelection: ModelSelection;
+    currentProviderInstanceId?: ModelSelection["instanceId"] | null | undefined;
+    nextModelSelection: ModelSelection;
+  },
+  t: Translate = DEFAULT_TRANSLATE,
+): { title: string; description: string } | null {
   if (!input.hasStartedSession) {
     return null;
   }
@@ -334,8 +343,8 @@ export function getStartedThreadModelChangeBlockReason(input: {
     return null;
   }
   return {
-    title: "Start a new chat to change models",
-    description: "This provider does not allow switching models after a conversation has started.",
+    title: t("chat.modelChange.newThread"),
+    description: t("chat.modelChange.newThreadDescription"),
   };
 }
 

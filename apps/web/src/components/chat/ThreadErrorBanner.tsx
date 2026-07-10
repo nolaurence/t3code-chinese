@@ -3,6 +3,7 @@ import { Alert, AlertAction, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { CircleAlertIcon, XIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { useI18n } from "../../i18n";
 
 export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   error,
@@ -11,6 +12,7 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   error: string | null;
   onDismiss?: () => void;
 }) {
+  const { t } = useI18n();
   if (!error) return null;
   return (
     <div className="pt-3 mx-auto max-w-3xl">
@@ -26,7 +28,12 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
         </Tooltip>
         {onDismiss && (
           <AlertAction>
-            <Button variant="ghost" size="icon-xs" aria-label="Dismiss error" onClick={onDismiss}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t("chat.error.dismiss")}
+              onClick={onDismiss}
+            >
               <XIcon className="text-destructive" />
             </Button>
           </AlertAction>

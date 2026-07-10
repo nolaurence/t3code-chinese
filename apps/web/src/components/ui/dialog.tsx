@@ -5,6 +5,7 @@ import { XIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import { useI18n } from "~/i18n";
 
 const DialogCreateHandle = DialogPrimitive.createHandle;
 
@@ -57,6 +58,7 @@ function DialogPopup({
   showCloseButton?: boolean;
   bottomStickOnMobile?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <DialogPortal>
       <DialogBackdrop />
@@ -76,7 +78,7 @@ function DialogPopup({
           {children}
           {showCloseButton && (
             <DialogPrimitive.Close
-              aria-label="Close"
+              aria-label={t("common.close")}
               className="absolute end-2 top-2"
               render={<Button size="icon" variant="ghost" />}
             >

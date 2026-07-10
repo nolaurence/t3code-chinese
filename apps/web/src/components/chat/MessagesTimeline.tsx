@@ -39,6 +39,7 @@ import {
   resolveFileDiffPath,
 } from "../../lib/diffRendering";
 import ChatMarkdown from "../ChatMarkdown";
+import { useI18n } from "../../i18n";
 import {
   BotIcon,
   CheckIcon,
@@ -930,6 +931,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
 }
 
 function RevertUserMessageButton({ messageId }: { messageId: MessageId }) {
+  const { t } = useI18n();
   const ctx = use(TimelineRowCtx);
   const activity = use(TimelineRowActivityCtx);
 
@@ -943,13 +945,13 @@ function RevertUserMessageButton({ messageId }: { messageId: MessageId }) {
             variant="ghost"
             disabled={activity.isRevertingCheckpoint || activity.isWorking}
             onClick={() => ctx.onRevertUserMessage(messageId)}
-            aria-label="Revert to this message"
+            aria-label={t("chat.revertMessage")}
           />
         }
       >
         <Undo2Icon className="size-3" />
       </TooltipTrigger>
-      <TooltipPopup side="top">Revert to this message</TooltipPopup>
+      <TooltipPopup side="top">{t("chat.revertMessage")}</TooltipPopup>
     </Tooltip>
   );
 }
@@ -1901,6 +1903,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
   workspaceRoot: string | undefined;
 }) {
+  const { t } = useI18n();
   const { workEntry, workspaceRoot } = props;
   const activity = use(TimelineRowActivityCtx);
   const [expanded, setExpanded] = useState(false);
@@ -2004,13 +2007,13 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                     render={
                       <span
                         className="flex size-4 items-center justify-center"
-                        aria-label="Tool call failed"
+                        aria-label={t("chat.toolFailed")}
                       />
                     }
                   >
                     <XIcon className="block size-3 shrink-0 text-destructive" aria-hidden />
                   </TooltipTrigger>
-                  <TooltipPopup>Failed</TooltipPopup>
+                  <TooltipPopup>{t("chat.failed")}</TooltipPopup>
                 </Tooltip>
               ) : showSuccessIndicator ? (
                 <Tooltip>
@@ -2025,7 +2028,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                       />
                     </span>
                   </TooltipTrigger>
-                  <TooltipPopup>Completed</TooltipPopup>
+                  <TooltipPopup>{t("chat.completed")}</TooltipPopup>
                 </Tooltip>
               ) : showNeutralIndicator ? (
                 <Tooltip>
@@ -2034,7 +2037,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                   >
                     <MinusIcon className="block size-3 shrink-0 opacity-70" aria-hidden />
                   </TooltipTrigger>
-                  <TooltipPopup>Empty</TooltipPopup>
+                  <TooltipPopup>{t("chat.empty")}</TooltipPopup>
                 </Tooltip>
               ) : null}
             </span>

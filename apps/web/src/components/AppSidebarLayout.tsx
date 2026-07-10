@@ -5,6 +5,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { isElectron } from "../env";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { isMacPlatform } from "../lib/utils";
+import { useI18n } from "../i18n";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import ThreadSidebar from "./Sidebar";
 import { Sidebar, SidebarProvider, SidebarRail, SidebarTrigger, useSidebar } from "./ui/sidebar";
@@ -16,6 +17,7 @@ const THREAD_MAIN_CONTENT_MIN_WIDTH = 40 * 16;
 const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "90px";
 
 function SidebarControl() {
+  const { t } = useI18n();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { toggleSidebar } = useSidebar();
   const shortcutLabel = shortcutLabelForCommand(keybindings, "sidebar.toggle");
@@ -42,11 +44,12 @@ function SidebarControl() {
       <Tooltip>
         <TooltipTrigger
           render={
-            <SidebarTrigger className="pointer-events-auto" aria-label="Toggle main sidebar" />
+            <SidebarTrigger className="pointer-events-auto" aria-label={t("sidebar.toggle")} />
           }
         />
         <TooltipPopup side="bottom">
-          Toggle main sidebar{shortcutLabel ? ` (${shortcutLabel})` : ""}
+          {t("sidebar.toggle")}
+          {shortcutLabel ? ` (${shortcutLabel})` : ""}
         </TooltipPopup>
       </Tooltip>
     </div>

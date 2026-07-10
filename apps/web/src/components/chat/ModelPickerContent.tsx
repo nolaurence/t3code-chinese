@@ -28,6 +28,7 @@ import {
   type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
+import { useI18n } from "../../i18n";
 
 type ModelPickerItem = {
   slug: string;
@@ -89,6 +90,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
+  const { t } = useI18n();
   const {
     keybindings: providedKeybindings,
     modelOptionsByInstance,
@@ -581,7 +583,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                   ref={searchInputRef}
                   className="[&_input]:h-6.5 [&_input]:font-sans [&_input]:leading-6.5"
                   inputClassName="rounded-none bg-transparent text-sm"
-                  placeholder="Search models..."
+                  placeholder={t("chat.model.search")}
                   showTrigger={false}
                   startAddon={
                     <SearchIcon className="-translate-x-0.5 size-4 shrink-0 text-muted-foreground/55" />

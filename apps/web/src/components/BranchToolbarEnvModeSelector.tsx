@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { useI18n } from "../i18n";
 
 interface BranchToolbarEnvModeSelectorProps {
   envLocked: boolean;
@@ -30,6 +31,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   activeWorktreePath,
   onEnvModeChange,
 }: BranchToolbarEnvModeSelectorProps) {
+  const { t } = useI18n();
   const envModeItems = useMemo(
     () => [
       { value: "local", label: resolveCurrentWorkspaceLabel(activeWorktreePath) },
@@ -63,7 +65,12 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
       onValueChange={(value) => onEnvModeChange(value as EnvMode)}
       items={envModeItems}
     >
-      <SelectTrigger variant="ghost" size="xs" className="font-medium" aria-label="Workspace">
+      <SelectTrigger
+        variant="ghost"
+        size="xs"
+        className="font-medium"
+        aria-label={t("branch.workspace")}
+      >
         {effectiveEnvMode === "worktree" ? (
           <FolderGit2Icon className="size-3" />
         ) : activeWorktreePath ? (
@@ -75,7 +82,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
       </SelectTrigger>
       <SelectPopup>
         <SelectGroup>
-          <SelectGroupLabel>Workspace</SelectGroupLabel>
+          <SelectGroupLabel>{t("branch.workspace")}</SelectGroupLabel>
           <SelectItem value="local">
             <span className="inline-flex items-center gap-1.5">
               {activeWorktreePath ? (

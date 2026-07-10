@@ -16,13 +16,15 @@ import {
 } from "../desktopUpdate.logic";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { useI18n } from "../../i18n";
 
 export function SidebarUpdatePill() {
+  const { t } = useI18n();
   const state = useDesktopUpdateState();
   const [dismissed, setDismissed] = useState(false);
 
   const visible = isElectron && shouldShowDesktopUpdateButton(state) && !dismissed;
-  const tooltip = state ? getDesktopUpdateButtonTooltip(state) : "Update available";
+  const tooltip = state ? getDesktopUpdateButtonTooltip(state) : t("update.available");
   const disabled = isDesktopUpdateButtonDisabled(state);
   const action = state ? resolveDesktopUpdateButtonAction(state) : "none";
 
@@ -42,8 +44,8 @@ export function SidebarUpdatePill() {
           if (result.completed) {
             toastManager.add({
               type: "success",
-              title: "Update downloaded",
-              description: "Restart the app from the update button to install it.",
+              title: t("update.downloaded"),
+              description: t("update.downloadedDescription"),
             });
           }
           if (!shouldToastDesktopUpdateActionResult(result)) return;
@@ -52,7 +54,7 @@ export function SidebarUpdatePill() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not download update",
+              title: t("update.downloadFailed"),
               description: actionError,
             }),
           );
@@ -61,8 +63,8 @@ export function SidebarUpdatePill() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not start update download",
-              description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              title: t("update.downloadStartFailed"),
+              description: error instanceof Error ? error.message : t("common.errorGeneric"),
             }),
           );
         });
@@ -81,7 +83,7 @@ export function SidebarUpdatePill() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not install update",
+              title: t("update.installFailed"),
               description: actionError,
             }),
           );
@@ -90,13 +92,13 @@ export function SidebarUpdatePill() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not install update",
-              description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              title: t("update.installFailed"),
+              description: error instanceof Error ? error.message : t("common.errorGeneric"),
             }),
           );
         });
     }
-  }, [action, disabled, state]);
+  }, [action, disabled, state, t]);
 
   if (!visible && !showArm64Warning) return null;
 
@@ -105,7 +107,7 @@ export function SidebarUpdatePill() {
       {showArm64Warning && arm64Description && (
         <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8 text-xs">
           <TriangleAlertIcon />
-          <AlertTitle>Intel build on Apple Silicon</AlertTitle>
+          <AlertTitle>{t("update.intelOnApple")}</AlertTitle>
           <AlertDescription>{arm64Description}</AlertDescription>
         </Alert>
       )}
@@ -130,13 +132,13 @@ export function SidebarUpdatePill() {
                   {action === "install" ? (
                     <>
                       <RotateCwIcon className="size-3.5" />
-                      <span>Restart to update</span>
+                      <span>{t("update.restart")}</span>
                     </>
                   ) : state?.status === "downloading" ? (
                     <>
                       <DownloadIcon className="size-3.5" />
                       <span>
-                        Downloading
+                        {t("update.downloading")}
                         {typeof state.downloadPercent === "number"
                           ? ` (${Math.floor(state.downloadPercent)}%)`
                           : "…"}
@@ -145,7 +147,7 @@ export function SidebarUpdatePill() {
                   ) : (
                     <>
                       <DownloadIcon className="size-3.5" />
-                      <span>Update available</span>
+                      <span>{t("update.available")}</span>
                     </>
                   )}
                 </button>
@@ -159,7 +161,7 @@ export function SidebarUpdatePill() {
                 render={
                   <button
                     type="button"
-                    aria-label="Dismiss update"
+                    aria-label={t("update.dismiss")}
                     className="mr-1 inline-flex size-5 items-center justify-center rounded-md text-primary/60 transition-colors hover:text-primary"
                     onClick={() => setDismissed(true)}
                   >
@@ -167,7 +169,7 @@ export function SidebarUpdatePill() {
                   </button>
                 }
               />
-              <TooltipPopup side="top">Dismiss until next launch</TooltipPopup>
+              <TooltipPopup side="top">{t("update.dismissLaunch")}</TooltipPopup>
             </Tooltip>
           )}
         </div>

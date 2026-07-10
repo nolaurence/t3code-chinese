@@ -37,6 +37,7 @@ import { previewEnvironment } from "~/state/preview";
 import { projectEnvironment } from "~/state/projects";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
+import { useI18n } from "~/i18n";
 
 import FileBrowserPanel from "./FileBrowserPanel";
 import {
@@ -620,6 +621,7 @@ export default function FilePreviewPanel({
   onOpenFile,
   onPendingChange,
 }: FilePreviewPanelProps) {
+  const { t } = useI18n();
   const { resolvedTheme } = useTheme();
   const wordWrap = useClientSettings((settings) => settings.wordWrap);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -687,12 +689,12 @@ export default function FilePreviewPanel({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Unable to open file in browser",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: t("files.openBrowserFailed"),
+          description: error instanceof Error ? error.message : t("common.errorGeneric"),
         }),
       );
     })();
-  }, [absolutePath, createAssetUrl, environmentHttpBaseUrl, openPreview, threadRef]);
+  }, [absolutePath, createAssetUrl, environmentHttpBaseUrl, openPreview, t, threadRef]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -753,7 +755,11 @@ export default function FilePreviewPanel({
                         revealRequestId: pressed ? revealRequestId : null,
                       });
                     }}
-                    aria-label={renderMarkdown ? "Show markdown source" : "Show rendered markdown"}
+                    aria-label={
+                      renderMarkdown
+                        ? t("files.showMarkdownSource")
+                        : t("files.showRenderedMarkdown")
+                    }
                     variant="ghost"
                     size="sm"
                   >
@@ -762,7 +768,7 @@ export default function FilePreviewPanel({
                 }
               />
               <TooltipPopup>
-                {renderMarkdown ? "Show markdown source" : "Show rendered markdown"}
+                {renderMarkdown ? t("files.showMarkdownSource") : t("files.showRenderedMarkdown")}
               </TooltipPopup>
             </Tooltip>
           ) : null}
@@ -774,7 +780,7 @@ export default function FilePreviewPanel({
                     className="shrink-0"
                     pressed={false}
                     onPressedChange={handleOpenInBrowser}
-                    aria-label="Open file in preview browser"
+                    aria-label={t("files.openPreview")}
                     variant="ghost"
                     size="sm"
                   >
@@ -782,7 +788,7 @@ export default function FilePreviewPanel({
                   </Toggle>
                 }
               />
-              <TooltipPopup>Open file in preview browser</TooltipPopup>
+              <TooltipPopup>{t("files.openPreview")}</TooltipPopup>
             </Tooltip>
           ) : null}
           <Tooltip>
@@ -792,7 +798,7 @@ export default function FilePreviewPanel({
                   className="shrink-0"
                   pressed={explorerOpen}
                   onPressedChange={toggleExplorer}
-                  aria-label={explorerOpen ? "Hide file explorer" : "Show file explorer"}
+                  aria-label={explorerOpen ? t("files.hideExplorer") : t("files.showExplorer")}
                   variant="ghost"
                   size="sm"
                 >
@@ -801,14 +807,14 @@ export default function FilePreviewPanel({
               }
             />
             <TooltipPopup>
-              {explorerOpen ? "Hide file explorer" : "Show file explorer"}
+              {explorerOpen ? t("files.hideExplorer") : t("files.showExplorer")}
             </TooltipPopup>
           </Tooltip>
         </div>
       ) : null}
       {relativePath && file.data?.truncated ? (
         <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/8 px-3 py-1.5 text-[11px] text-amber-700 dark:text-amber-300">
-          Preview limited to the first 1 MB of a {file.data.byteLength.toLocaleString()} byte file.
+          {t("files.previewLimited", { bytes: file.data.byteLength.toLocaleString() })}
         </div>
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">

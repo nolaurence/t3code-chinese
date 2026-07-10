@@ -15,3 +15,4 @@ export {
   type TranslateValues,
 } from "./messages";
 export { I18nProvider, useI18n, type I18nValue } from "./I18nProvider";
+export { localizedConnectionStatusText } from "./connection";

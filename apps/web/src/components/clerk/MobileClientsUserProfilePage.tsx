@@ -12,6 +12,7 @@ import {
   mobileClientPlatformLabel,
   mobileClientUpdatedAtLabel,
 } from "./MobileClientsUserProfilePage.logic";
+import { useI18n } from "../../i18n";
 
 const MOBILE_CLIENT_SKELETON_ROWS = ["primary", "secondary"] as const;
 
@@ -22,14 +23,16 @@ function MobileClientStatusBadge({
   readonly enabled: boolean;
   readonly label: string;
 }) {
+  const { t } = useI18n();
   return (
     <Badge variant={enabled ? "success" : "outline"}>
-      {label}: {enabled ? "On" : "Off"}
+      {label}: {enabled ? t("auth.on") : t("auth.off")}
     </Badge>
   );
 }
 
 function MobileClientRow({ device }: { readonly device: RelayClientDeviceRecord }) {
+  const { t } = useI18n();
   return (
     <li className="rounded-xl border bg-card p-4 text-card-foreground shadow-sm/4">
       <div className="flex items-start gap-3">
@@ -49,11 +52,11 @@ function MobileClientRow({ device }: { readonly device: RelayClientDeviceRecord 
           <div className="mt-3 flex flex-wrap gap-1.5">
             <MobileClientStatusBadge
               enabled={device.notifications.enabled}
-              label="Push notifications"
+              label={t("auth.pushNotifications")}
             />
             <MobileClientStatusBadge
               enabled={device.liveActivities.enabled}
-              label="Live Activities"
+              label={t("auth.liveActivities")}
             />
           </div>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground/80">
@@ -66,8 +69,9 @@ function MobileClientRow({ device }: { readonly device: RelayClientDeviceRecord 
 }
 
 function MobileClientsSkeleton() {
+  const { t } = useI18n();
   return (
-    <div aria-label="Loading mobile clients" className="space-y-3" role="status">
+    <div aria-label={t("auth.mobileClientsLoading")} className="space-y-3" role="status">
       {MOBILE_CLIENT_SKELETON_ROWS.map((row) => (
         <div key={row} className="rounded-xl border p-4">
           <div className="flex gap-3">
@@ -88,23 +92,22 @@ function MobileClientsSkeleton() {
 }
 
 function EmptyMobileClients() {
+  const { t } = useI18n();
   return (
     <Empty className="min-h-72 rounded-xl border border-dashed bg-muted/15">
       <EmptyMedia variant="icon">
         <SmartphoneIcon />
       </EmptyMedia>
       <EmptyHeader>
-        <EmptyTitle>No mobile clients</EmptyTitle>
-        <EmptyDescription>
-          Sign in to T3 Code on your iPhone to register it for push notifications and Live
-          Activities.
-        </EmptyDescription>
+        <EmptyTitle>{t("auth.noMobileClients")}</EmptyTitle>
+        <EmptyDescription>{t("auth.noMobileClientsDescription")}</EmptyDescription>
       </EmptyHeader>
     </Empty>
   );
 }
 
 export function MobileClientsUserProfilePage() {
+  const { t } = useI18n();
   const devicesState = useManagedRelayDevices();
   const devices = devicesState.data ?? [];
   const isInitialLoad =
@@ -115,10 +118,8 @@ export function MobileClientsUserProfilePage() {
     <div className="flex min-h-[30rem] w-full flex-col bg-background text-foreground">
       <header className="flex flex-col gap-4 border-b px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold tracking-[-0.01em]">Mobile clients</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Devices registered to receive T3 Connect activity from your environments.
-          </p>
+          <h2 className="text-base font-semibold tracking-[-0.01em]">{t("auth.mobileClients")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t("auth.mobileClientsDescription")}</p>
         </div>
         <Button
           size="sm"
@@ -127,7 +128,7 @@ export function MobileClientsUserProfilePage() {
           onClick={devicesState.refresh}
         >
           <RefreshCwIcon className={cn("size-3.5", devicesState.isPending && "animate-spin")} />
-          Refresh
+          {t("preview.refresh")}
         </Button>
       </header>
 
@@ -139,12 +140,12 @@ export function MobileClientsUserProfilePage() {
           >
             <div>
               <p className="font-medium text-destructive-foreground">
-                Could not load mobile clients
+                {t("auth.mobileClientsLoadFailed")}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">{devicesState.error}</p>
             </div>
             <Button size="xs" variant="outline" onClick={devicesState.refresh}>
-              Try again
+              {t("rootError.tryAgain")}
             </Button>
           </div>
         ) : null}

@@ -1,4 +1,7 @@
 import type { ServerProvider, ServerProviderVersionAdvisory } from "@t3tools/contracts";
+import { createTranslator, type Translate } from "../../i18n";
+
+const english = createTranslator("en");
 
 /**
  * Visual treatment for each server-reported provider status. Centralized so
@@ -28,55 +31,55 @@ export type ProviderStatusKey = keyof typeof PROVIDER_STATUS_STYLES;
  * state — which happens before the first probe or when an instance names a
  * driver this build does not ship.
  */
-export function getProviderSummary(provider: ServerProvider | undefined) {
+export function getProviderSummary(provider: ServerProvider | undefined, t: Translate = english) {
   if (!provider) {
     return {
-      headline: "Checking provider status",
-      detail: "Waiting for the server to report installation and authentication details.",
+      headline: t("providers.status.checking"),
+      detail: t("providers.status.checkingDetail"),
     };
   }
   if (!provider.enabled) {
     return {
-      headline: "Disabled",
-      detail:
-        provider.message ?? "This provider is installed but disabled for new sessions in T3 Code.",
+      headline: t("providers.status.disabled"),
+      detail: provider.message ?? t("providers.status.disabledDetail"),
     };
   }
   if (!provider.installed) {
     return {
-      headline: "Not found",
-      detail: provider.message ?? "CLI not detected on PATH.",
+      headline: t("providers.status.notFound"),
+      detail: provider.message ?? t("providers.status.notFoundDetail"),
     };
   }
   if (provider.auth.status === "authenticated") {
     const authLabel = provider.auth.label ?? provider.auth.type;
     return {
-      headline: authLabel ? `Authenticated · ${authLabel}` : "Authenticated",
+      headline: authLabel
+        ? t("providers.status.authenticatedDetail", { label: authLabel })
+        : t("providers.status.authenticated"),
       detail: provider.message ?? null,
     };
   }
   if (provider.auth.status === "unauthenticated") {
     return {
-      headline: "Not authenticated",
+      headline: t("providers.status.unauthenticated"),
       detail: provider.message ?? null,
     };
   }
   if (provider.status === "warning") {
     return {
-      headline: "Needs attention",
-      detail:
-        provider.message ?? "The provider is installed, but the server could not fully verify it.",
+      headline: t("providers.status.attention"),
+      detail: provider.message ?? t("providers.status.attentionDetail"),
     };
   }
   if (provider.status === "error") {
     return {
-      headline: "Unavailable",
-      detail: provider.message ?? "The provider failed its startup checks.",
+      headline: t("providers.status.unavailable"),
+      detail: provider.message ?? t("providers.status.unavailableDetail"),
     };
   }
   return {
-    headline: "Available",
-    detail: provider.message ?? "Installed and ready, but authentication could not be verified.",
+    headline: t("providers.status.available"),
+    detail: provider.message ?? t("providers.status.availableDetail"),
   };
 }
 
@@ -92,6 +95,7 @@ export function getProviderVersionLabel(version: string | null | undefined) {
 
 export function getProviderVersionAdvisoryPresentation(
   advisory: ServerProviderVersionAdvisory | undefined,
+  t: Translate = english,
 ): {
   readonly detail: string;
   readonly updateCommand: string | null;
@@ -101,7 +105,6 @@ export function getProviderVersionAdvisoryPresentation(
     return null;
   }
 
-  const label = "Update available";
   const version = advisory.latestVersion;
   const versionLabel = getProviderVersionLabel(version);
 
@@ -109,8 +112,8 @@ export function getProviderVersionAdvisoryPresentation(
     detail:
       advisory.message ??
       (versionLabel
-        ? `${label}: install ${versionLabel}.`
-        : `${label}: install the latest provider version.`),
+        ? t("providers.status.installVersion", { version: versionLabel })
+        : t("providers.status.installLatest")),
     updateCommand: advisory.updateCommand,
     emphasis: "normal" as const,
   };

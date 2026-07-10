@@ -36,6 +36,7 @@ import {
   MenuTrigger,
 } from "./ui/menu";
 import { Separator } from "./ui/separator";
+import { useI18n } from "../i18n";
 
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
@@ -77,6 +78,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
   activeWorktreePath,
   onEnvModeChange,
 }: MobileRunContextSelectorProps) {
+  const { t } = useI18n();
   const activeEnvironment = useMemo(
     () => availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null,
     [availableEnvironments, environmentId],
@@ -108,7 +110,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
     <>
       {icon}
       <span className="min-w-0 truncate">
-        {showEnvironmentPicker ? (activeEnvironment?.label ?? "Run on") : workspaceLabel}
+        {showEnvironmentPicker ? (activeEnvironment?.label ?? t("branch.runOn")) : workspaceLabel}
       </span>
     </>
   );
@@ -134,7 +136,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
         {showEnvironmentPicker && availableEnvironments && onEnvironmentChange ? (
           <>
             <MenuGroup>
-              <MenuGroupLabel>Run on</MenuGroupLabel>
+              <MenuGroupLabel>{t("branch.runOn")}</MenuGroupLabel>
               <MenuRadioGroup
                 value={environmentId}
                 onValueChange={(value) => onEnvironmentChange(value as EnvironmentId)}
@@ -160,7 +162,7 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
           </>
         ) : null}
         <MenuGroup>
-          <MenuGroupLabel>Workspace</MenuGroupLabel>
+          <MenuGroupLabel>{t("branch.workspace")}</MenuGroupLabel>
           <MenuRadioGroup
             value={effectiveEnvMode}
             onValueChange={(value) => onEnvModeChange(value as EnvMode)}

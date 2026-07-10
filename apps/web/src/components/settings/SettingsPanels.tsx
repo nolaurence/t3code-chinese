@@ -378,44 +378,46 @@ export function useSettingsRestore(onRestored?: () => void) {
   const changedSettingLabels = useMemo(
     () => [
       ...(!isDefaultLocalePreference(locale) ? [t("settings.language.title")] : []),
-      ...(theme !== "system" ? ["Theme"] : []),
+      ...(theme !== "system" ? [t("settings.theme.title")] : []),
       ...(settings.timestampFormat !== DEFAULT_UNIFIED_SETTINGS.timestampFormat
-        ? ["Time format"]
+        ? [t("settings.time.title")]
         : []),
       ...(settings.sidebarThreadPreviewCount !== DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount
-        ? ["Visible threads"]
+        ? [t("sidebar.visibleThreads")]
         : []),
-      ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? ["Word wrap"] : []),
+      ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap
+        ? [t("settings.wordWrap.title")]
+        : []),
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
-        ? ["Diff whitespace changes"]
+        ? [t("settings.whitespace.resetLabel")]
         : []),
       ...(settings.autoOpenPlanSidebar !== DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar
-        ? ["Auto-open task panel"]
+        ? [t("settings.autoOpen.title")]
         : []),
       ...(settings.enableAssistantStreaming !== DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming
-        ? ["Assistant output"]
+        ? [t("settings.assistantOutput.title")]
         : []),
       ...(Duration.toMillis(settings.automaticGitFetchInterval) !==
       Duration.toMillis(DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval)
-        ? ["Automatic Git fetch interval"]
+        ? [t("sourceControl.fetchInterval")]
         : []),
       ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
-        ? ["New thread mode"]
+        ? [t("settings.newThreads.title")]
         : []),
       ...(settings.newWorktreesStartFromOrigin !==
       DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin
-        ? ["New worktrees start from origin"]
+        ? [t("settings.startOrigin.resetLabel")]
         : []),
       ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
-        ? ["Add project base directory"]
+        ? [t("settings.addProject.resetLabel")]
         : []),
       ...(settings.confirmThreadArchive !== DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive
-        ? ["Archive confirmation"]
+        ? [t("settings.archive.title")]
         : []),
       ...(settings.confirmThreadDelete !== DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete
-        ? ["Delete confirmation"]
+        ? [t("settings.delete.title")]
         : []),
-      ...(isGitWritingModelDirty ? ["Git writing model"] : []),
+      ...(isGitWritingModelDirty ? [t("settings.textGeneration.title")] : []),
     ],
     [
       isGitWritingModelDirty,
@@ -481,13 +483,16 @@ export function GeneralSettingsPanel() {
   const updateSettings = useUpdatePrimarySettings();
   const observability = useAtomValue(primaryServerObservabilityAtom);
   const serverProviders = useAtomValue(primaryServerProvidersAtom);
-  const diagnosticsDescription = formatDiagnosticsDescription({
-    localTracingEnabled: observability?.localTracingEnabled ?? false,
-    otlpTracesEnabled: observability?.otlpTracesEnabled ?? false,
-    otlpTracesUrl: observability?.otlpTracesUrl,
-    otlpMetricsEnabled: observability?.otlpMetricsEnabled ?? false,
-    otlpMetricsUrl: observability?.otlpMetricsUrl,
-  });
+  const diagnosticsDescription = formatDiagnosticsDescription(
+    {
+      localTracingEnabled: observability?.localTracingEnabled ?? false,
+      otlpTracesEnabled: observability?.otlpTracesEnabled ?? false,
+      otlpTracesUrl: observability?.otlpTracesUrl,
+      otlpMetricsEnabled: observability?.otlpMetricsEnabled ?? false,
+      otlpMetricsUrl: observability?.otlpMetricsUrl,
+    },
+    t,
+  );
 
   const textGenerationModelSelection = resolveAppModelSelectionState(settings, serverProviders);
   const textGenInstanceId = textGenerationModelSelection.instanceId;
@@ -984,6 +989,7 @@ export function GeneralSettingsPanel() {
 }
 
 export function ProviderSettingsPanel() {
+  const { t } = useI18n();
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
   const serverProviders = useAtomValue(primaryServerProvidersAtom);
@@ -1083,11 +1089,10 @@ export function ProviderSettingsPanel() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: `Could not update ${PROVIDER_DISPLAY_NAMES[candidate.driver] ?? candidate.driver}`,
-            description:
-              error instanceof Error
-                ? error.message
-                : "The provider update command could not be started.",
+            title: t("providers.updateProviderFailed", {
+              provider: PROVIDER_DISPLAY_NAMES[candidate.driver] ?? candidate.driver,
+            }),
+            description: error instanceof Error ? error.message : t("providers.updateStartFailed"),
           }),
         );
       }
@@ -1100,7 +1105,7 @@ export function ProviderSettingsPanel() {
         return next;
       });
     },
-    [primaryEnvironment, updateProvider],
+    [primaryEnvironment, t, updateProvider],
   );
 
   interface InstanceRow {
@@ -1277,7 +1282,7 @@ export function ProviderSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection
-        title="Providers"
+        title={t("providers.title")}
         headerAction={
           <div className="flex items-center gap-1.5">
             <ProviderLastChecked lastCheckedAt={lastCheckedAt} />
@@ -1289,13 +1294,13 @@ export function ProviderSettingsPanel() {
                     variant="ghost"
                     className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
                     onClick={() => setIsAddInstanceDialogOpen(true)}
-                    aria-label="Add provider instance"
+                    aria-label={t("providers.addInstance")}
                   >
                     <PlusIcon className="size-3" />
                   </Button>
                 }
               />
-              <TooltipPopup side="top">Add provider instance</TooltipPopup>
+              <TooltipPopup side="top">{t("providers.addInstance")}</TooltipPopup>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
@@ -1306,7 +1311,7 @@ export function ProviderSettingsPanel() {
                     className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
                     disabled={isRefreshingProviders}
                     onClick={() => void refreshProviders()}
-                    aria-label="Refresh provider status"
+                    aria-label={t("providers.refreshStatus")}
                   >
                     {isRefreshingProviders ? (
                       <LoaderIcon className="size-3 animate-spin" />
@@ -1316,7 +1321,7 @@ export function ProviderSettingsPanel() {
                   </Button>
                 }
               />
-              <TooltipPopup side="top">Refresh provider status</TooltipPopup>
+              <TooltipPopup side="top">{t("providers.refreshStatus")}</TooltipPopup>
             </Tooltip>
           </div>
         }
@@ -1429,6 +1434,7 @@ export function ProviderSettingsPanel() {
 }
 
 export function ArchivedThreadsPanel() {
+  const { t } = useI18n();
   const projects = useProjects();
   const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
   const environmentIds = useMemo(
@@ -1498,8 +1504,8 @@ export function ArchivedThreadsPanel() {
       if (!api) return;
       const clicked = await api.contextMenu.show(
         [
-          { id: "unarchive", label: "Unarchive" },
-          { id: "delete", label: "Delete", destructive: true },
+          { id: "unarchive", label: t("settings.archived.unarchive") },
+          { id: "delete", label: t("common.delete"), destructive: true },
         ],
         position,
       );
@@ -1513,8 +1519,8 @@ export function ArchivedThreadsPanel() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Failed to unarchive thread",
-              description: error instanceof Error ? error.message : "An error occurred.",
+              title: t("settings.archived.unarchiveFailed"),
+              description: error instanceof Error ? error.message : t("common.errorGeneric"),
             }),
           );
         }
@@ -1530,20 +1536,20 @@ export function ArchivedThreadsPanel() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Failed to delete thread",
-              description: error instanceof Error ? error.message : "An error occurred.",
+              title: t("settings.archived.deleteFailed"),
+              description: error instanceof Error ? error.message : t("common.errorGeneric"),
             }),
           );
         }
       }
     },
-    [confirmAndDeleteThread, refreshArchivedThreads, unarchiveThread],
+    [confirmAndDeleteThread, refreshArchivedThreads, t, unarchiveThread],
   );
 
   return (
     <SettingsPageContainer>
       {archivedGroups.length === 0 ? (
-        <SettingsSection title="Archived threads">
+        <SettingsSection title={t("settings.archived.title")}>
           <SettingsRow
             title={
               <span className="inline-flex items-center gap-2">
@@ -1553,16 +1559,16 @@ export function ArchivedThreadsPanel() {
                   <ArchiveIcon className="size-3.5 text-muted-foreground" />
                 )}
                 {isLoadingArchive
-                  ? "Loading archived threads"
+                  ? t("settings.archived.loading")
                   : archiveError
-                    ? "Could not load archived threads"
-                    : "No archived threads"}
+                    ? t("settings.archived.loadFailed")
+                    : t("settings.archived.empty")}
               </span>
             }
             description={
               isLoadingArchive
-                ? "Checking connected environments."
-                : (archiveError ?? "Archived threads will appear here.")
+                ? t("settings.archived.checking")
+                : (archiveError ?? t("settings.archived.emptyDescription"))
             }
           />
         </SettingsSection>
@@ -1593,9 +1599,9 @@ export function ArchivedThreadsPanel() {
                       toastManager.add(
                         stackedThreadToast({
                           type: "error",
-                          title: "Archived thread action failed",
+                          title: t("settings.archived.actionFailed"),
                           description:
-                            error instanceof Error ? error.message : "An error occurred.",
+                            error instanceof Error ? error.message : t("common.errorGeneric"),
                         }),
                       );
                     }
@@ -1604,9 +1610,10 @@ export function ArchivedThreadsPanel() {
                 title={thread.title}
                 description={
                   <>
-                    Archived {formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt)}
-                    {" \u00b7 Created "}
-                    {formatRelativeTimeLabel(thread.createdAt)}
+                    {t("settings.archived.metadata", {
+                      archived: formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt),
+                      created: formatRelativeTimeLabel(thread.createdAt),
+                    })}
                   </>
                 }
                 control={
@@ -1629,9 +1636,9 @@ export function ArchivedThreadsPanel() {
                           toastManager.add(
                             stackedThreadToast({
                               type: "error",
-                              title: "Failed to unarchive thread",
+                              title: t("settings.archived.unarchiveFailed"),
                               description:
-                                error instanceof Error ? error.message : "An error occurred.",
+                                error instanceof Error ? error.message : t("common.errorGeneric"),
                             }),
                           );
                         }
@@ -1639,7 +1646,7 @@ export function ArchivedThreadsPanel() {
                     }}
                   >
                     <ArchiveX className="size-3.5" />
-                    <span>Unarchive</span>
+                    <span>{t("settings.archived.unarchive")}</span>
                   </Button>
                 }
               />

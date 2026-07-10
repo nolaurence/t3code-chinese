@@ -28,6 +28,7 @@ import {
 } from "../ui/dialog";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
+import { useI18n } from "../../i18n";
 
 /**
  * Post-sign-in onboarding wizard for T3 Connect. Opens on every in-session
@@ -47,6 +48,7 @@ export function ConnectOnboardingDialog() {
 type OnboardingStep = "publish" | "devices";
 
 function ConfiguredConnectOnboardingDialog() {
+  const { t } = useI18n();
   // Mirrors ManagedRelayAuthProvider: a pending Clerk session must not read as
   // signed-out, or its later activation would look like a fresh sign-in.
   const { isLoaded, isSignedIn, userId } = useAuth({ treatPendingAsSignedOut: false });
@@ -200,10 +202,10 @@ function ConfiguredConnectOnboardingDialog() {
     if (!ok) return;
     toastManager.add({
       type: "success",
-      title: "T3 Connect enabled",
+      title: t("cloud.onboarding.enabled"),
       description: exposeEnvironment
-        ? "This environment is available to your other devices through T3 Connect."
-        : "This environment publishes agent activity to your mobile clients.",
+        ? t("cloud.onboarding.environmentAvailable")
+        : t("cloud.onboarding.activityPublished"),
     });
     setStep("devices");
   };
@@ -219,11 +221,8 @@ function ConfiguredConnectOnboardingDialog() {
     >
       <DialogPopup className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Set up T3 Connect</DialogTitle>
-          <DialogDescription>
-            Mesh your devices together — publish this environment and connect the rest, all in one
-            place.
-          </DialogDescription>
+          <DialogTitle>{t("cloud.onboarding.title")}</DialogTitle>
+          <DialogDescription>{t("cloud.onboarding.description")}</DialogDescription>
           {steps.length > 1 ? (
             <OnboardingStepper
               steps={steps}
@@ -253,13 +252,13 @@ function ConfiguredConnectOnboardingDialog() {
               checked={dontShowAgain}
               onCheckedChange={(checked) => setDontShowAgain(checked === true)}
             />
-            Don&apos;t show this again
+            {t("cloud.onboarding.dontShowAgain")}
           </label>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             {step === "publish" ? (
               <>
                 <Button variant="ghost" disabled={isApplying} onClick={() => setStep("devices")}>
-                  Not now
+                  {t("cloud.onboarding.notNow")}
                 </Button>
                 <Button
                   disabled={
@@ -267,12 +266,12 @@ function ConfiguredConnectOnboardingDialog() {
                   }
                   onClick={() => void applyPublishSelection()}
                 >
-                  {isApplying ? "Enabling…" : "Continue"}
+                  {isApplying ? t("cloud.onboarding.enabling") : t("git.continue")}
                 </Button>
               </>
             ) : (
               <Button disabled={isApplying} onClick={complete}>
-                Done
+                {t("git.done")}
               </Button>
             )}
           </div>
@@ -281,11 +280,6 @@ function ConfiguredConnectOnboardingDialog() {
     </Dialog>
   );
 }
-
-const STEP_LABELS: Record<OnboardingStep, string> = {
-  publish: "Publish",
-  devices: "Connect devices",
-};
 
 function OnboardingStepper({
   steps,
@@ -298,6 +292,7 @@ function OnboardingStepper({
   readonly disabled: boolean;
   readonly onStepSelect: (step: OnboardingStep) => void;
 }) {
+  const { t } = useI18n();
   const currentIndex = steps.indexOf(currentStep);
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -330,10 +325,10 @@ function OnboardingStepper({
             {index < currentIndex ? <CheckIcon className="size-3" /> : null}
           </span>
           <span className="text-[10px] font-medium uppercase text-muted-foreground">
-            Step {index + 1}
+            {t("providers.step", { number: index + 1 })}
           </span>
           <span className="truncate text-xs font-semibold text-foreground">
-            {STEP_LABELS[step]}
+            {step === "publish" ? t("cloud.onboarding.publish") : t("cloud.onboarding.devices")}
           </span>
         </button>
       ))}
@@ -356,19 +351,20 @@ function PublishStep({
   readonly onExposeEnvironmentChange: (enabled: boolean) => void;
   readonly onPublishAgentActivityChange: (enabled: boolean) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-3">
       <div className="rounded-lg border">
         <OnboardingToggleRow
-          title="Publish this environment"
-          description="Make this environment available to your other devices through T3 Connect."
+          title={t("cloud.onboarding.publishEnvironment")}
+          description={t("cloud.onboarding.publishEnvironmentDescription")}
           checked={exposeEnvironment}
           disabled={disabled}
           onCheckedChange={onExposeEnvironmentChange}
         />
         <OnboardingToggleRow
-          title="Publish agent activity"
-          description="Send activity from this environment to your mobile clients for push notifications and Live Activities."
+          title={t("cloud.onboarding.publishActivity")}
+          description={t("cloud.onboarding.publishActivityDescription")}
           checked={publishAgentActivity}
           disabled={disabled}
           onCheckedChange={onPublishAgentActivityChange}

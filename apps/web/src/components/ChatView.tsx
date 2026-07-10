@@ -21,10 +21,7 @@ import {
   RuntimeMode,
   TerminalOpenInput,
 } from "@t3tools/contracts";
-import {
-  connectionStatusText,
-  type EnvironmentConnectionPresentation,
-} from "@t3tools/client-runtime/connection";
+import type { EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
 import {
   parseScopedThreadKey,
   scopedThreadKey,
@@ -139,6 +136,7 @@ import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import { ChevronDownIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
 import { cn, randomHex } from "~/lib/utils";
+import { localizedConnectionStatusText, useI18n } from "~/i18n";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { decodeProjectScriptKeybindingRule } from "~/lib/projectScriptKeybindings";
@@ -980,6 +978,7 @@ const PersistentThreadTerminalPanel = memo(function PersistentThreadTerminalPane
 });
 
 function ChatViewContent(props: ChatViewProps) {
+  const { t } = useI18n();
   const {
     environmentId,
     threadId,
@@ -1233,9 +1232,10 @@ function ChatViewContent(props: ChatViewProps) {
               instanceId: ProviderInstanceId.make("codex"),
               model: DEFAULT_MODEL,
             },
+            t,
           )
         : undefined,
-    [draftThread, fallbackDraftProject?.defaultModelSelection, threadId],
+    [draftThread, fallbackDraftProject?.defaultModelSelection, t, threadId],
   );
   const isServerThread = routeKind === "server" && serverThread !== null;
   const activeThread = isServerThread ? serverThread : localDraftThread;
@@ -1451,13 +1451,16 @@ function ChatViewContent(props: ChatViewProps) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not reconnect environment",
-            description: error instanceof Error ? error.message : "Failed to reconnect.",
+            title: t("chat.environment.reconnectFailed"),
+            description:
+              error instanceof Error
+                ? error.message
+                : t("chat.environment.reconnectFailedDescription"),
           }),
         );
       }
     },
-    [retryEnvironment],
+    [retryEnvironment, t],
   );
   const projectGroupingSettings = selectProjectGroupingSettings(settings);
   const logicalProjectEnvironments = useMemo(() => {
@@ -1646,11 +1649,6 @@ function ChatViewContent(props: ChatViewProps) {
     isVersionMismatchDismissed(versionMismatchDismissKey);
   const showVersionMismatchBanner =
     versionMismatch !== null && versionMismatchDismissKey !== null && !versionMismatchDismissed;
-  const hasMultipleRegisteredEnvironments = environments.length > 1;
-  const versionMismatchServerLabel =
-    hasMultipleRegisteredEnvironments && activeThread
-      ? `${environmentById.get(activeThread.environmentId)?.label ?? serverConfig?.environment.label ?? activeThread.environmentId} server`
-      : "server";
   const composerBannerItems = useMemo<ComposerBannerStackItem[]>(() => {
     const items: ComposerBannerStackItem[] = [];
     if (activeEnvironmentUnavailableState) {
@@ -1661,10 +1659,8 @@ function ChatViewContent(props: ChatViewProps) {
         id: `environment-unavailable:${activeEnvironmentUnavailableState.environmentId}`,
         variant: connection.phase === "error" ? "error" : "warning",
         icon: <WifiOffIcon />,
-        title: `${activeEnvironmentUnavailableState.label}: ${connectionStatusText(connection)}`,
-        description:
-          connection.error ??
-          "Reconnect this environment before sending messages or running actions.",
+        title: `${activeEnvironmentUnavailableState.label}: ${localizedConnectionStatusText(connection, t)}`,
+        description: connection.error ?? t("chat.environment.reconnectRequired"),
         actions: (
           <>
             <Button
@@ -1676,14 +1672,16 @@ function ChatViewContent(props: ChatViewProps) {
                 )
               }
             >
-              {isReconnecting ? "Reconnecting..." : "Reconnect"}
+              {isReconnecting
+                ? t("chat.environment.reconnecting")
+                : t("chat.environment.reconnect")}
             </Button>
             <Button
               size="xs"
               variant="outline"
               onClick={() => void navigate({ to: "/settings/connections" })}
             >
-              Connections
+              {t("connections.title")}
             </Button>
           </>
         ),
@@ -1694,14 +1692,12 @@ function ChatViewContent(props: ChatViewProps) {
         id: `version-mismatch:${versionMismatchDismissKey}`,
         variant: "warning",
         icon: <TriangleAlertIcon />,
-        title: "Client and server versions differ",
-        description: (
-          <>
-            Client {versionMismatch.clientVersion} is connected to {versionMismatchServerLabel}{" "}
-            {versionMismatch.serverVersion}. Sync them if RPC calls or reconnects fail.
-          </>
-        ),
-        dismissLabel: "Dismiss version mismatch warning",
+        title: t("connections.versionDriftTitle"),
+        description: t("connections.versionDriftDescription", {
+          client: versionMismatch.clientVersion,
+          server: versionMismatch.serverVersion,
+        }),
+        dismissLabel: t("connections.versionDriftDismiss"),
         onDismiss: () => {
           dismissVersionMismatch(versionMismatchDismissKey);
           setDismissedVersionMismatchKey(versionMismatchDismissKey);
@@ -1714,9 +1710,9 @@ function ChatViewContent(props: ChatViewProps) {
     handleReconnectActiveEnvironment,
     navigate,
     showVersionMismatchBanner,
+    t,
     versionMismatch,
     versionMismatchDismissKey,
-    versionMismatchServerLabel,
   ]);
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
   const unlockedSelectedProvider = resolveSelectableProvider(
@@ -2511,7 +2507,7 @@ function ChatViewContent(props: ChatViewProps) {
           const error = squashAtomCommandFailure(openResult);
           setThreadError(
             activeThreadId,
-            error instanceof Error ? error.message : `Failed to run script "${script.name}".`,
+            error instanceof Error ? error.message : t("scripts.runFailed", { name: script.name }),
           );
         }
         return;
@@ -2529,7 +2525,7 @@ function ChatViewContent(props: ChatViewProps) {
         const error = squashAtomCommandFailure(writeResult);
         setThreadError(
           activeThreadId,
-          error instanceof Error ? error.message : `Failed to run script "${script.name}".`,
+          error instanceof Error ? error.message : t("scripts.runFailed", { name: script.name }),
         );
       }
     },
@@ -2549,6 +2545,7 @@ function ChatViewContent(props: ChatViewProps) {
       activeKnownTerminalIds,
       runningTerminalIds,
       terminalUiState.activeTerminalId,
+      t,
       writeTerminal,
     ],
   );
@@ -2689,21 +2686,21 @@ function ChatViewContent(props: ChatViewProps) {
       if (result._tag === "Success") {
         toastManager.add({
           type: "success",
-          title: `Deleted action "${deletedName ?? "Unknown"}"`,
+          title: t("scripts.deleted", { name: deletedName ?? t("scripts.unknown") }),
         });
       } else if (!isAtomCommandInterrupted(result)) {
         const error = squashAtomCommandFailure(result);
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not delete action",
-            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+            title: t("scripts.deleteFailed"),
+            description: error instanceof Error ? error.message : t("common.errorGeneric"),
           }),
         );
       }
       return result;
     },
-    [activeProject, persistProjectScripts],
+    [activeProject, persistProjectScripts, t],
   );
 
   const handleRuntimeModeChange = useCallback(
@@ -3035,37 +3032,40 @@ function ChatViewContent(props: ChatViewProps) {
     cleanupRightPanelSurfaces(rightPanelState.surfaces);
     useRightPanelStore.getState().closeAllSurfaces(activeThreadRef);
   }, [activeThreadRef, cleanupRightPanelSurfaces, rightPanelState.surfaces]);
-  const copyRightPanelFilePath = useCallback((relativePath: string) => {
-    if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title: "Failed to copy path",
-          description: "Clipboard API unavailable.",
-        }),
-      );
-      return;
-    }
-
-    void navigator.clipboard.writeText(relativePath).then(
-      () => {
-        toastManager.add({
-          type: "success",
-          title: "Path copied",
-          description: relativePath,
-        });
-      },
-      (error) => {
+  const copyRightPanelFilePath = useCallback(
+    (relativePath: string) => {
+      if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Failed to copy path",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: t("panel.copyPathFailed"),
+            description: t("preview.error.clipboardUnavailable"),
           }),
         );
-      },
-    );
-  }, []);
+        return;
+      }
+
+      void navigator.clipboard.writeText(relativePath).then(
+        () => {
+          toastManager.add({
+            type: "success",
+            title: t("panel.pathCopied"),
+            description: relativePath,
+          });
+        },
+        (error) => {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: t("panel.copyPathFailed"),
+              description: error instanceof Error ? error.message : t("common.errorGeneric"),
+            }),
+          );
+        },
+      );
+    },
+    [t],
+  );
   useEffect(
     () =>
       subscribePreviewAction((action) => {
@@ -3824,19 +3824,19 @@ function ChatViewContent(props: ChatViewProps) {
       if (activeEnvironmentUnavailable && activeEnvironmentUnavailableLabel) {
         setThreadError(
           activeThread.id,
-          `Reconnect ${activeEnvironmentUnavailableLabel} before reverting checkpoints.`,
+          t("chat.revert.reconnectFirst", { environment: activeEnvironmentUnavailableLabel }),
         );
         return;
       }
       if (phase === "running" || isSendBusy || isConnecting) {
-        setThreadError(activeThread.id, "Interrupt the current turn before reverting checkpoints.");
+        setThreadError(activeThread.id, t("chat.revert.interruptFirst"));
         return;
       }
       const confirmed = await localApi.dialogs.confirm(
         [
-          `Revert this thread to checkpoint ${turnCount}?`,
-          "This will discard newer messages and turn diffs in this thread.",
-          "This action cannot be undone.",
+          t("chat.revert.confirmTitle", { count: turnCount }),
+          t("chat.revert.confirmDescription"),
+          t("chat.revert.irreversible"),
         ].join("\n"),
       );
       if (!confirmed) {
@@ -3856,7 +3856,7 @@ function ChatViewContent(props: ChatViewProps) {
         const error = squashAtomCommandFailure(result);
         setThreadError(
           activeThread.id,
-          error instanceof Error ? error.message : "Failed to revert thread state.",
+          error instanceof Error ? error.message : t("chat.revert.failed"),
         );
       }
       setIsRevertingCheckpoint(false);
@@ -3872,6 +3872,7 @@ function ChatViewContent(props: ChatViewProps) {
       phase,
       revertThreadCheckpoint,
       setThreadError,
+      t,
     ],
   );
 
@@ -3952,6 +3953,7 @@ function ChatViewContent(props: ChatViewProps) {
         const toastCopy = buildExpiredTerminalContextToastCopy(
           expiredTerminalContextCount,
           "empty",
+          t,
         );
         toastManager.add(
           stackedThreadToast({
@@ -3976,7 +3978,7 @@ function ChatViewContent(props: ChatViewProps) {
     const shouldCreateWorktree =
       isFirstMessage && sendEnvMode === "worktree" && !activeThread.worktreePath;
     if (shouldCreateWorktree && !activeThreadBranch) {
-      setThreadError(threadIdForSend, "Select a base branch before sending in New worktree mode.");
+      setThreadError(threadIdForSend, t("chat.worktree.selectBase"));
       return;
     }
 
@@ -4058,6 +4060,7 @@ function ChatViewContent(props: ChatViewProps) {
       const toastCopy = buildExpiredTerminalContextToastCopy(
         expiredTerminalContextCount,
         "omitted",
+        t,
       );
       toastManager.add(
         stackedThreadToast({
@@ -4081,13 +4084,13 @@ function ChatViewContent(props: ChatViewProps) {
     let titleSeed = trimmed;
     if (!titleSeed) {
       if (firstComposerImageName) {
-        titleSeed = `Image: ${firstComposerImageName}`;
+        titleSeed = t("chat.imageTitle", { name: firstComposerImageName });
       } else if (composerTerminalContextsSnapshot.length > 0) {
         titleSeed = formatTerminalContextLabel(composerTerminalContextsSnapshot[0]!);
       } else if (composerElementContextsSnapshot.length > 0) {
         titleSeed = formatElementContextLabel(composerElementContextsSnapshot[0]!);
       } else {
-        titleSeed = "New thread";
+        titleSeed = t("sidebar.newThread");
       }
     }
     const title = truncate(titleSeed);
@@ -4712,11 +4715,9 @@ function ChatViewContent(props: ChatViewProps) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not start implementation thread",
+            title: t("chat.implementation.startFailed"),
             description:
-              error instanceof Error
-                ? error.message
-                : "An error occurred while creating the new thread.",
+              error instanceof Error ? error.message : t("chat.implementation.createFailed"),
           }),
         );
       }
@@ -4738,6 +4739,7 @@ function ChatViewContent(props: ChatViewProps) {
     resetLocalDispatch,
     runtimeMode,
     startThreadTurn,
+    t,
     autoOpenPlanSidebar,
     environmentId,
     composerRef,
@@ -4748,16 +4750,19 @@ function ChatViewContent(props: ChatViewProps) {
       if (!activeThread) {
         return null;
       }
-      const reason = getStartedThreadModelChangeBlockReason({
-        providers: providerStatuses,
-        hasStartedSession: activeThread.session !== null,
-        currentModelSelection: activeThread.modelSelection,
-        currentProviderInstanceId: activeThread.session?.providerInstanceId ?? null,
-        nextModelSelection: { instanceId, model },
-      });
-      return reason ? `${reason.description} Start a new thread to use this model.` : null;
+      const reason = getStartedThreadModelChangeBlockReason(
+        {
+          providers: providerStatuses,
+          hasStartedSession: activeThread.session !== null,
+          currentModelSelection: activeThread.modelSelection,
+          currentProviderInstanceId: activeThread.session?.providerInstanceId ?? null,
+          nextModelSelection: { instanceId, model },
+        },
+        t,
+      );
+      return reason ? `${reason.description} ${t("chat.modelChange.useNewThread")}` : null;
     },
-    [activeThread, providerStatuses],
+    [activeThread, providerStatuses, t],
   );
 
   const onProviderModelSelect = useCallback(
@@ -4803,13 +4808,16 @@ function ChatViewContent(props: ChatViewProps) {
         instanceId,
         model: resolvedModel,
       };
-      const modelChangeBlockReason = getStartedThreadModelChangeBlockReason({
-        providers: providerStatuses,
-        hasStartedSession: activeThread.session !== null,
-        currentModelSelection: activeThread.modelSelection,
-        currentProviderInstanceId: activeThread.session?.providerInstanceId ?? null,
-        nextModelSelection,
-      });
+      const modelChangeBlockReason = getStartedThreadModelChangeBlockReason(
+        {
+          providers: providerStatuses,
+          hasStartedSession: activeThread.session !== null,
+          currentModelSelection: activeThread.modelSelection,
+          currentProviderInstanceId: activeThread.session?.providerInstanceId ?? null,
+          nextModelSelection,
+        },
+        t,
+      );
       if (modelChangeBlockReason) {
         toastManager.add({
           type: "warning",
@@ -4834,6 +4842,7 @@ function ChatViewContent(props: ChatViewProps) {
       setStickyComposerModelSelection,
       providerStatuses,
       settings,
+      t,
     ],
   );
   const onEnvModeChange = useCallback(
@@ -5111,13 +5120,13 @@ function ChatViewContent(props: ChatViewProps) {
                 >
                   <button
                     type="button"
-                    aria-label="Scroll to end"
-                    title="Scroll to end"
+                    aria-label={t("chat.scrollToEnd")}
+                    title={t("chat.scrollToEnd")}
                     onClick={() => scrollToEnd(true)}
                     className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
                   >
                     <ChevronDownIcon className="size-3.5" />
-                    Scroll to end
+                    {t("chat.scrollToEnd")}
                   </button>
                 </div>
               )}

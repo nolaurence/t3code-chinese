@@ -18,20 +18,20 @@ import {
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
-const installSteps: ReadonlyArray<{
-  readonly stage: RelayClientInstallProgressStage;
-  readonly label: string;
-}> = [
-  { stage: "checking", label: "Checking current installation" },
-  { stage: "waiting_for_lock", label: "Waiting for installer" },
-  { stage: "downloading", label: "Downloading relay client" },
-  { stage: "verifying", label: "Verifying download" },
-  { stage: "installing", label: "Installing relay client" },
-  { stage: "validating", label: "Validating executable" },
-  { stage: "activating", label: "Activating installation" },
+import { useI18n } from "../../i18n";
+
+const installSteps: ReadonlyArray<RelayClientInstallProgressStage> = [
+  "checking",
+  "waiting_for_lock",
+  "downloading",
+  "verifying",
+  "installing",
+  "validating",
+  "activating",
 ];
 
 export function RelayClientInstallDialog() {
+  const { t } = useI18n();
   const state = useSyncExternalStore(
     subscribeRelayClientInstallDialog,
     readRelayClientInstallDialogState,
@@ -41,9 +41,12 @@ export function RelayClientInstallDialog() {
   const isConfirming = view.status === "confirming";
   const isInstalling = view.status === "installing";
   const activeStepIndex = isInstalling
-    ? installSteps.findIndex(({ stage }) => stage === view.stage)
+    ? installSteps.findIndex((stage) => stage === view.stage)
     : -1;
   const activeStep = installSteps[activeStepIndex];
+  const activeStepLabel = activeStep
+    ? t(`cloud.install.${activeStep}` as Parameters<typeof t>[0])
+    : "";
 
   return (
     <Dialog
@@ -65,12 +68,12 @@ export function RelayClientInstallDialog() {
             <DownloadIcon aria-hidden className="size-4.5 text-muted-foreground" />
           </div>
           <DialogTitle>
-            {isInstalling ? "Installing relay client" : "Install relay client?"}
+            {isInstalling ? t("cloud.install.installingTitle") : t("cloud.install.confirmTitle")}
           </DialogTitle>
           <DialogDescription>
             {isInstalling
-              ? "T3 Code is preparing this environment for secure access through T3 Connect."
-              : "T3 Code needs the relay client to make this environment available through T3 Connect."}
+              ? t("cloud.install.installingDescription")
+              : t("cloud.install.confirmDescription")}
           </DialogDescription>
         </DialogHeader>
         <DialogPanel scrollFade={false}>
@@ -78,28 +81,32 @@ export function RelayClientInstallDialog() {
             <div className="space-y-2.5">
               <div className="flex items-center justify-between gap-3 text-sm">
                 <p aria-live="polite" className="font-medium text-foreground">
-                  {activeStep?.label}
+                  {activeStepLabel}
                 </p>
                 <p className="shrink-0 tabular-nums text-muted-foreground">
-                  {activeStepIndex + 1} of {installSteps.length}
+                  {t("cloud.install.progressCount", {
+                    current: activeStepIndex + 1,
+                    total: installSteps.length,
+                  })}
                 </p>
               </div>
               <progress
-                aria-label="Relay client installation progress"
+                aria-label={t("cloud.install.progress")}
                 className="h-2 w-full appearance-none overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-primary [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-primary"
                 max={installSteps.length}
                 value={activeStepIndex + 1}
               />
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Keep T3 Code open while the relay client is installed.
+                {t("cloud.install.keepOpen")}
               </p>
             </div>
           ) : (
             <div className="rounded-xl border border-border/70 bg-muted/35 p-3">
-              <p className="text-sm font-medium text-foreground">Managed relay client</p>
+              <p className="text-sm font-medium text-foreground">{t("cloud.install.managed")}</p>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                T3 Code will download and install version{" "}
-                {view.status === "confirming" ? view.version : ""} locally.
+                {t("cloud.install.version", {
+                  version: view.status === "confirming" ? view.version : "",
+                })}
               </p>
             </div>
           )}
@@ -110,10 +117,10 @@ export function RelayClientInstallDialog() {
               variant="outline"
               onClick={() => respondToRelayClientInstallConfirmation(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={() => respondToRelayClientInstallConfirmation(true)}>
-              Download and install
+              {t("cloud.install.download")}
             </Button>
           </DialogFooter>
         ) : null}

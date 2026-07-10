@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
+import { useI18n } from "~/i18n";
 
 interface LocalCommentAnnotationProps {
   kind: "draft" | "comment";
@@ -21,6 +22,7 @@ export function LocalCommentAnnotation({
   onComment,
   onDelete,
 }: LocalCommentAnnotationProps) {
+  const { t } = useI18n();
   const [text, setText] = useState("");
 
   if (kind === "comment") {
@@ -33,9 +35,14 @@ export function LocalCommentAnnotation({
       >
         <div className="flex items-center gap-2">
           <MessageCircle className="size-4 text-muted-foreground" />
-          <span className="text-xs font-medium">Local comment</span>
+          <span className="text-xs font-medium">{t("files.localComment")}</span>
           <span className="ml-auto text-[11px] text-muted-foreground">{rangeLabel}</span>
-          <Button variant="ghost" size="icon-xs" aria-label="Delete comment" onClick={onDelete}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t("files.deleteComment")}
+            onClick={onDelete}
+          >
             <Trash2 className="size-3.5" />
           </Button>
         </div>
@@ -55,16 +62,18 @@ export function LocalCommentAnnotation({
     >
       <div className="flex items-center gap-2">
         <MessageCircle className="size-4 text-muted-foreground" />
-        <span className="text-sm font-medium">Local comment</span>
+        <span className="text-sm font-medium">{t("files.localComment")}</span>
       </div>
-      <div className="mt-1 text-xs text-muted-foreground">Comment on lines {rangeLabel}</div>
+      <div className="mt-1 text-xs text-muted-foreground">
+        {t("files.commentLines", { lines: rangeLabel })}
+      </div>
       <Textarea
         autoFocus
         className="mt-3"
         size="sm"
         value={text}
-        placeholder="Request change"
-        aria-label={`Comment on lines ${rangeLabel}`}
+        placeholder={t("files.requestChange")}
+        aria-label={t("files.commentLines", { lines: rangeLabel })}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
@@ -79,10 +88,10 @@ export function LocalCommentAnnotation({
       />
       <div className="mt-3 flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
+          {t("common.cancel")}
         </Button>
         <Button size="sm" disabled={!text.trim()} onClick={() => onComment(text.trim())}>
-          Comment
+          {t("files.comment")}
         </Button>
       </div>
     </div>

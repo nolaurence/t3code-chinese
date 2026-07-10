@@ -30,6 +30,7 @@ import {
 import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
 import { getProviderModelCapabilities } from "../../providerModels";
 import { cn } from "~/lib/utils";
+import { useI18n } from "~/i18n";
 
 type ProviderOptions = ReadonlyArray<ProviderOptionSelection>;
 
@@ -219,6 +220,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
   allowPromptInjectedEffort = true,
   ...persistence
 }: TraitsMenuContentProps & TraitsPersistence) {
+  const { t } = useI18n();
   const setProviderModelOptions = useComposerDraftStore((store) => store.setProviderModelOptions);
   const updateModelOptions = useCallback(
     (nextOptions: ProviderOptions | undefined) => {
@@ -294,8 +296,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
             </div>
             {ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id ? (
               <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
-                Your prompt contains &quot;ultrathink&quot; in the text. Remove it to change this
-                option.
+                {t("chat.ultrathinkControlled")}
               </div>
             ) : null}
             <MenuRadioGroup
@@ -313,7 +314,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
                   disabled={ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id}
                 >
                   {option.label}
-                  {option.isDefault ? " (default)" : ""}
+                  {option.isDefault ? t("chat.defaultSuffix") : ""}
                 </MenuRadioItem>
               ))}
             </MenuRadioGroup>
@@ -335,8 +336,8 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
                 );
               }}
             >
-              <MenuRadioItem value="on">On</MenuRadioItem>
-              <MenuRadioItem value="off">Off</MenuRadioItem>
+              <MenuRadioItem value="on">{t("auth.on")}</MenuRadioItem>
+              <MenuRadioItem value="off">{t("auth.off")}</MenuRadioItem>
             </MenuRadioGroup>
           </MenuGroup>
         </div>

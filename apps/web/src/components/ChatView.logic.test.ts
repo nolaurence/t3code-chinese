@@ -2,6 +2,7 @@ import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId, TurnId } from "
 import { describe, expect, it } from "vite-plus/test";
 
 import type { Thread } from "../types";
+import { createTranslator } from "../i18n";
 import {
   MAX_HIDDEN_MOUNTED_PREVIEW_THREADS,
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
@@ -178,6 +179,15 @@ describe("buildExpiredTerminalContextToastCopy", () => {
       description: "Re-add it if you want that terminal output included.",
     });
   });
+
+  it("formats guidance in the requested locale", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(buildExpiredTerminalContextToastCopy(2, "omitted", t)).toEqual({
+      title: "过期的终端上下文已从消息中省略",
+      description: "如需包含该终端输出，请重新添加。",
+    });
+  });
 });
 
 describe("getStartedThreadModelChangeBlockReason", () => {
@@ -243,6 +253,31 @@ describe("getStartedThreadModelChangeBlockReason", () => {
       title: "Start a new chat to change models",
       description:
         "This provider does not allow switching models after a conversation has started.",
+    });
+  });
+
+  it("localizes the model-change block reason", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(
+      getStartedThreadModelChangeBlockReason(
+        {
+          providers,
+          hasStartedSession: true,
+          currentModelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5.4",
+          },
+          nextModelSelection: {
+            instanceId: ProviderInstanceId.make("grok"),
+            model: "grok-build",
+          },
+        },
+        t,
+      ),
+    ).toEqual({
+      title: "请新建对话以更改模型",
+      description: "此供应商不允许在对话开始后切换模型。",
     });
   });
 });

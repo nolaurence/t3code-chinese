@@ -5,6 +5,7 @@ import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { MobileClientsUserProfilePage } from "./MobileClientsUserProfilePage";
 import { useT3ConnectAuthPrompt } from "./useT3ConnectAuthPrompt";
+import { useI18n } from "../../i18n";
 
 export function T3ConnectSidebarSignIn() {
   if (!hasCloudPublicConfig()) return null;
@@ -19,6 +20,7 @@ export function T3ConnectSidebarAvatar() {
 }
 
 function ConfiguredT3ConnectSidebarAvatar() {
+  const { t } = useI18n();
   const { isLoaded, isSignedIn } = useAuth();
 
   if (!isLoaded || !isSignedIn) return null;
@@ -33,7 +35,7 @@ function ConfiguredT3ConnectSidebarAvatar() {
       }}
     >
       <UserButton.UserProfilePage
-        label="Mobile clients"
+        label={t("auth.mobileClients")}
         labelIcon={<SmartphoneIcon className="size-4" />}
         url="mobile-clients"
       >
@@ -44,6 +46,7 @@ function ConfiguredT3ConnectSidebarAvatar() {
 }
 
 function ConfiguredT3ConnectSidebarSignIn() {
+  const { t } = useI18n();
   const { isLoaded, isSignedIn } = useAuth();
   const { authPrompt, openAuthPrompt } = useT3ConnectAuthPrompt();
 
@@ -59,7 +62,7 @@ function ConfiguredT3ConnectSidebarSignIn() {
             onClick={openAuthPrompt}
           >
             <LogInIcon className="size-4" />
-            <span>Sign in to T3 Connect</span>
+            <span>{t("auth.signInConnect")}</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>

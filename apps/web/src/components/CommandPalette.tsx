@@ -59,6 +59,7 @@ import { sourceControlEnvironment } from "../state/sourceControl";
 import { useAtomCommand } from "../state/use-atom-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
+import { useI18n } from "../i18n";
 import { useProjects, useThreadShells } from "../state/entities";
 import {
   startNewThreadInProjectFromContext,
@@ -451,6 +452,7 @@ function OpenCommandPaletteDialog(props: {
   readonly setOpen: (open: boolean) => void;
   readonly clearOpenIntent: () => void;
 }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { clearOpenIntent, openIntent, setOpen } = props;
   const composerHandleRef = useComposerHandleContext();
@@ -1656,7 +1658,7 @@ function OpenCommandPaletteDialog(props: {
 
   return (
     <CommandDialogPopup
-      aria-label="Command palette"
+      aria-label={t("commandPalette.title")}
       className="overflow-hidden p-0"
       data-command-palette="true"
       data-testid="command-palette"
@@ -1670,7 +1672,7 @@ function OpenCommandPaletteDialog(props: {
     >
       <Command
         key={`${viewStack.length}-${browseGeneration}-${isBrowsing}-${addProjectCloneFlow?.step ?? "none"}`}
-        aria-label="Command palette"
+        aria-label={t("commandPalette.title")}
         autoHighlight={isBrowsing || isRemoteProjectCloneFlow ? false : "always"}
         mode="none"
         onItemHighlighted={(value) => {
@@ -1700,7 +1702,7 @@ function OpenCommandPaletteDialog(props: {
                     <button
                       type="button"
                       className="flex cursor-pointer items-center"
-                      aria-label="Back"
+                      aria-label={t("common.back")}
                       onClick={popView}
                     >
                       <ArrowLeftIcon />
@@ -1723,7 +1725,7 @@ function OpenCommandPaletteDialog(props: {
                     size="xs"
                     tabIndex={-1}
                     className="absolute inset-e-2.5 top-1/2 gap-1.5 pe-1 ps-2 -translate-y-1/2"
-                    aria-label={`${remoteProjectButtonLabel ?? "Continue"} (Enter)`}
+                    aria-label={`${remoteProjectButtonLabel ?? t("git.continue")} (Enter)`}
                     disabled={!canSubmitRemoteProjectFlow}
                     onMouseDown={(event) => {
                       event.preventDefault();
@@ -1734,13 +1736,15 @@ function OpenCommandPaletteDialog(props: {
                   />
                 }
               >
-                <span>{isRemoteProjectPending ? "Working" : remoteProjectButtonLabel}</span>
+                <span>
+                  {isRemoteProjectPending ? t("commandPalette.working") : remoteProjectButtonLabel}
+                </span>
                 <KbdGroup className="pointer-events-none -me-0.5 items-center gap-1">
                   <Kbd>Enter</Kbd>
                 </KbdGroup>
               </TooltipTrigger>
               <TooltipPopup side="top">
-                {remoteProjectButtonLabel ?? "Continue"} (Enter)
+                {remoteProjectButtonLabel ?? t("git.continue")} (Enter)
               </TooltipPopup>
             </Tooltip>
           ) : isBrowsing ? (
@@ -1777,7 +1781,9 @@ function OpenCommandPaletteDialog(props: {
                 }
               >
                 <span>
-                  {isCloneDestinationStep && isRemoteProjectPending ? "Cloning" : submitActionLabel}
+                  {isCloneDestinationStep && isRemoteProjectPending
+                    ? t("commandPalette.cloning")
+                    : submitActionLabel}
                 </span>
                 <KbdGroup className="pointer-events-none -me-0.5 items-center gap-1">
                   <Kbd>{hasHighlightedBrowseItem ? `${submitModifierLabel} Enter` : "Enter"}</Kbd>
@@ -1793,7 +1799,7 @@ function OpenCommandPaletteDialog(props: {
           {remoteProjectContext ? (
             <div className="p-2 pb-0">
               <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">
-                Repository
+                {t("git.publish.repository")}
               </div>
               <div className="flex min-h-8 items-center gap-2 rounded-sm px-2 py-1.5">
                 {remoteProjectContext.icon}
@@ -1818,17 +1824,16 @@ function OpenCommandPaletteDialog(props: {
               ? {
                   emptyStateMessage:
                     addProjectCloneFlow.source === "url"
-                      ? "Enter a Git clone URL and press Enter to continue."
-                      : "Enter a repository path and press Enter to look it up.",
+                      ? t("commandPalette.enterCloneUrl")
+                      : t("commandPalette.enterRepositoryPath"),
                 }
               : addProjectCloneFlow?.step === "confirm"
-                ? { emptyStateMessage: "Choose a destination path and press Enter to clone." }
+                ? { emptyStateMessage: t("commandPalette.chooseDestination") }
                 : relativePathNeedsActiveProject
-                  ? { emptyStateMessage: "Relative paths require an active project." }
+                  ? { emptyStateMessage: t("commandPalette.relativePathRequiresProject") }
                   : willCreateProjectPath
                     ? {
-                        emptyStateMessage:
-                          "Press Enter to create this folder and add it as a project.",
+                        emptyStateMessage: t("commandPalette.createFolder"),
                       }
                     : {})}
           />
@@ -1842,30 +1847,30 @@ function OpenCommandPaletteDialog(props: {
               <Kbd>
                 <ArrowDownIcon />
               </Kbd>
-              <span className={cn("text-muted-foreground/80")}>Navigate</span>
+              <span className={cn("text-muted-foreground/80")}>{t("commandPalette.navigate")}</span>
             </KbdGroup>
             {addProjectCloneFlow?.step === "repository" ? (
               <KbdGroup className="items-center gap-1.5">
                 <Kbd>Enter</Kbd>
                 <span className={cn("text-muted-foreground/80")}>
-                  {remoteProjectButtonLabel ?? "Continue"}
+                  {remoteProjectButtonLabel ?? t("git.continue")}
                 </span>
               </KbdGroup>
             ) : !canSubmitBrowsePath || hasHighlightedBrowseItem ? (
               <KbdGroup className="items-center gap-1.5">
                 <Kbd>Enter</Kbd>
-                <span className={cn("text-muted-foreground/80")}>Select</span>
+                <span className={cn("text-muted-foreground/80")}>{t("commandPalette.select")}</span>
               </KbdGroup>
             ) : null}
             {isSubmenu ? (
               <KbdGroup className="items-center gap-1.5">
                 <Kbd>Backspace</Kbd>
-                <span className={cn("text-muted-foreground/80")}>Back</span>
+                <span className={cn("text-muted-foreground/80")}>{t("common.back")}</span>
               </KbdGroup>
             ) : null}
             <KbdGroup className="items-center gap-1.5">
               <Kbd>Esc</Kbd>
-              <span className={cn("text-muted-foreground/80")}>Close</span>
+              <span className={cn("text-muted-foreground/80")}>{t("panel.close")}</span>
             </KbdGroup>
           </div>
           {canOpenProjectFromFileManager ? (

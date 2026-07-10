@@ -5,6 +5,7 @@ import { Minus, MoreVertical, Plus as PlusIcon, RotateCcw } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { useI18n } from "~/i18n";
 
 import { previewBridge } from "./previewBridge";
 
@@ -37,6 +38,7 @@ export function PreviewMoreMenu({
   deviceToolbarVisible,
   onToggleDeviceToolbar,
 }: Props) {
+  const { t } = useI18n();
   if (!previewBridge) return null;
   const bridge = previewBridge;
   const tabDisabled = !tabId || !hasWebContents;
@@ -53,24 +55,29 @@ export function PreviewMoreMenu({
           render={
             <MenuTrigger
               render={
-                <Button variant="ghost" size="icon-xs" type="button" aria-label="Preview menu" />
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  type="button"
+                  aria-label={t("preview.menu")}
+                />
               }
             />
           }
         >
           <MoreVertical />
         </TooltipTrigger>
-        <TooltipPopup>More</TooltipPopup>
+        <TooltipPopup>{t("preview.more")}</TooltipPopup>
       </Tooltip>
       <MenuPopup align="end" sideOffset={6} className="min-w-56">
         <MenuItem onClick={callTab(bridge.hardReload)} disabled={tabDisabled}>
-          Hard reload
+          {t("preview.hardReload")}
         </MenuItem>
         <MenuItem onClick={callTab(bridge.openDevTools)} disabled={tabDisabled}>
-          Open DevTools
+          {t("preview.openDevTools")}
         </MenuItem>
         <MenuItem onClick={onToggleDeviceToolbar} disabled={tabDisabled}>
-          {deviceToolbarVisible ? "Hide device toolbar" : "Show device toolbar"}
+          {deviceToolbarVisible ? t("preview.hideDeviceToolbar") : t("preview.showDeviceToolbar")}
         </MenuItem>
         <MenuSeparator />
         {/*
@@ -83,14 +90,14 @@ export function PreviewMoreMenu({
           className="justify-between"
           disabled={tabDisabled}
         >
-          <span>Zoom</span>
+          <span>{t("preview.zoom")}</span>
           <span className="flex items-center gap-1">
             <Button
               variant="outline"
               size="icon-xs"
               type="button"
               onClick={callTab(bridge.zoomOut)}
-              aria-label="Zoom out"
+              aria-label={t("preview.zoomOut")}
               disabled={tabDisabled}
             >
               <Minus />
@@ -103,7 +110,7 @@ export function PreviewMoreMenu({
               size="icon-xs"
               type="button"
               onClick={callTab(bridge.zoomIn)}
-              aria-label="Zoom in"
+              aria-label={t("preview.zoomIn")}
               disabled={tabDisabled}
             >
               <PlusIcon />
@@ -113,7 +120,7 @@ export function PreviewMoreMenu({
               size="icon-xs"
               type="button"
               onClick={callTab(bridge.resetZoom)}
-              aria-label="Reset zoom"
+              aria-label={t("preview.resetZoom")}
               disabled={tabDisabled}
             >
               <RotateCcw />
@@ -122,10 +129,10 @@ export function PreviewMoreMenu({
         </MenuItem>
         <MenuSeparator />
         <MenuItem onClick={() => void bridge.clearCookies().catch(() => undefined)}>
-          Clear cookies
+          {t("preview.clearCookies")}
         </MenuItem>
         <MenuItem onClick={() => void bridge.clearCache().catch(() => undefined)}>
-          Clear cache
+          {t("preview.clearCache")}
         </MenuItem>
       </MenuPopup>
     </Menu>
