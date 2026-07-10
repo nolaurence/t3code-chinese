@@ -6,6 +6,23 @@ import type {
   UnifiedSettings,
 } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import type { Translate } from "../../i18n/messages";
+
+export function getThemeOptions(t: Translate) {
+  return [
+    { value: "system", label: t("settings.theme.system") },
+    { value: "light", label: t("settings.theme.light") },
+    { value: "dark", label: t("settings.theme.dark") },
+  ] as const;
+}
+
+export function getTimestampFormatLabels(t: Translate) {
+  return {
+    locale: t("settings.time.system"),
+    "12-hour": t("settings.time.12Hour"),
+    "24-hour": t("settings.time.24Hour"),
+  } as const;
+}
 
 function collapseOtelSignalsUrl(input: {
   readonly tracesUrl: string;

@@ -5,10 +5,26 @@ import {
   type ProviderInstanceConfig,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import { createTranslator } from "../../i18n/messages";
 import {
   buildProviderInstanceUpdatePatch,
   formatDiagnosticsDescription,
+  getThemeOptions,
+  getTimestampFormatLabels,
 } from "./SettingsPanels.logic";
+
+describe("localized general settings options", () => {
+  it("returns Simplified Chinese theme and timestamp labels", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(getThemeOptions(t).map((option) => option.label)).toEqual(["跟随系统", "浅色", "深色"]);
+    expect(getTimestampFormatLabels(t)).toEqual({
+      locale: "跟随系统",
+      "12-hour": "12 小时制",
+      "24-hour": "24 小时制",
+    });
+  });
+});
 
 describe("formatDiagnosticsDescription", () => {
   it("collapses trace and metric URLs that share the same OTEL base path", () => {

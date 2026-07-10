@@ -1,4 +1,4 @@
-import { useCallback, type ComponentType } from "react";
+import { useCallback, useMemo, type ComponentType } from "react";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
@@ -21,6 +21,8 @@ import {
   useSidebar,
 } from "../ui/sidebar";
 import { T3ConnectSidebarAvatar, T3ConnectSidebarSignIn } from "../clerk/T3ConnectSidebarSignIn";
+import { useI18n } from "../../i18n/I18nProvider";
+import type { MessageKey, Translate } from "../../i18n/messages";
 
 export type SettingsSectionPath =
   | "/settings/general"
@@ -30,20 +32,30 @@ export type SettingsSectionPath =
   | "/settings/connections"
   | "/settings/archived";
 
-export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
-  label: string;
+const SETTINGS_NAV_ITEMS: ReadonlyArray<{
+  labelKey: MessageKey;
   to: SettingsSectionPath;
   icon: ComponentType<{ className?: string }>;
 }> = [
-  { label: "General", to: "/settings/general", icon: Settings2Icon },
-  { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
-  { label: "Providers", to: "/settings/providers", icon: BotIcon },
-  { label: "Source Control", to: "/settings/source-control", icon: GitBranchIcon },
-  { label: "Connections", to: "/settings/connections", icon: Link2Icon },
-  { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
+  { labelKey: "settings.nav.general", to: "/settings/general", icon: Settings2Icon },
+  { labelKey: "settings.nav.keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
+  { labelKey: "settings.nav.providers", to: "/settings/providers", icon: BotIcon },
+  {
+    labelKey: "settings.nav.sourceControl",
+    to: "/settings/source-control",
+    icon: GitBranchIcon,
+  },
+  { labelKey: "settings.nav.connections", to: "/settings/connections", icon: Link2Icon },
+  { labelKey: "settings.nav.archive", to: "/settings/archived", icon: ArchiveIcon },
 ];
 
+export function getSettingsNavItems(t: Translate) {
+  return SETTINGS_NAV_ITEMS.map(({ labelKey, ...item }) => ({ ...item, label: t(labelKey) }));
+}
+
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
+  const { t } = useI18n();
+  const items = useMemo(() => getSettingsNavItems(t), [t]);
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -72,7 +84,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
       <SidebarContent className="overflow-x-hidden">
         <SidebarGroup className="px-2 py-3">
           <SidebarMenu>
-            {SETTINGS_NAV_ITEMS.map((item) => {
+            {items.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.to;
               return (
@@ -115,7 +127,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                 onClick={handleBackClick}
               >
                 <ArrowLeftIcon className="size-4" />
-                <span>Back</span>
+                <span>{t("settings.nav.back")}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
