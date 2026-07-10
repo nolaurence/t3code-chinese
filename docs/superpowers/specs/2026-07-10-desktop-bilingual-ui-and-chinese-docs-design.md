@@ -1,134 +1,134 @@
-# Desktop Bilingual UI and Chinese Documentation Design
+# 桌面端中英文界面与中文文档设计
 
-## Summary
+## 概述
 
-Add an English and Simplified Chinese language switch to the desktop application, translate all desktop product copy, publish a mirrored Simplified Chinese documentation tree, and make repository-facing README links point to this fork.
+为桌面应用增加英文和简体中文切换功能，翻译桌面端全部产品文案，发布一套与英文目录对应的简体中文文档，并将 README 中与仓库相关的链接改为指向当前工程。
 
-This change applies to the desktop application UI implemented in `apps/web`. It does not include `apps/mobile` or `apps/marketing`.
+本次改动仅适用于由 `apps/web` 实现的桌面应用界面，不包含 `apps/mobile` 或 `apps/marketing`。
 
-## Goals
+## 目标
 
-- Let users switch the desktop UI between English and Simplified Chinese from Settings.
-- Apply language changes immediately and preserve the selection across restarts.
-- Translate all product-owned, user-visible desktop copy, including accessibility labels.
-- Preserve the existing English documentation and add a complete Chinese mirror under `docs/zh-CN/`.
-- Preserve the English root README, add `README.zh-CN.md`, and link both language versions together.
-- Update repository links in the root README files to target `nolaurence/t3code-chinese` instead of the upstream fork source.
+- 用户可以在设置中将桌面界面切换为英文或简体中文。
+- 语言切换立即生效，并在应用重启后保留用户选择。
+- 翻译所有由产品提供、面向用户显示的桌面端文案，包括无障碍标签。
+- 保留现有英文文档，并在 `docs/zh-CN/` 下新增完整的中文镜像。
+- 保留英文根 README，新增 `README.zh-CN.md`，并让两个语言版本互相链接。
+- 将根 README 中属于本仓库的链接从上游仓库改为 `nolaurence/t3code-chinese`。
 
-## Non-Goals
+## 非目标
 
-- Translating the native mobile application.
-- Translating the marketing site.
-- Supporting locales other than `en` and `zh-CN`.
-- Automatically detecting the operating system language.
-- Translating user content, model names, paths, branch names, commands, command output, Git content, or raw provider/server errors.
-- Building a general-purpose localization framework for future languages.
+- 翻译原生手机应用。
+- 翻译营销站点。
+- 支持 `en` 和 `zh-CN` 以外的语言。
+- 自动根据操作系统语言选择界面语言。
+- 翻译用户内容、模型名称、路径、分支名、命令、命令输出、Git 内容或服务端及供应商返回的原始错误。
+- 为未来可能增加的语言构建通用国际化框架。
 
-## Localization Architecture
+## 国际化架构
 
-The Web application will own a small, internal localization module under `apps/web/src/i18n/`. It will expose:
+Web 应用将在 `apps/web/src/i18n/` 中维护一套小型内部国际化模块，并提供：
 
-- a fixed `Locale` union containing `en` and `zh-CN`;
-- pure functions for locale parsing, message lookup, interpolation, and persistence;
-- a React provider that owns the active locale;
-- a hook for components that need translated messages;
-- an imperative translation function for product copy created outside React components.
+- 仅包含 `en` 和 `zh-CN` 的固定 `Locale` 联合类型；
+- 用于语言解析、文案查找、变量插值和持久化的纯函数；
+- 管理当前语言的 React Provider；
+- 供组件获取翻译文案的 Hook；
+- 供 React 组件之外的产品逻辑使用的命令式翻译函数。
 
-Message catalogs will be split by product domain, such as common UI, settings, chat, source control, terminal, preview, connections, and errors. English resources define the complete message-key contract. Simplified Chinese resources must satisfy the same TypeScript shape so missing or extra keys fail type checking.
+文案词典按产品功能域拆分，例如通用界面、设置、聊天、版本控制、终端、预览、连接和错误信息。英文资源定义完整的文案键约束，简体中文资源必须满足相同的 TypeScript 结构，使缺少或多余的键在类型检查时直接失败。
 
-Only the currently required interpolation behavior will be implemented. Dynamic values will be passed separately from translated message templates. No pluralization framework, locale negotiation, or remote resource loading will be added.
+只实现当前实际需要的变量插值能力。动态值与翻译模板分开传入。不增加复数规则框架、语言协商或远程资源加载。
 
-If a lookup cannot resolve a Chinese message, it will return the English message. Localization failures must not prevent the application from rendering.
+如果中文文案无法解析，则返回对应的英文文案。国际化异常不得阻止应用正常渲染。
 
-## Locale Lifecycle
+## 语言生命周期
 
-The default locale is English. The selected locale will be stored as a client-only local preference using the repository's safe browser persistence conventions.
+默认语言为英文。用户选择的语言将按照仓库现有的安全浏览器持久化约定，保存为仅客户端使用的本地偏好。
 
-At application startup:
+应用启动时依次执行：
 
-1. Read the persisted locale.
-2. Accept only `en` or `zh-CN`.
-3. Fall back to `en` when storage is unavailable, corrupted, or contains an unknown value.
-4. Set the active locale before the routed application renders.
-5. Synchronize the document root `lang` attribute with the active locale.
+1. 读取已保存的语言。
+2. 只接受 `en` 或 `zh-CN`。
+3. 当存储不可用、数据损坏或包含未知值时回退到 `en`。
+4. 在路由应用渲染前设置当前语言。
+5. 将文档根节点的 `lang` 属性同步为当前语言。
 
-When the user selects another language, the provider updates immediately, persists the new value, and updates `document.documentElement.lang`. A storage write failure is logged but does not roll back the visible language change.
+用户选择另一种语言后，Provider 立即更新界面、持久化新值，并更新 `document.documentElement.lang`。如果写入存储失败，只记录错误，不回滚界面上已经生效的语言。
 
-## Settings Experience
+## 设置界面
 
-Add an "Interface language" row to Settings > General near the theme and time-format preferences. The row uses the existing Select component and offers:
+在“设置 > 常规”中靠近主题和时间格式的位置增加“界面语言”设置行。该设置复用现有 Select 组件，并提供：
 
 - English
 - 简体中文
 
-The option labels remain recognizable in either active language. The setting participates in the existing Restore defaults behavior; restoring defaults selects English.
+无论当前使用哪种语言，两个选项名称都保持清晰可识别。语言设置纳入现有的“恢复默认设置”行为，恢复默认值时选择英文。
 
-All surrounding Settings navigation, titles, descriptions, controls, dialogs, notifications, and accessibility labels will use the localization layer.
+设置页周边的导航、标题、说明、控件、对话框、通知和无障碍标签全部接入国际化层。
 
-## Desktop Copy Migration
+## 桌面端文案迁移
 
-All product-owned desktop copy in `apps/web` will move to the message catalogs. This includes:
+`apps/web` 中所有由产品提供的桌面端文案都迁移到词典，包括：
 
-- navigation and settings;
-- project and thread actions;
-- chat composer controls and status text;
-- approvals and user-input prompts;
-- Git, diff, review, and pull-request UI;
-- terminal and preview UI;
-- provider, connection, authentication, and update flows;
-- empty, loading, warning, and failure states;
-- tooltips, placeholders, confirmation prompts, toast messages, and accessibility labels.
+- 导航和设置；
+- 项目及任务操作；
+- 聊天输入区控件和状态文本；
+- 审批和用户输入提示；
+- Git、差异、审查和拉取请求界面；
+- 终端和预览界面；
+- 供应商、连接、身份验证和更新流程；
+- 空状态、加载状态、警告和失败状态；
+- 工具提示、占位文本、确认提示、Toast 消息和无障碍标签。
 
-Values supplied by users, tools, providers, Git, the file system, or server processes remain unchanged. Product-owned framing around those values is translated. For example, a translated failure title may be shown beside an unchanged raw provider error.
+来自用户、工具、供应商、Git、文件系统或服务端进程的值保持不变，包裹这些值的产品文案则需要翻译。例如，可以在翻译后的失败标题旁显示未经修改的供应商原始错误。
 
-Migration will favor shared messages for genuinely identical concepts while retaining distinct keys when context changes meaning. Translation logic will not be implemented through DOM text replacement or mutation observers.
+只有语义确实相同的概念才复用公共文案；同一词语在不同上下文中含义不同时使用不同的键。不得通过替换 DOM 文本或 MutationObserver 实现翻译。
 
-## Chinese Documentation
+## 中文文档
 
-Create `docs/zh-CN/` as a path-for-path mirror of the existing documentation set. Every Markdown and HTML document currently under `docs/` will have a Chinese counterpart, excluding generated planning artifacts under `docs/superpowers/`.
+创建 `docs/zh-CN/`，使其目录和文件路径与现有文档集一一对应。当前 `docs/` 下的每个 Markdown 和 HTML 文档都应有中文版本，但不包含 `docs/superpowers/` 下由开发流程生成的设计和计划文档。
 
-Translations will preserve:
+翻译时保留：
 
-- shell commands and code blocks;
-- package, API, type, symbol, environment-variable, and configuration names;
-- file-system paths and URLs;
-- relative link targets, adjusted only when needed to remain inside the Chinese documentation tree;
-- Mermaid participant and node identifiers required by diagram syntax.
+- Shell 命令和代码块；
+- 包名、API、类型、符号、环境变量和配置项名称；
+- 文件系统路径和 URL；
+- 相对链接目标，仅在必须保持链接位于中文文档树内时调整；
+- Mermaid 语法所需的参与者和节点标识符。
 
-Headings, prose, list descriptions, callouts, table labels, and visible diagram text will be translated. The Chinese documentation index will link only to Chinese counterparts when one exists.
+标题、说明文字、列表描述、提示块、表格标签和图中可见文案都翻译为中文。存在中文版本时，中文文档首页只链接到对应的中文文档。
 
-## README Structure and Repository Links
+## README 结构和仓库链接
 
-Keep `README.md` as the English entry point and add `README.zh-CN.md` as the Simplified Chinese entry point. Each file will contain a language link at the top that points to the other version.
+保留 `README.md` 作为英文入口，新增 `README.zh-CN.md` 作为简体中文入口。两个文件顶部都提供指向另一语言版本的链接。
 
-The English README will continue to link to English documentation. The Chinese README will link to `docs/zh-CN/` documents. Repository-owned GitHub links, including Releases, will target:
+英文 README 继续链接英文文档，中文 README 链接 `docs/zh-CN/` 下的文档。包括 Releases 在内的本仓库 GitHub 链接统一指向：
 
 `https://github.com/nolaurence/t3code-chinese`
 
-Third-party product, installer, documentation, and community links will remain unchanged unless they incorrectly refer to the upstream repository.
+第三方产品、安装工具、文档和社区链接保持不变，除非其中错误地引用了上游仓库。
 
-## Reliability and Error Handling
+## 可靠性和错误处理
 
-- Invalid locale values fall back to English.
-- Missing translations fall back to the matching English message.
-- Storage read and write failures are non-fatal.
-- Dynamic interpolation values are converted safely and must not be evaluated as markup.
-- Translation catalogs are bundled with the application; language switching does not require network access.
-- Locale changes do not reset session, editor, terminal, or connection state.
+- 无效语言值回退到英文。
+- 缺失的中文翻译回退到对应英文文案。
+- 存储读取和写入失败不会中断应用。
+- 动态插值值需要安全转换，且不得作为标记执行。
+- 翻译词典随应用一同打包，切换语言不依赖网络。
+- 切换语言不会重置会话、编辑器、终端或连接状态。
 
-## Testing and Verification
+## 测试和验证
 
-Implementation follows test-driven development for runtime behavior:
+运行时行为按照测试驱动开发方式实现：
 
-1. Add failing unit tests for locale validation, persistence fallback, message fallback, interpolation, and document-language synchronization.
-2. Add catalog-contract tests that prove English and Chinese resources contain matching keys.
-3. Add a failing React test proving that changing locale rerenders translated product copy.
-4. Add a failing Settings test proving the language selector is exposed and persists changes.
-5. Implement the minimum localization runtime and UI integration needed to pass those tests.
-6. Migrate product copy by domain, running targeted Web tests after each group.
-7. Verify links in both documentation trees and both README files.
+1. 先为语言校验、持久化回退、文案回退、变量插值和文档语言同步编写失败的单元测试。
+2. 增加词典约束测试，证明英文与中文资源包含完全一致的键。
+3. 增加失败的 React 测试，证明切换语言后产品文案会重新渲染。
+4. 增加失败的设置界面测试，证明语言选择器可用并会持久化修改。
+5. 实现通过上述测试所需的最小国际化运行时和界面集成。
+6. 按功能域迁移产品文案，并在每组迁移后运行对应的 Web 测试。
+7. 校验两个文档目录以及两份 README 中的链接。
 
-Before completion, run:
+完成前运行：
 
 ```bash
 vp test
@@ -136,16 +136,16 @@ vp check
 vp run typecheck
 ```
 
-Native mobile code is not changed, so `vp run lint:mobile` is not required.
+本次不修改原生手机代码，因此无需运行 `vp run lint:mobile`。
 
-## Acceptance Criteria
+## 验收标准
 
-- A desktop user can select English or Simplified Chinese in Settings > General.
-- The complete product-owned desktop interface changes language without reloading.
-- The selected language survives an application restart.
-- English remains the reliable default and runtime fallback.
-- All existing non-localized dynamic content remains byte-for-byte unchanged.
-- `docs/zh-CN/` contains a Chinese counterpart for every in-scope English documentation file.
-- `README.md` and `README.zh-CN.md` link to each other and to the correct documentation language.
-- Repository links no longer point to `pingdotgg/t3code` where this fork should be the target.
-- Required tests, `vp check`, and `vp run typecheck` pass.
+- 桌面端用户可以在“设置 > 常规”中选择英文或简体中文。
+- 所有由产品提供的桌面界面文案无需重新加载即可切换语言。
+- 用户选择的语言在应用重启后仍然生效。
+- 英文始终作为可靠的默认语言和运行时回退语言。
+- 所有不属于翻译范围的动态内容保持逐字节不变。
+- `docs/zh-CN/` 为范围内每个英文文档提供对应的中文版本。
+- `README.md` 和 `README.zh-CN.md` 互相链接，并分别链接到正确语言的文档。
+- 应指向当前工程的仓库链接不再指向 `pingdotgg/t3code`。
+- 相关测试、`vp check` 和 `vp run typecheck` 全部通过。
