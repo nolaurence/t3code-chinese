@@ -28,6 +28,7 @@ import {
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { useClientSettings } from "../hooks/useSettings";
+import { useI18n } from "../i18n/I18nProvider";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
@@ -35,6 +36,7 @@ import {
 } from "../logicalProject";
 import { useUiStateStore } from "../uiStateStore";
 import { syncBrowserChromeTheme } from "../hooks/useTheme";
+import { getRootErrorDetails, getRootErrorMessage } from "../rootErrorPresentation";
 import { configureClientTracing } from "../observability/clientTracing";
 import { resolveInitialServerAuthGateState } from "../environments/primary";
 import { hasHostedPairingRequest, isHostedStaticApp } from "../hostedPairing";
@@ -187,8 +189,9 @@ function HostedStaticEnvironmentBootstrap() {
 }
 
 function RootRouteErrorView({ error, reset }: ErrorComponentProps) {
-  const message = errorMessage(error);
-  const details = errorDetails(error);
+  const { t } = useI18n();
+  const message = getRootErrorMessage(error, t);
+  const details = getRootErrorDetails(error, t);
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
@@ -202,23 +205,23 @@ function RootRouteErrorView({ error, reset }: ErrorComponentProps) {
           {APP_DISPLAY_NAME}
         </p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-          Something went wrong.
+          {t("rootError.title")}
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{message}</p>
 
         <div className="mt-5 flex flex-wrap gap-2">
           <Button size="sm" onClick={() => reset()}>
-            Try again
+            {t("rootError.tryAgain")}
           </Button>
           <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
-            Reload app
+            {t("rootError.reload")}
           </Button>
         </div>
 
         <details className="group mt-5 overflow-hidden rounded-lg border border-border/70 bg-background/55">
           <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground">
-            <span className="group-open:hidden">Show error details</span>
-            <span className="hidden group-open:inline">Hide error details</span>
+            <span className="group-open:hidden">{t("rootError.showDetails")}</span>
+            <span className="hidden group-open:inline">{t("rootError.hideDetails")}</span>
           </summary>
           <pre className="max-h-56 overflow-auto border-t border-border/70 bg-background/80 px-3 py-2 text-xs text-foreground/85">
             {details}
@@ -227,34 +230,6 @@ function RootRouteErrorView({ error, reset }: ErrorComponentProps) {
       </section>
     </div>
   );
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
-  }
-
-  return "An unexpected router error occurred.";
-}
-
-function errorDetails(error: unknown): string {
-  if (error instanceof Error) {
-    return error.stack ?? error.message;
-  }
-
-  if (typeof error === "string") {
-    return error;
-  }
-
-  try {
-    return JSON.stringify(error, null, 2);
-  } catch {
-    return "No additional error details are available.";
-  }
 }
 
 function AuthenticatedTracingBootstrap() {
@@ -266,6 +241,7 @@ function AuthenticatedTracingBootstrap() {
 }
 
 function EventRouter() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
@@ -333,8 +309,8 @@ function EventRouter() {
     if (decision._tag === "Success") {
       toastManager.add({
         type: "success",
-        title: "Keybindings updated",
-        description: "Keybindings configuration reloaded successfully.",
+        title: t("root.keybindings.updated"),
+        description: t("root.keybindings.updatedDescription"),
       });
       return;
     }
@@ -342,11 +318,11 @@ function EventRouter() {
     toastManager.add(
       stackedThreadToast({
         type: "warning",
-        title: "Invalid keybindings configuration",
+        title: t("root.keybindings.invalid"),
         description: decision.message,
         actionVariant: "outline",
         actionProps: {
-          children: "Open keybindings.json",
+          children: t("root.keybindings.open"),
           onClick: () => {
             if (!serverConfig || !primaryEnvironment) {
               return;
@@ -371,9 +347,9 @@ function EventRouter() {
               toastManager.add(
                 stackedThreadToast({
                   type: "error",
-                  title: "Unable to open keybindings file",
+                  title: t("root.keybindings.openFailed"),
                   description:
-                    error instanceof Error ? error.message : "Unknown error opening file.",
+                    error instanceof Error ? error.message : t("root.keybindings.openUnknown"),
                 }),
               );
             })();
