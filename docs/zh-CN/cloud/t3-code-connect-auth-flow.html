@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>T3 Connect 架构</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #171717;
+        --muted: #62646b;
+        --hairline: #d8d8dd;
+        --panel: #ffffff;
+        --paper: #f5f5f2;
+        --blue: #1457d9;
+        --green: #1d7d4d;
+        --amber: #a65f00;
+        --red: #b8242c;
+        --violet: #6150b8;
+        --shadow: 0 18px 55px rgba(25, 25, 28, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(90deg, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+          linear-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px), var(--paper);
+        background-size: 34px 34px;
+        color: var(--ink);
+        font-family:
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.48;
+      }
+
+      .shell {
+        width: min(1540px, calc(100vw - 40px));
+        margin: 0 auto;
+        padding: 38px 0 72px;
+      }
+
+      header {
+        border-bottom: 2px solid var(--ink);
+        padding-bottom: 24px;
+        margin-bottom: 28px;
+      }
+
+      .eyebrow {
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 980px;
+        margin: 8px 0 12px;
+        font-size: clamp(34px, 5vw, 66px);
+        line-height: 0.98;
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: 26px;
+        line-height: 1.08;
+      }
+
+      h3 {
+        margin: 22px 0 8px;
+        font-size: 17px;
+      }
+
+      p {
+        margin: 0 0 12px;
+      }
+
+      code,
+      .mono {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      }
+
+      code {
+        border-radius: 4px;
+        background: #f0f0ed;
+        padding: 1px 4px;
+        font-size: 0.92em;
+      }
+
+      .lede {
+        max-width: 1000px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 18px;
+      }
+
+      .panel {
+        grid-column: span 12;
+        border: 1px solid var(--hairline);
+        border-radius: 10px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        padding: 22px;
+      }
+
+      .half {
+        grid-column: span 6;
+      }
+
+      .callout {
+        border-left: 5px solid var(--blue);
+        background: #eef4ff;
+        padding: 14px 16px;
+        margin-top: 14px;
+      }
+
+      .callout.warning {
+        border-left-color: var(--amber);
+        background: #fff6e6;
+      }
+
+      .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .badge {
+        border: 1px solid var(--hairline);
+        border-radius: 999px;
+        background: #fff;
+        padding: 5px 9px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .badge.user {
+        border-color: rgba(20, 87, 217, 0.3);
+        color: var(--blue);
+      }
+
+      .badge.env {
+        border-color: rgba(29, 125, 77, 0.3);
+        color: var(--green);
+      }
+
+      .badge.local {
+        border-color: rgba(166, 95, 0, 0.35);
+        color: var(--amber);
+      }
+
+      .diagram {
+        overflow-x: auto;
+        margin: 12px 0 0;
+        border: 1px solid var(--hairline);
+        border-radius: 8px;
+        background: #fbfbf8;
+        color: var(--ink);
+        padding: 18px;
+      }
+
+      .diagram svg {
+        display: block;
+        width: auto !important;
+        min-width: 100%;
+        max-width: none !important;
+        height: auto;
+        margin: 0 auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--hairline);
+        padding: 11px 9px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      ul {
+        margin: 8px 0 0;
+        padding-left: 20px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .flow {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .step {
+        border: 1px solid var(--hairline);
+        border-left: 5px solid var(--green);
+        border-radius: 8px;
+        background: #fff;
+        padding: 12px 14px;
+      }
+
+      .step strong {
+        display: block;
+        margin-bottom: 3px;
+      }
+
+      .source-list a {
+        color: var(--blue);
+        font-weight: 700;
+      }
+
+      @media (max-width: 860px) {
+        .half {
+          grid-column: span 12;
+        }
+
+        .shell {
+          width: min(100vw - 24px, 1540px);
+          padding-top: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <div class="eyebrow">已实现架构</div>
+        <h1>T3 Connect 控制平面与托管端点流程</h1>
+        <p class="lede">
+          T3 Connect 将本地已授权的 T3 环境与已登录的云端用户关联，为该环境预置托管 HTTPS/WSS
+          端点，并代理受证明约束的远程连接。本地环境仍是签发环境访问凭据的权威。 托管 Relay
+          存储关联、协调托管端点资源、验证签名证明并发送智能体活动通知。
+        </p>
+        <div class="badge-row">
+          <span class="badge user">客户端 -> Relay：Clerk Bearer 或 Relay DPoP</span>
+          <span class="badge env">Relay -> 环境：Relay 签名的健康和签发证明</span>
+          <span class="badge env">环境 -> Relay：环境 Bearer 和已签名活动证明</span>
+          <span class="badge local">客户端 -> 环境：环境访问令牌和 DPoP</span>
+        </div>
+      </header>
+
+      <section class="grid" aria-label="架构摘要">
+        <article class="panel half">
+          <h2>安全不变量</h2>
+          <p>云端身份不是环境登录。远程访问需要同时满足以下所有条件：</p>
+          <ul>
+            <li>通过 Clerk 认证的 T3 Connect 用户；</li>
+            <li>该用户与环境之间存在活动 Relay 关联；</li>
+            <li>远程客户端持有 DPoP 证明密钥；</li>
+            <li>已关联本地环境接受 Relay 签名的签发请求；以及</li>
+            <li>环境签发的凭据绑定到远程客户端的 DPoP 指纹。</li>
+          </ul>
+          <div class="callout">
+            Relay 无法自行签发环境访问令牌。它只能请求本地环境为已授权云端用户签发短期引导凭据。
+          </div>
+          <p>在正常连接流程中，Relay 无法冒充远程客户端：</p>
+          <ul>
+            <li>普通环境 API 流量从远程客户端直接经过托管端点。Relay 不会收到最终环境访问令牌。</li>
+            <li>
+              一次性引导凭据和最终环境访问令牌都绑定到远程客户端的 DPoP 公钥指纹。兑换或使用它们
+              需要由对应私钥签名的请求证明，而私钥始终保留在客户端。
+            </li>
+            <li>
+              Relay 签名的健康和签发证明具有短期、受众绑定、作用域限制和重放保护。只有专用云端点
+              接受这些证明，普通环境 API 不会将其视为凭据。
+            </li>
+            <li>
+              环境健康和签发响应由已关联环境签名并绑定请求 nonce，因此隧道后的其他进程无法冒充
+              已关联环境。
+            </li>
+          </ul>
+          <div class="callout warning">
+            托管 Relay 仍是受信任的签发代理：它持有云端签发私钥。DPoP 会阻止 Relay 或隧道传输
+            在正常流程中复用凭据，但 Relay 签名权威一旦失陷仍会造成危害。
+          </div>
+        </article>
+
+        <article class="panel half">
+          <h2>产品边界</h2>
+          <p>
+            通用本地连接器称为 <strong>Relay 客户端</strong>。当前实现层使用
+            <code>cloudflared</code>，但它是内部传输细节，而不是产品合约。
+          </p>
+          <ul>
+            <li>Relay Worker 负责云端关联、托管端点分配和通知。</li>
+            <li>环境服务器负责本地会话、环境密钥和访问令牌。</li>
+            <li>Relay 客户端只暴露环境的回环 HTTP 服务器。</li>
+            <li>引导完成后，Web 和移动客户端直接连接托管环境端点。</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="panel" aria-label="拓扑">
+        <h2>当前拓扑</h2>
+        <pre class="diagram mermaid">
+flowchart LR
+  subgraph Clients["面向用户的客户端"]
+    Web["桌面/托管 Web UI"]
+    Mobile["移动应用"]
+    CLI["无界面 CLI"]
+  end
+
+  Clerk["Clerk<br/>用户身份与 OAuth"]
+
+  subgraph Relay["Cloudflare 上的 T3 Code Relay"]
+    Worker["Relay Worker<br/>HTTP API"]
+    Queue["APNs 发送队列<br/>含死信队列"]
+    Hyperdrive["Hyperdrive"]
+    CF["Cloudflare 隧道和 DNS API"]
+  end
+
+  DB["PlanetScale Postgres<br/>生产数据库和阶段分支"]
+  APNs["Apple 推送通知服务"]
+  Traces["Axiom OTLP 链路追踪"]
+
+  subgraph Local["已关联的 T3 环境"]
+    Env["环境服务器<br/>本地认证权威"]
+    RelayClient["Relay 客户端<br/>cloudflared 实现"]
+    Secrets["服务器机密存储<br/>密钥和 Relay 配置"]
+  end
+
+  Endpoint["托管 HTTPS/WSS 端点"]
+
+  Web -->|"Clerk Bearer / Relay DPoP"| Worker
+  Mobile -->|"Clerk Bearer / Relay DPoP"| Worker
+  CLI -->|"Clerk OAuth Bearer"| Worker
+  Web --> Clerk
+  Mobile --> Clerk
+  CLI -->|"PKCE 授权码流程"| Clerk
+  Worker --> Hyperdrive --> DB
+  Worker --> Traces
+  Worker --> CF
+  Worker --> Queue --> APNs
+  Worker --> Endpoint
+  Endpoint --> RelayClient -->|"http://127.0.0.1:port"| Env
+  Env --> Secrets
+  Web -->|"环境令牌 + DPoP<br/>HTTPS / WSS"| Endpoint
+  Mobile -->|"环境令牌 + DPoP<br/>HTTPS / WSS"| Endpoint
+  Env -->|"环境 Bearer + 已签名活动证明"| Worker
+        </pre>
+      </section>
+
+      <section class="panel" aria-label="认证矩阵">
+        <h2>认证和传输矩阵</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>边界</th>
+              <th>传输</th>
+              <th>认证</th>
+              <th>用途</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Web 或移动端 -> Relay 关联管理</td>
+              <td>HTTPS</td>
+              <td>Clerk 会话模板 Bearer 令牌</td>
+              <td>创建关联挑战、提交环境证明、列出关联或取消关联。</td>
+            </tr>
+            <tr>
+              <td>CLI -> Relay 关联管理</td>
+              <td>HTTPS</td>
+              <td>通过 PKCE 获取的 Clerk OAuth 访问令牌</td>
+              <td>服务器启动时协调所需的无界面云端关联。</td>
+            </tr>
+            <tr>
+              <td>Web 或移动端 -> Relay 受保护客户端端点</td>
+              <td>HTTPS</td>
+              <td>Relay 签发的 DPoP 令牌和每请求 DPoP 证明</td>
+              <td>检查环境状态、请求远程连接并注册移动设备。</td>
+            </tr>
+            <tr>
+              <td>Relay -> 托管环境端点</td>
+              <td>通过托管隧道的 HTTPS</td>
+              <td>短期 Relay 签名 JWT 请求证明</td>
+              <td>请求已签名健康响应，或要求本地环境签发凭据。</td>
+            </tr>
+            <tr>
+              <td>环境 -> Relay 活动发布</td>
+              <td>HTTPS</td>
+              <td>Relay 签发的环境 Bearer 凭据和环境签名 JWT 证明</td>
+              <td>为推送通知和实时活动发布已脱敏的智能体活动状态。</td>
+            </tr>
+            <tr>
+              <td>远程客户端 -> 环境</td>
+              <td>通过托管隧道的 HTTPS 和 WSS</td>
+              <td>绑定客户端 DPoP 密钥的环境访问令牌</td>
+              <td>使用普通环境 HTTP API 并请求一次性 WebSocket 票据。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel" aria-label="凭据所有权">
+        <h2>凭据所有权</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>凭据</th>
+              <th>创建者</th>
+              <th>存储位置</th>
+              <th>用途</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Clerk 会话模板 JWT</td>
+              <td>Clerk</td>
+              <td>Web 或移动客户端</td>
+              <td>认证云端用户 Relay 请求，并引导 Relay DPoP 令牌交换。</td>
+            </tr>
+            <tr>
+              <td>CLI OAuth 访问和刷新令牌</td>
+              <td>Clerk OAuth</td>
+              <td>本地服务器机密存储</td>
+              <td>授权无界面 CLI 关联协调。</td>
+            </tr>
+            <tr>
+              <td>环境 Ed25519 密钥对</td>
+              <td>本地环境服务器</td>
+              <td>本地服务器机密存储</td>
+              <td>签署关联证明、健康响应、签发响应和活动发布证明。</td>
+            </tr>
+            <tr>
+              <td>Relay 云端签发密钥对</td>
+              <td>Relay 部署</td>
+              <td>私钥位于 Relay Worker 配置，公钥安装到环境</td>
+              <td>签署 Relay 到环境的健康和签发请求。</td>
+            </tr>
+            <tr>
+              <td>Relay 环境 Bearer 凭据</td>
+              <td>Relay</td>
+              <td>哈希存储在 Relay Postgres，明文存储在本地服务器机密存储</td>
+              <td>认证环境到 Relay 的智能体活动发布。</td>
+            </tr>
+            <tr>
+              <td>Relay DPoP 访问令牌</td>
+              <td>Relay</td>
+              <td>远程客户端内存缓存</td>
+              <td>使用持有证明授权状态、连接和移动注册端点。</td>
+            </tr>
+            <tr>
+              <td>环境引导凭据</td>
+              <td>本地环境服务器</td>
+              <td>经 Relay 传递给远程客户端</td>
+              <td>在环境 <code>/oauth/token</code> 端点进行一次性交换。</td>
+            </tr>
+            <tr>
+              <td>环境访问令牌</td>
+              <td>本地环境服务器</td>
+              <td>远程客户端</td>
+              <td>授权环境 HTTP 操作和 WebSocket 票据签发。</td>
+            </tr>
+            <tr>
+              <td>WebSocket 票据</td>
+              <td>本地环境服务器</td>
+              <td>使用前存储在远程客户端</td>
+              <td>用于 WSS 升级的短期一次性凭据。</td>
+            </tr>
+            <tr>
+              <td>Relay 客户端连接器令牌</td>
+              <td>Cloudflare 隧道 API</td>
+              <td>本地服务器机密存储</td>
+              <td>
+                启动本地 Relay 客户端。通过 <code>TUNNEL_TOKEN</code> 传递，而不是 Shell 参数。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="grid" aria-label="核心流程">
+        <article class="panel">
+          <h2>流程 1：从桌面 Web UI 关联</h2>
+          <pre class="diagram mermaid">
+sequenceDiagram
+  participant U as 已登录用户
+  participant C as 桌面 Web UI
+  participant E as 本地环境
+  participant R as Relay Worker
+  participant CF as Cloudflare API
+  participant RC as 本地 Relay 客户端
+
+  U->>C: 为本地已配对环境启用 T3 Connect
+  C->>E: 检查 Relay 客户端可用性
+  alt 缺少 Relay 客户端
+    C->>U: 下载和安装前提示
+    U->>C: 确认
+    C->>E: 流式 Relay 客户端安装 RPC
+    E-->>C: 进度阶段
+  end
+  C->>R: POST /v1/client/environment-link-challenges（Clerk Bearer）
+  R-->>C: 短期挑战
+  C->>E: POST /api/connect/link-proof（本地 relay:write Bearer）
+  E->>E: 认证、拒绝转发权威、获取或创建密钥对、验证回环源
+  E-->>C: 环境签名的关联证明
+  C->>R: POST /v1/client/environment-links（Clerk Bearer + 证明）
+  R->>R: 验证挑战、证明、能力、nonce 和回环源
+  R->>CF: 协调隧道、入口和 CNAME
+  R->>R: 更新用户/环境关联并签发环境 Bearer
+  R-->>C: 托管端点、Relay 配置和连接器令牌
+  C->>E: POST /api/connect/relay-config（本地 relay:write Bearer）
+  E->>RC: 使用 TUNNEL_TOKEN 启动 Relay 客户端
+          </pre>
+          <div class="callout">
+            本地关联证明端点要求
+            <code>relay:write</code>，拒绝转发的权威请求头，并且只接受完全匹配的
+            回环源。在并发关联尝试中，环境密钥对持久化保持原子性。
+          </div>
+          <p>
+            本地已配对移动客户端使用相同的 Relay 挑战、本地证明、Relay 关联和本地 Relay 配置端点。
+            桌面 Web UI 负责检查 Relay 客户端可用性并提供托管安装对话框。
+          </p>
+        </article>
+
+        <article class="panel">
+          <h2>流程 2：无界面 CLI 关联</h2>
+          <pre class="diagram mermaid">
+sequenceDiagram
+  participant U as 运维人员
+  participant CLI as t3 connect CLI
+  participant Clerk as Clerk OAuth
+  participant S as 下次启动的环境服务器
+  participant R as Relay Worker
+  participant RC as 本地 Relay 客户端
+
+  U->>CLI: t3 connect link
+  CLI->>CLI: 解析 Relay 客户端
+  alt 缺少 Relay 客户端
+    CLI->>U: 确认安装托管 Relay 客户端
+    U->>CLI: 确认
+    CLI->>CLI: 安装并在终端中更新进度
+  end
+  CLI->>Clerk: 浏览器 PKCE 授权码流程
+  Clerk-->>CLI: OAuth 访问和刷新令牌
+  CLI->>CLI: 持久化所需云端关联状态
+  U->>S: 启动 T3 环境服务器
+  S->>R: 创建挑战并提交本地签名证明
+  R-->>S: 托管端点配置和连接器令牌
+  S->>RC: 启动 Relay 客户端
+          </pre>
+          <p>
+            <code>t3 connect login</code> 存储授权但不启用暴露。<code>t3 connect unlink</code>
+            禁用暴露但保留授权。<code>t3 connect logout</code> 还会移除已存储的 CLI 授权。
+          </p>
+        </article>
+
+        <article class="panel">
+          <h2>流程 3：远程连接引导</h2>
+          <pre class="diagram mermaid">
+sequenceDiagram
+  participant C as Web 或移动客户端
+  participant Clerk as Clerk
+  participant R as Relay Worker
+  participant E as 托管环境端点
+
+  C->>Clerk: 获取 Clerk 会话模板 JWT
+  C->>R: POST /v1/client/dpop-token（Clerk JWT + DPoP 证明）
+  R-->>C: Relay DPoP 访问令牌
+  C->>R: POST /v1/environments/:id/connect（Relay DPoP）
+  R->>E: POST /api/t3-connect/mint-credential（Relay 签名证明）
+  E->>E: 验证 Relay 签名者、已关联用户、作用域、有效期、cnf 和重放保护
+  E-->>R: 引导凭据 + 环境签名证明
+  R->>R: 验证环境签名、nonce、端点和 DPoP 绑定
+  R-->>C: 托管端点 + 引导凭据
+  C->>E: POST /oauth/token（引导凭据 + DPoP 证明）
+  E-->>C: 环境 DPoP 绑定访问令牌
+  C->>E: POST /api/auth/websocket-ticket
+  E-->>C: 一次性 WebSocket 票据
+  C->>E: 使用票据连接 WSS /ws
+          </pre>
+          <div class="callout">
+            Relay 到环境的控制请求会禁用重定向，只使用已协调的托管端点分配，并要求先收到已签名的
+            环境响应，Relay 才会向客户端返回数据。
+          </div>
+        </article>
+
+        <article class="panel">
+          <h2>流程 4：智能体活动通知</h2>
+          <pre class="diagram mermaid">
+sequenceDiagram
+  participant E as 本地环境
+  participant R as Relay Worker
+  participant DB as Relay Postgres
+  participant Q as APNs 队列
+  participant APNs as Apple 推送通知服务
+  participant M as 移动应用
+
+  E->>E: 投影可发布的会话状态并脱敏失败详情
+  E->>R: POST /v1/environments/:environmentId/threads/:threadId/agent-activity
+  Note over E,R: 环境 Bearer 凭据 + 环境签名的逐状态证明
+  R->>R: 验证凭据、签名、作用域、过期时间和 nonce
+  R->>DB: 存储当前活动行
+  R->>Q: 将推送或实时活动发送作业加入队列
+  Q->>APNs: 发送已签名 APNs 请求
+  APNs-->>M: 推送通知或实时活动更新
+          </pre>
+          <p>
+            本地服务器有意发布范围有限的投影。失败运行使用固定的脱敏摘要，详细字符串会在发布前
+            限制长度。
+          </p>
+        </article>
+      </section>
+
+      <section class="grid" aria-label="托管端点生命周期">
+        <article class="panel half">
+          <h2>托管端点协调</h2>
+          <p>
+            托管端点资源以 <code>(userId, environmentId)</code> 为键。Relay 在预置前保留稳定的
+            主机名和隧道名，然后在 Postgres 中记录隧道 ID、DNS 记录 ID 和就绪状态检查点。
+          </p>
+          <div class="flow">
+            <div class="step">
+              <strong>1. 保留确定性分配</strong>
+              主机名和隧道名由 Relay 阶段、云端用户和环境 ID 派生。
+            </div>
+            <div class="step">
+              <strong>2. 复用或创建隧道</strong>
+              复用已有命名隧道。隧道入口被重写到已验证的回环源。
+            </div>
+            <div class="step">
+              <strong>3. 协调 DNS</strong>
+              更新已有 CNAME 并移除重复记录。创建冲突通过列出并协调最终生效记录来恢复。
+            </div>
+            <div class="step">
+              <strong>4. 标记为就绪</strong>
+              连接和状态请求只使用主机名仍与 Relay 管理命名空间匹配的就绪分配。
+            </div>
+          </div>
+        </article>
+
+        <article class="panel half">
+          <h2>取消关联清理</h2>
+          <p>Relay 取消关联会先移除用户的托管端点分配，再撤销用户与环境的关联：</p>
+          <ul>
+            <li>删除已有的托管 DNS 记录；</li>
+            <li>删除已有的 Cloudflare 隧道；</li>
+            <li>移除分配行；</li>
+            <li>撤销用户的环境关联；以及</li>
+            <li>仅在该环境密钥的最后一个活动关联消失后，撤销环境发布凭据。</li>
+          </ul>
+          <p>
+            本地取消关联会停止 Relay 客户端，并移除本地持久化的 Relay URL、签发者、已关联用户、
+            环境发布凭据、云端签发公钥、连接器配置和智能体活动偏好。
+          </p>
+        </article>
+      </section>
+
+      <section class="panel" aria-label="Cloudflare 隧道运行配置">
+        <h2>Cloudflare 隧道运行配置</h2>
+        <p>
+          托管隧道是私有应用后端，而不是通用公开托管。Relay 为每个活动
+          <code>(userId, environmentId)</code> 分配预置一个命名 Cloudflare 隧道和一条 DNS 记录。
+        </p>
+        <ul>
+          <li>
+            <strong>生命周期：</strong>环境关联时创建隧道，在可安全重试的协调中复用，在关联存续期间
+            保留，并在取消关联时删除。如果拆除失败，会保留分配检查点以便重试清理。
+          </li>
+          <li>
+            <strong>源：</strong>隧道入口限制为已关联环境服务器经过验证的回环 HTTP 源。拒绝任意上游
+            主机和原始 TCP 源。
+          </li>
+          <li>
+            <strong>协议：</strong>托管端点只承载 HTTPS 请求/响应流量和 WSS 连接。远程客户端通过隧道
+            使用普通环境 HTTP API 和已认证 WebSocket RPC 传输。
+          </li>
+          <li>
+            <strong>Relay 生成的流量：</strong>托管 Relay 在状态检查和远程连接引导期间发送少量 HTTPS
+            健康检查和凭据签发请求，不代理稳定状态下的远程会话。
+          </li>
+          <li>
+            <strong>流量形态：</strong>预期负载是交互式且由用户驱动。活动远程会话可能保持 WebSocket
+            打开并交换终端、智能体和 UI 更新；不活动的已关联环境应只有很少或没有隧道流量。
+          </li>
+          <li>
+            <strong>容量规划：</strong
+            >项目尚未发布，因此还没有生产带宽基线。隧道数量随活动的用户/环境
+            关联分配增长，带宽和并发 WebSocket 则随活动远程使用增长。
+          </li>
+        </ul>
+      </section>
+
+      <section class="panel" aria-label="SSRF 和隧道加固">
+        <h2>SSRF 和隧道加固</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>风险</th>
+              <th>已实现控制</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>客户端要求 Relay 为任意主机建立隧道。</td>
+              <td>环境和 Relay 都只接受回环主机和有效端口作为托管隧道源。</td>
+            </tr>
+            <tr>
+              <td>转发请求欺骗本地源验证。</td>
+              <td>本地关联证明处理器要求完全匹配的回环请求 URL，并拒绝转发的主机或协议请求头。</td>
+            </tr>
+            <tr>
+              <td>已存储端点被替换为任意外部 URL。</td>
+              <td>
+                连接和状态操作从 Postgres 解析就绪分配，并要求主机名位于已配置的托管端点区域下。
+              </td>
+            </tr>
+            <tr>
+              <td>托管端点将 Relay 出站流量重定向到其他位置。</td>
+              <td>Relay 到环境的状态和签发请求将重定向处理设为 <code>manual</code>。</td>
+            </tr>
+            <tr>
+              <td>隧道后的进程返回攻击者控制的数据。</td>
+              <td>Relay 使用已关联环境公钥、预期 nonce 和请求绑定验证环境签名的健康及签发响应。</td>
+            </tr>
+            <tr>
+              <td>被盗的远程访问令牌遭到重放。</td>
+              <td>Relay 和环境访问令牌均绑定 DPoP，并要求每请求证明和重放保护。</td>
+            </tr>
+            <tr>
+              <td>Relay 客户端令牌通过进程列表或 Shell 解析泄漏。</td>
+              <td>
+                Relay 客户端不通过 Shell 启动，并在 <code>TUNNEL_TOKEN</code> 中接收连接器令牌。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="callout warning">
+          托管隧道主机名位于已配置的隧道 DNS 区域下。在广泛用于不可信场景之前，仍需通过带有 Public
+          Suffix List 条目的专用可注册域名提供服务，以满足运行隔离要求。
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Relay HTTP API">
+        <h2>Relay HTTP API</h2>
+        <p>
+          Relay 在 <code>/openapi.json</code> 发布 OpenAPI 文档，在 <code>/docs</code> 发布交互式
+          API 文档，并将 <code>/</code> 重定向到文档。
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>端点</th>
+              <th>认证</th>
+              <th>用途</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET /health</code></td>
+              <td>无</td>
+              <td>Relay 健康检查。</td>
+            </tr>
+            <tr>
+              <td><code>GET /.well-known/oauth-authorization-server</code></td>
+              <td>无</td>
+              <td>Relay OAuth 令牌交换发现元数据。</td>
+            </tr>
+            <tr>
+              <td><code>GET /.well-known/oauth-protected-resource</code></td>
+              <td>无</td>
+              <td>Relay DPoP 受保护资源发现元数据。</td>
+            </tr>
+            <tr>
+              <td><code>GET /v1/environments</code></td>
+              <td>Clerk Bearer</td>
+              <td>列出已关联到当前登录用户的环境。</td>
+            </tr>
+            <tr>
+              <td><code>POST /v1/client/environment-link-challenges</code></td>
+              <td>Clerk Bearer</td>
+              <td>创建绑定用户的短期环境关联挑战。</td>
+            </tr>
+            <tr>
+              <td><code>POST /v1/client/environment-links</code></td>
+              <td>Clerk Bearer</td>
+              <td>验证本地环境证明、协调托管端点并更新用户关联。</td>
+            </tr>
+            <tr>
+              <td><code>DELETE /v1/client/environment-links/:environmentId</code></td>
+              <td>Clerk Bearer</td>
+              <td>移除托管端点资源并撤销用户关联。</td>
+            </tr>
+            <tr>
+              <td><code>POST /v1/client/dpop-token</code></td>
+              <td>令牌交换负载中的 Clerk 令牌和 DPoP 证明</td>
+              <td>为请求的受支持作用域签发 Relay DPoP 访问令牌。</td>
+            </tr>
+            <tr>
+              <td><code>POST /v1/environments/:environmentId/status</code></td>
+              <td>Relay DPoP</td>
+              <td>请求并验证已签名环境健康响应。</td>
+            </tr>
+            <tr>
+              <td><code>POST /v1/environments/:environmentId/connect</code></td>
+              <td>Relay DPoP</td>
+              <td>请求并验证环境引导凭据。</td>
+            </tr>
+            <tr>
+              <td><code>POST /v1/mobile/devices</code></td>
+              <td>Relay DPoP</td>
+              <td>注册或更新用于通知的移动设备。</td>
+            </tr>
+            <tr>
+              <td><code>POST /v1/mobile/live-activities</code></td>
+              <td>Relay DPoP</td>
+              <td>注册实时活动推送令牌。</td>
+            </tr>
+            <tr>
+              <td><code>DELETE /v1/mobile/devices/:deviceId</code></td>
+              <td>Relay DPoP</td>
+              <td>注销移动设备。</td>
+            </tr>
+            <tr>
+              <td>
+                <code>POST /v1/environments/:environmentId/threads/:threadId/agent-activity</code>
+              </td>
+              <td>环境 Bearer 和已签名发布证明</td>
+              <td>发布已脱敏的当前智能体活动以发送通知。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel" aria-label="环境 HTTP API">
+        <h2>环境云端 HTTP API</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>端点</th>
+              <th>认证</th>
+              <th>用途</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>POST /api/connect/link-proof</code></td>
+              <td>带有 <code>relay:write</code> 的本地环境令牌</td>
+              <td>验证本地源并签署环境关联证明。</td>
+            </tr>
+            <tr>
+              <td><code>POST /api/connect/relay-config</code></td>
+              <td>带有 <code>relay:write</code> 的本地环境令牌</td>
+              <td>持久化已关联 Relay 配置并启动 Relay 客户端。</td>
+            </tr>
+            <tr>
+              <td><code>GET /api/connect/link-state</code></td>
+              <td>带有 <code>relay:read</code> 的本地环境令牌</td>
+              <td>读取环境当前的 T3 Connect 关联状态。</td>
+            </tr>
+            <tr>
+              <td><code>POST /api/connect/preferences</code></td>
+              <td>带有 <code>relay:write</code> 的本地环境令牌</td>
+              <td>启用或禁用智能体活动发布。</td>
+            </tr>
+            <tr>
+              <td><code>POST /api/connect/unlink</code></td>
+              <td>带有 <code>relay:write</code> 的本地环境令牌</td>
+              <td>停止 Relay 客户端并清除本地 T3 Connect 配置。</td>
+            </tr>
+            <tr>
+              <td><code>POST /api/t3-connect/health</code></td>
+              <td>Relay 签名证明</td>
+              <td>返回已签名环境健康响应。</td>
+            </tr>
+            <tr>
+              <td><code>POST /api/t3-connect/mint-credential</code></td>
+              <td>Relay 签名证明</td>
+              <td>为远程客户端签发绑定 DPoP 的一次性引导凭据。</td>
+            </tr>
+            <tr>
+              <td><code>POST /oauth/token</code></td>
+              <td>引导凭据和 DPoP 证明</td>
+              <td>将引导凭据交换为环境访问令牌。</td>
+            </tr>
+            <tr>
+              <td><code>POST /api/auth/websocket-ticket</code></td>
+              <td>环境访问令牌</td>
+              <td>为 WSS 升级签发一次性票据。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="grid" aria-label="运行时和基础设施">
+        <article class="panel half">
+          <h2>Relay 客户端安装</h2>
+          <p>
+            桌面 Web UI 可用性检查和安装使用本地 WebSocket RPC 方法：
+            <code>cloud.getRelayClientStatus</code> 和流式
+            <code>cloud.installRelayClient</code>。安装流会发出当前阶段：检查、等待锁、下载、验证、
+            安装、校验和激活。
+          </p>
+          <p>
+            Web UI 在安装前请求确认，并显示自定义进度对话框。CLI 直接调用同一本地 Relay 客户端
+            服务，并在终端中报告相同的进度阶段。
+          </p>
+        </article>
+
+        <article class="panel half">
+          <h2>Relay 基础设施</h2>
+          <ul>
+            <li>用于托管 Relay HTTP API 的 Cloudflare Worker。</li>
+            <li>名为 <code>t3coderelay</code> 的 PlanetScale Postgres 数据库。</li>
+            <li>生产环境使用共享数据库，非生产阶段使用数据库分支。</li>
+            <li>禁用缓存且限制源连接数的 Cloudflare Hyperdrive。</li>
+            <li>用于托管端点协调的 Cloudflare 隧道和 DNS 绑定。</li>
+            <li>Cloudflare APNs 发送队列和死信队列。</li>
+            <li>每五分钟清理过期 DPoP 重放行的计划任务。</li>
+            <li>每个阶段的 Axiom OTLP 链路数据集、限定范围的摄取令牌和最近 span 视图。</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="panel" aria-label="部署配置">
+        <h2>部署配置</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>边界</th>
+              <th>配置</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Relay 基础设施</td>
+              <td>
+                <code>RELAY_API_ZONE_NAME</code>、<code>RELAY_TUNNEL_ZONE_NAME</code>、可选的
+                <code>RELAY_DOMAIN</code>, <code>CLERK_PUBLISHABLE_KEY</code>,
+                <code>CLERK_SECRET_KEY</code>、<code>CLERK_JWT_AUDIENCE</code> 和 APNs 凭据。
+              </td>
+            </tr>
+            <tr>
+              <td>源码构建的桌面/服务器云端功能</td>
+              <td>
+                可选的 <code>T3CODE_RELAY_URL</code>、<code>T3CODE_CLERK_PUBLISHABLE_KEY</code> 和
+                <code>T3CODE_CLERK_CLI_OAUTH_CLIENT_ID</code>。发布构建在构建时注入公开值。
+              </td>
+            </tr>
+            <tr>
+              <td>Web 和移动云端客户端</td>
+              <td>
+                公开 Clerk 可发布密钥、Clerk JWT 模板名称和 Relay URL。Relay URL 必须规范化为绝对
+                HTTPS 源，并且不能包含凭据、查询、片段或非根路径。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel" aria-label="实施清单">
+        <h2>实施清单</h2>
+        <ul>
+          <li>Relay 云端签发私钥只保留在托管端，只将公钥安装到环境中。</li>
+          <li>将环境签名私钥保留在本地，并以原子方式持久化密钥对创建。</li>
+          <li>关联或更改 Relay 配置前，要求本地 <code>relay:write</code> 会话。</li>
+          <li>发送凭据前，将 Relay URL 验证为安全的绝对 HTTPS 源。</li>
+          <li>关联证明边界两侧都只允许回环隧道源。</li>
+          <li>从就绪分配行解析托管端点出站地址，而不是使用客户端提供的 URL。</li>
+          <li>在 Relay 到环境的请求上禁用重定向。</li>
+          <li>使用隧道响应前验证环境签名的响应证明。</li>
+          <li>保持隧道和 DNS 预置可安全重试，并在取消关联时解除预置。</li>
+          <li>仅在最后一个活动关联消失后撤销共享环境发布凭据。</li>
+          <li>对外发布前，脱敏并限制本地智能体失败详情长度。</li>
+        </ul>
+      </section>
+
+      <section class="panel" aria-label="标准参考">
+        <h2>标准参考</h2>
+        <ul class="source-list">
+          <li>
+            <a href="https://www.rfc-editor.org/rfc/rfc8252">RFC 8252</a>：原生应用基于浏览器的
+            OAuth，由 CLI PKCE 授权流程使用。
+          </li>
+          <li>
+            <a href="https://www.rfc-editor.org/rfc/rfc8693">RFC 8693</a>：OAuth 令牌交换，用于从
+            Clerk 令牌交换到 Relay DPoP 令牌。
+          </li>
+          <li>
+            <a href="https://www.rfc-editor.org/rfc/rfc9449">RFC 9449</a>：DPoP 持有证明，用于 Relay
+            和环境访问令牌。
+          </li>
+        </ul>
+      </section>
+    </main>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: "base",
+        themeVariables: {
+          fontFamily: 'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          primaryColor: "#eef4ff",
+          primaryBorderColor: "#1457d9",
+          primaryTextColor: "#171717",
+          lineColor: "#62646b",
+          signalColor: "#171717",
+          signalTextColor: "#171717",
+          noteBkgColor: "#fff6e6",
+          noteTextColor: "#171717",
+          actorBkg: "#fbfbf8",
+          actorBorder: "#62646b",
+          actorTextColor: "#171717",
+        },
+        flowchart: {
+          htmlLabels: true,
+          curve: "basis",
+          padding: 18,
+        },
+        sequence: {
+          showSequenceNumbers: true,
+          mirrorActors: false,
+          rightAngles: false,
+        },
+      });
+
+      await mermaid.run({ querySelector: ".diagram.mermaid" });
+
+      for (const svg of document.querySelectorAll(".diagram.mermaid svg")) {
+        const viewBox = svg.getAttribute("viewBox");
+        const width = viewBox?.split(/\s+/).map(Number)[2];
+        if (Number.isFinite(width) && width > 0) {
+          svg.style.setProperty("width", `${Math.ceil(width)}px`, "important");
+          svg.style.setProperty("max-width", "none", "important");
+        }
+      }
+    </script>
+  </body>
+</html>
