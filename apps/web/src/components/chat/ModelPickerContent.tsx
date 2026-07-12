@@ -42,6 +42,17 @@ type ModelPickerItem = {
   continuationGroupKey?: string | undefined;
 };
 
+export function resolveBrowsedInstanceModel(input: {
+  activeInstanceId: ProviderInstanceId;
+  activeModel: string;
+  nextInstanceId: ProviderInstanceId;
+  modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
+}): string | null {
+  if (input.nextInstanceId === input.activeInstanceId) return null;
+  const models = input.modelOptionsByInstance.get(input.nextInstanceId) ?? [];
+  return models.find((model) => model.slug === input.activeModel)?.slug ?? models[0]?.slug ?? null;
+}
+
 const EMPTY_MODEL_JUMP_LABELS = new Map<string, string>();
 
 // Split a `${instanceId}:${slug}` combobox key back into its pieces. Slugs
@@ -88,6 +99,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   terminalOpen: boolean;
   onRequestClose?: () => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
+  onInstanceChange?: (instanceId: ProviderInstanceId, model: string) => void;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
 }) {
   const { t } = useI18n();
@@ -96,6 +108,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     modelOptionsByInstance,
     instanceEntries,
     getModelDisabledReason,
+    onInstanceChange,
     onInstanceModelChange,
   } = props;
   const [searchQuery, setSearchQuery] = useState("");
@@ -128,11 +141,28 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const handleSelectInstance = useCallback(
     (instanceId: ProviderInstanceId | "favorites") => {
       setSelectedInstanceId(instanceId);
+      if (instanceId !== "favorites") {
+        const model = resolveBrowsedInstanceModel({
+          activeInstanceId: props.activeInstanceId,
+          activeModel: props.model,
+          nextInstanceId: instanceId,
+          modelOptionsByInstance,
+        });
+        if (model) {
+          onInstanceChange?.(instanceId, model);
+        }
+      }
       window.requestAnimationFrame(() => {
         focusSearchInput();
       });
     },
-    [focusSearchInput],
+    [
+      focusSearchInput,
+      modelOptionsByInstance,
+      onInstanceChange,
+      props.activeInstanceId,
+      props.model,
+    ],
   );
 
   useLayoutEffect(() => {

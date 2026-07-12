@@ -132,6 +132,11 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     setIsMenuOpen(false);
   };
 
+  const handleInstanceChange = (instanceId: ProviderInstanceId, model: string) => {
+    if (props.disabled) return;
+    props.onInstanceModelChange(instanceId, model);
+  };
+
   return (
     <Popover
       open={isMenuOpen}
@@ -203,6 +208,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           {...(props.getModelDisabledReason
             ? { getModelDisabledReason: props.getModelDisabledReason }
             : {})}
+          onInstanceChange={handleInstanceChange}
           onInstanceModelChange={handleInstanceModelChange}
         />
       </PopoverPopup>

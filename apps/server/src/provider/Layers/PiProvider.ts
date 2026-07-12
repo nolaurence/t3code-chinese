@@ -149,7 +149,21 @@ const discoverPiModels = (settings: PiAgentSettings, cwd: string, environment: N
         env: environment,
       });
       const response = yield* client.request({ type: "get_available_models" });
-      return response.success ? mapPiAvailableModels(response.data, settings.customModels) : [];
+      if (!response.success) return { models: fallbackModels(settings), hasConfiguredAuth: false };
+
+      // Pi's get_available_models RPC only returns models whose provider has
+      // configured auth. Keep that signal separate from T3's manually added
+      // custom model slugs, which do not prove Pi has usable credentials.
+      const availableModels = mapPiAvailableModels(response.data);
+      return {
+        models: providerModelsFromSettings(
+          availableModels,
+          PROVIDER,
+          settings.customModels,
+          EMPTY_CAPABILITIES,
+        ),
+        hasConfiguredAuth: availableModels.length > 0,
+      };
     }),
   );
 
@@ -248,12 +262,20 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
     presentation: PI_PRESENTATION,
     enabled: true,
     checkedAt,
-    models: discovered.success.value,
+    models: discovered.success.value.models,
     probe: {
       installed: true,
       version,
-      status: "ready",
-      auth: { status: "unknown" },
+      status: discovered.success.value.hasConfiguredAuth ? "ready" : "error",
+      auth: {
+        status: discovered.success.value.hasConfiguredAuth ? "authenticated" : "unauthenticated",
+      },
+      ...(discovered.success.value.hasConfiguredAuth
+        ? {}
+        : {
+            message:
+              "Pi has no models with configured credentials. Configure a provider in Pi and try again.",
+          }),
     },
   });
 });

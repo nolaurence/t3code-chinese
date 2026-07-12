@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { isElectron } from "~/env";
 import { useResizableWidth } from "~/hooks/useResizableWidth";
 import { cn } from "~/lib/utils";
+import { inlineRightPanelSizeStyle } from "~/chatLayout";
 
 import { RightPanelResizeHandle } from "./RightPanelResizeHandle";
 
@@ -47,7 +48,7 @@ export function PreviewPanelShell(props: {
             : "shrink-0 border-l border-border"
           : "w-full",
       )}
-      style={isInline && !props.maximized ? { width: `${width}px` } : undefined}
+      style={isInline && !props.maximized ? inlineRightPanelSizeStyle(width) : undefined}
       data-preview-panel-mode={props.mode}
       data-preview-panel-maximized={props.maximized ? "true" : "false"}
     >

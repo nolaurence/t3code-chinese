@@ -126,7 +126,7 @@ export function SidebarProviderUpdatePill() {
 
   return (
     <div
-      className={`group/provider-update relative flex h-7 w-full items-center overflow-hidden rounded-lg text-xs font-medium transform-gpu transition-all duration-180 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
+      className={`group/provider-update relative flex h-7 min-w-0 w-full items-center overflow-hidden rounded-lg text-xs font-medium transform-gpu transition-all duration-180 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:w-8 ${
         PROVIDER_UPDATE_PILL_STYLES[displayedView.tone]
       } ${
         exitingKey === displayedView.key
@@ -170,19 +170,21 @@ export function SidebarProviderUpdatePill() {
             <button
               type="button"
               aria-label={displayedView.description}
-              className="provider-update-main relative z-[1] flex h-full flex-1 items-center gap-2 px-2 text-left"
+              className="provider-update-main relative z-[1] flex h-full min-w-0 flex-1 items-center gap-2 px-2 text-left group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
               onClick={openProviderSettings}
             >
               {displayedView.tone === "loading" ? (
-                <LoaderIcon className="size-3.5 animate-spin" />
+                <LoaderIcon className="size-3.5 shrink-0 animate-spin" />
               ) : displayedView.tone === "success" ? (
-                <CircleCheckIcon className="size-3.5" />
+                <CircleCheckIcon className="size-3.5 shrink-0" />
               ) : displayedView.tone === "error" ? (
-                <TriangleAlertIcon className="size-3.5" />
+                <TriangleAlertIcon className="size-3.5 shrink-0" />
               ) : (
-                <DownloadIcon className="size-3.5" />
+                <DownloadIcon className="size-3.5 shrink-0" />
               )}
-              <span>{displayedView.title}</span>
+              <span className="min-w-0 truncate whitespace-nowrap group-data-[collapsible=icon]:hidden">
+                {displayedView.title}
+              </span>
             </button>
           }
         />
@@ -195,7 +197,7 @@ export function SidebarProviderUpdatePill() {
               <button
                 type="button"
                 aria-label={t("update.dismissProvider")}
-                className="relative z-[1] mr-1 inline-flex size-5 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100"
+                className="relative z-[1] mr-1 inline-flex size-5 shrink-0 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 group-data-[collapsible=icon]:hidden"
                 onClick={() => startExit(displayedView.key, null, displayedView.key)}
               >
                 <XIcon className="size-3.5" />

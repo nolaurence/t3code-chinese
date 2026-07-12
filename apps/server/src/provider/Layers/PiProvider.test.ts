@@ -76,6 +76,14 @@ describe("mapPiAvailableModels", () => {
     expect(models[1]?.capabilities?.optionDescriptors).toEqual([]);
     expect(models[2]?.isCustom).toBe(true);
   });
+
+  it("keeps manually configured model slugs separate from Pi-discovered models", () => {
+    const models = mapPiAvailableModels({ models: [] }, ["custom/local-model"]);
+
+    expect(models).toEqual([
+      expect.objectContaining({ slug: "custom/local-model", isCustom: true }),
+    ]);
+  });
 });
 
 it.layer(NodeServices.layer)("checkPiProviderStatus", (it) => {

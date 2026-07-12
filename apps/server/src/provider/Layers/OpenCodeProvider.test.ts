@@ -142,6 +142,22 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
     }),
   );
 
+  it.effect("rejects OpenCode versions with the known SQLite session schema incompatibility", () =>
+    Effect.gen(function* () {
+      runtimeMock.state.versionStdout = "opencode 1.15.13\n";
+      const snapshot = yield* checkOpenCodeProviderStatus(makeOpenCodeSettings(), process.cwd());
+
+      NodeAssert.equal(snapshot.status, "error");
+      NodeAssert.equal(snapshot.installed, true);
+      NodeAssert.equal(snapshot.version, "1.15.13");
+      NodeAssert.equal(
+        snapshot.message,
+        "OpenCode v1.15.13 has a known SQLite session schema incompatibility. Upgrade OpenCode before using it with T3 Code.",
+      );
+      NodeAssert.equal(runtimeMock.state.closeCalls, 0);
+    }),
+  );
+
   it.effect("emits OpenCode variant defaults so trait picker can resolve a visible selection", () =>
     Effect.gen(function* () {
       runtimeMock.state.inventory = {

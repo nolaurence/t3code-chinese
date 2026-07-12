@@ -31,6 +31,7 @@ const OPENCODE_PRESENTATION = {
   showInteractionModeToggle: false,
 } as const;
 const MINIMUM_OPENCODE_VERSION = "1.14.19";
+const INCOMPATIBLE_OPENCODE_VERSIONS = new Set(["1.15.13"]);
 
 class OpenCodeProbeError extends Data.TaggedError("OpenCodeProbeError")<{
   readonly cause: unknown;
@@ -403,6 +404,26 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
           status: "error",
           auth: { status: "unknown" },
           message: `OpenCode v${version} is too old. Upgrade to v${MINIMUM_OPENCODE_VERSION} or newer.`,
+        },
+      });
+    }
+    if (INCOMPATIBLE_OPENCODE_VERSIONS.has(version)) {
+      return buildServerProvider({
+        presentation: OPENCODE_PRESENTATION,
+        enabled: openCodeSettings.enabled,
+        checkedAt,
+        models: providerModelsFromSettings(
+          [],
+          PROVIDER,
+          customModels,
+          DEFAULT_OPENCODE_MODEL_CAPABILITIES,
+        ),
+        probe: {
+          installed: true,
+          version,
+          status: "error",
+          auth: { status: "unknown" },
+          message: `OpenCode v${version} has a known SQLite session schema incompatibility. Upgrade OpenCode before using it with T3 Code.`,
         },
       });
     }

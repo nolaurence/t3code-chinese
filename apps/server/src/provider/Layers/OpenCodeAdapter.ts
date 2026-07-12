@@ -1215,7 +1215,13 @@ export function makeOpenCodeAdapter(
       const variant = getModelSelectionStringOptionValue(modelSelection, "variant");
 
       context.activeTurnId = turnId;
-      context.activeAgent = agent ?? (input.interactionMode === "plan" ? "plan" : undefined);
+      // `build` is OpenCode's implicit default. Sending it explicitly makes
+      // OpenCode persist an unnecessary agent-switch message, which is broken
+      // by some CLI/database schema combinations (notably v1.15.13).
+      context.activeAgent =
+        agent === "build"
+          ? undefined
+          : (agent ?? (input.interactionMode === "plan" ? "plan" : undefined));
       context.activeVariant = variant;
       yield* updateProviderSession(
         context,
