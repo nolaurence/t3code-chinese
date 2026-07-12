@@ -24,6 +24,7 @@ const history = isElectron ? createHashHistory() : createBrowserHistory();
 const router = getRouter(history);
 
 if (isElectron) {
+  document.documentElement.classList.add("desktop-runtime");
   syncDocumentWindowControlsOverlayClass();
 }
 

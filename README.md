@@ -1,72 +1,71 @@
 # T3 Code
 
-[English](./README.md) | [简体中文](./README.zh-CN.md)
+[简体中文](./README.md) | [English](./README.en.md)
 
-T3 Code is a minimal web GUI for coding agents (currently Codex, Claude, Cursor, OpenCode, and Pi, with more coming soon).
+T3 Code 是一个供编程智能体使用的简洁 Web 图形界面，目前支持 Codex、Claude、Cursor 和 OpenCode，后续还会支持更多智能体。
 
-## Installation
+## 安装
 
 > [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, OpenCode, and Pi.
-> Install and authenticate at least one provider before use:
+> T3 Code 目前支持 Codex、Claude、Cursor 和 OpenCode。
+> 使用前，请至少安装并登录一个供应商：
 >
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `cursor-agent login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
-> - Pi: run `npm install -g @earendil-works/pi-coding-agent`, then configure a model and authentication in Pi
+> - Codex：安装 [Codex CLI](https://developers.openai.com/codex/cli)，然后运行 `codex login`
+> - Claude：安装 [Claude Code](https://claude.com/product/claude-code)，然后运行 `claude auth login`
+> - Cursor：安装 [Cursor CLI](https://cursor.com/cli)，然后运行 `cursor-agent login`
+> - OpenCode：安装 [OpenCode](https://opencode.ai)，然后运行 `opencode auth login`
 
-### Run without installing
+### 无需安装直接运行
 
 ```bash
 npx t3@latest
 ```
 
-Tip: Use `npx t3@latest --help` for the full CLI reference.
+提示：运行 `npx t3@latest --help` 可查看完整 CLI 参考。
 
-### Desktop app
+### 桌面应用
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/nolaurence/t3code-chinese/releases), or from your favorite package registry:
+从 [GitHub Releases](https://github.com/nolaurence/t3code-chinese/releases) 安装最新桌面应用，也可以使用常用的软件包管理器：
 
-#### Windows (`winget`)
+#### Windows（`winget`）
 
 ```bash
 winget install T3Tools.T3Code
 ```
 
-#### macOS (Homebrew)
+#### macOS（Homebrew）
 
 ```bash
 brew install --cask t3-code
 ```
 
-#### Arch Linux (AUR)
+#### Arch Linux（AUR）
 
 ```bash
 yay -S t3code-bin
 ```
 
-## Some notes
+## 说明
 
-We are very very early in this project. Expect bugs.
+本项目仍处于非常早期的开发阶段，使用时可能遇到问题。
 
-We are not accepting contributions yet.
+目前暂不接受外部贡献。
 
-There's no public docs site yet, checkout the miscellaneous markdown files in [docs](./docs).
+公开文档站点尚未上线，请查看 [docs/zh-CN](./docs/zh-CN/) 中的 Markdown 文档。
 
-## Documentation
+## 文档
 
-- [Getting started](./docs/getting-started/quick-start.md)
-- [Architecture overview](./docs/architecture/overview.md)
-- [Provider guides](./docs/providers/codex.md)
-- [Operations](./docs/operations/ci.md)
-- [Reference](./docs/reference/encyclopedia.md)
+- [快速开始](./docs/zh-CN/getting-started/quick-start.md)
+- [架构概览](./docs/zh-CN/architecture/overview.md)
+- [供应商指南](./docs/zh-CN/providers/codex.md)
+- [运维](./docs/zh-CN/operations/ci.md)
+- [参考手册](./docs/zh-CN/reference/encyclopedia.md)
 
-## If you REALLY want to contribute still.... read this first
+## 仍然希望参与贡献时，请先阅读以下内容
 
-### Install `vp`
+### 安装 `vp`
 
-T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
+T3 Code 使用 Vite+，因此需要安装全局 `vp` 命令行工具。
 
 #### macOS / Linux
 
@@ -80,14 +79,14 @@ curl -fsSL https://vite.plus | bash
 irm https://vite.plus/ps1 | iex
 ```
 
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
+更多信息请查看 Vite+ 的入门指南：https://viteplus.dev/guide/
 
-### Install dependencies
+### 安装依赖
 
 ```bash
 vp i
 ```
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or PR.
+提交 Issue 或 PR 前，请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+需要支持时，可以加入 [Discord](https://discord.gg/jn4EGJjrvv)。

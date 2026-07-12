@@ -80,6 +80,12 @@
   }
 }
 
+:root.desktop-runtime {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -286,14 +292,7 @@
 }
 
 body {
-  font-family:
-    "DM Sans Variable",
-    "DM Sans",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    system-ui,
-    sans-serif;
+  font-family: var(--font-sans);
   margin: 0;
   padding: 0;
 }
@@ -333,8 +332,7 @@ body::after {
 
 pre,
 code {
-  font-family:
-    "SF Mono", "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 /* Window drag region (frameless titlebar) */

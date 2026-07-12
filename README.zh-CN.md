@@ -1,6 +1,6 @@
 # T3 Code
 
-[English](./README.md) | [简体中文](./README.zh-CN.md)
+[简体中文](./README.md) | [English](./README.en.md)
 
 T3 Code 是一个供编程智能体使用的简洁 Web 图形界面，目前支持 Codex、Claude、Cursor、OpenCode 和 Pi，后续还会支持更多智能体。
 
