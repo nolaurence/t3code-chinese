@@ -10,6 +10,7 @@ import type {
 } from "@t3tools/contracts";
 
 import { cn } from "../../lib/utils";
+import { useI18n, type Translate } from "../../i18n";
 import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
@@ -109,6 +110,23 @@ export function deriveProviderSettingsFields(
         } satisfies ProviderSettingsFieldModel,
       ];
     });
+}
+
+export function localizeProviderSettingsFields(
+  definition: ProviderClientDefinition,
+  fields: ReadonlyArray<ProviderSettingsFieldModel>,
+  t: Translate,
+): ReadonlyArray<ProviderSettingsFieldModel> {
+  return fields.map((field) => {
+    const messages = definition.settingsFieldMessages?.[field.key];
+    if (!messages) return field;
+    return {
+      ...field,
+      label: t(messages.label),
+      ...(messages.description ? { description: t(messages.description) } : {}),
+      ...(messages.placeholder ? { placeholder: t(messages.placeholder) } : {}),
+    };
+  });
 }
 
 export function readProviderConfigString(config: unknown, key: string): string {
@@ -281,7 +299,11 @@ export function ProviderSettingsForm({
   variant,
   onChange,
 }: ProviderSettingsFormProps) {
-  const fields = useMemo(() => deriveProviderSettingsFields(definition), [definition]);
+  const { t, locale } = useI18n();
+  const fields = useMemo(
+    () => localizeProviderSettingsFields(definition, deriveProviderSettingsFields(definition), t),
+    [definition, locale, t],
+  );
 
   if (fields.length === 0) {
     return null;

@@ -4,10 +4,20 @@ import {
   CursorSettings,
   GrokSettings,
   OpenCodeSettings,
+  PiAgentSettings,
   ProviderDriverKind,
 } from "@t3tools/contracts";
 import type * as Schema from "effect/Schema";
-import { ClaudeAI, CursorIcon, GrokIcon, type Icon, OpenAI, OpenCodeIcon } from "../Icons";
+import {
+  ClaudeAI,
+  CursorIcon,
+  GrokIcon,
+  type Icon,
+  OpenAI,
+  OpenCodeIcon,
+  PiAgentIcon,
+} from "../Icons";
+import type { MessageKey } from "../../i18n";
 
 type ProviderSettingsSchema = {
   readonly fields: Readonly<Record<string, Schema.Top>>;
@@ -32,6 +42,16 @@ export interface ProviderClientDefinition {
    * built-in default or custom — advertises the same marker.
    */
   readonly badgeLabel?: string;
+  readonly settingsFieldMessages?: Readonly<
+    Record<
+      string,
+      {
+        readonly label: MessageKey;
+        readonly description?: MessageKey;
+        readonly placeholder?: MessageKey;
+      }
+    >
+  >;
 }
 
 export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
@@ -66,6 +86,22 @@ export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = 
     label: "OpenCode",
     icon: OpenCodeIcon,
     settingsSchema: OpenCodeSettings,
+  },
+  {
+    value: ProviderDriverKind.make("piAgent"),
+    label: "Pi",
+    icon: PiAgentIcon,
+    settingsSchema: PiAgentSettings,
+    settingsFieldMessages: {
+      binaryPath: {
+        label: "providers.pi.binaryPath.label",
+        description: "providers.pi.binaryPath.description",
+      },
+      homePath: {
+        label: "providers.pi.homePath.label",
+        description: "providers.pi.homePath.description",
+      },
+    },
   },
 ];
 

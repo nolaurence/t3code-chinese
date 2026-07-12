@@ -979,6 +979,15 @@ const common = defineMessages(
       "Used to distinguish this instance in picker rails and model lists.",
     "providers.noConfig":
       "This driver has no required configuration. You can add the instance now.",
+    "providers.pi.binaryPath.label": "Binary path",
+    "providers.pi.binaryPath.description":
+      "Path to the external Pi Coding Agent executable. Leave as 'pi' to use PATH discovery.",
+    "providers.pi.homePath.label": "Pi agent home path",
+    "providers.pi.homePath.description":
+      "Optional Pi configuration directory. Leave blank to reuse ~/.pi/agent.",
+    "providers.pi.trustTitle": "Trusted workspaces only",
+    "providers.pi.trustNotice":
+      "Pi runs its native tools directly without T3 Code approval prompts. Use this provider only in workspaces you trust.",
     "providers.added": "Provider instance added",
     "providers.addedDescription": "{provider} instance '{id}' was added.",
     "providers.addFailed": "Could not add provider instance",
@@ -2392,6 +2401,14 @@ const common = defineMessages(
     "providers.accentDescription": "显示在选择器中的可选标记。",
     "providers.accentPickerDescription": "用于在选择器轨道和模型列表中区分此实例。",
     "providers.noConfig": "此驱动没有必填配置，现在即可添加实例。",
+    "providers.pi.binaryPath.label": "可执行文件路径",
+    "providers.pi.binaryPath.description":
+      "外部 Pi Coding Agent 可执行文件的路径。保留为“pi”即可通过 PATH 自动探测。",
+    "providers.pi.homePath.label": "Pi Agent 主目录",
+    "providers.pi.homePath.description": "可选的 Pi 配置目录。留空时复用 ~/.pi/agent。",
+    "providers.pi.trustTitle": "仅用于可信工作区",
+    "providers.pi.trustNotice":
+      "Pi 的原生工具会直接执行，不经过 T3 Code 的批准提示。请仅在你信任的工作区中使用此供应商。",
     "providers.added": "已添加供应商实例",
     "providers.addedDescription": "已添加 {provider} 实例“{id}”。",
     "providers.addFailed": "无法添加供应商实例",

@@ -8,6 +8,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { createTranslator } from "../../i18n/messages";
 import {
   buildProviderInstanceUpdatePatch,
+  deriveDefaultProviderInstanceRow,
   formatDiagnosticsDescription,
   getThemeOptions,
   getTimestampFormatLabels,
@@ -133,5 +134,35 @@ describe("buildProviderInstanceUpdatePatch", () => {
 
     expect(patch.providerInstances?.[instanceId]).toEqual(nextInstance);
     expect(patch.providers).toBeUndefined();
+  });
+});
+
+describe("deriveDefaultProviderInstanceRow", () => {
+  it("builds a clean default row for drivers without legacy provider settings", () => {
+    const driver = ProviderDriverKind.make("piAgent");
+
+    expect(
+      deriveDefaultProviderInstanceRow({
+        driver,
+        defaultConfig: {
+          enabled: true,
+          binaryPath: "pi",
+          homePath: "",
+          customModels: [],
+        },
+      }),
+    ).toEqual({
+      instance: {
+        driver,
+        enabled: true,
+        config: {
+          enabled: true,
+          binaryPath: "pi",
+          homePath: "",
+          customModels: [],
+        },
+      },
+      isDirty: false,
+    });
   });
 });

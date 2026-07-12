@@ -24,6 +24,7 @@ import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
 import {
   canCheckForUpdate,
@@ -79,6 +80,7 @@ import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
 import {
   buildProviderInstanceUpdatePatch,
+  deriveDefaultProviderInstanceRow,
   formatDiagnosticsDescription,
   getThemeOptions,
   getTimestampFormatLabels,
@@ -113,6 +115,7 @@ function withoutProviderInstanceFavorites(
 
 const PROVIDER_SETTINGS = DRIVER_OPTIONS.map((definition) => ({
   provider: definition.value,
+  definition,
 }));
 
 function ProviderLastChecked({ lastCheckedAt }: { lastCheckedAt: string | null }) {
@@ -1148,17 +1151,18 @@ export function ProviderSettingsPanel() {
     const driver = providerSettings.provider;
     const defaultInstanceId = defaultInstanceIdForDriver(driver);
     const explicitInstance = settings.providerInstances?.[defaultInstanceId];
-    const legacyConfig = legacyProviders[providerSettings.provider]!;
-    const defaultLegacyConfig = defaultLegacyProviders[providerSettings.provider]!;
-    const effectiveInstance: ProviderInstanceConfig =
-      explicitInstance ??
-      ({
-        driver,
-        enabled: legacyConfig.enabled,
-        config: legacyConfig,
-      } satisfies ProviderInstanceConfig);
-    const isDirty =
-      explicitInstance !== undefined || !Equal.equals(legacyConfig, defaultLegacyConfig);
+    const legacyConfig = legacyProviders[providerSettings.provider];
+    const defaultLegacyConfig = defaultLegacyProviders[providerSettings.provider];
+    const defaultConfig = Schema.decodeUnknownSync(
+      providerSettings.definition.settingsSchema as unknown as Schema.Decoder<unknown>,
+    )({}) as Record<string, unknown>;
+    const { instance: effectiveInstance, isDirty } = deriveDefaultProviderInstanceRow({
+      driver,
+      explicitInstance,
+      legacyConfig,
+      defaultLegacyConfig,
+      defaultConfig,
+    });
     rows.push({
       instanceId: defaultInstanceId,
       instance: effectiveInstance,

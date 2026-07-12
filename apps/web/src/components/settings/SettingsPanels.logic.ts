@@ -6,9 +6,45 @@ import type {
   UnifiedSettings,
 } from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import * as Equal from "effect/Equal";
 import { createTranslator, type Translate } from "../../i18n/messages";
 
 const DEFAULT_TRANSLATE = createTranslator("en");
+
+export function deriveDefaultProviderInstanceRow(input: {
+  readonly driver: ProviderDriverKind;
+  readonly explicitInstance?: ProviderInstanceConfig | undefined;
+  readonly legacyConfig?:
+    | (Readonly<Record<string, unknown>> & { readonly enabled?: boolean })
+    | undefined;
+  readonly defaultLegacyConfig?: Readonly<Record<string, unknown>> | undefined;
+  readonly defaultConfig: Readonly<Record<string, unknown>>;
+}): { readonly instance: ProviderInstanceConfig; readonly isDirty: boolean } {
+  if (input.explicitInstance) {
+    return { instance: input.explicitInstance, isDirty: true };
+  }
+  if (input.legacyConfig) {
+    return {
+      instance: {
+        driver: input.driver,
+        enabled: input.legacyConfig.enabled ?? true,
+        config: input.legacyConfig,
+      },
+      isDirty:
+        input.defaultLegacyConfig === undefined ||
+        !Equal.equals(input.legacyConfig, input.defaultLegacyConfig),
+    };
+  }
+  return {
+    instance: {
+      driver: input.driver,
+      enabled:
+        typeof input.defaultConfig.enabled === "boolean" ? input.defaultConfig.enabled : true,
+      config: input.defaultConfig,
+    },
+    isDirty: false,
+  };
+}
 
 export function getThemeOptions(t: Translate) {
   return [

@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, ShieldAlertIcon } from "lucide-react";
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -13,7 +13,7 @@ import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSet
 import { cn } from "../../lib/utils";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Button } from "../ui/button";
-import { ACPRegistryIcon, Gemini, GithubCopilotIcon, PiAgentIcon, type Icon } from "../Icons";
+import { ACPRegistryIcon, Gemini, GithubCopilotIcon, type Icon } from "../Icons";
 import {
   Dialog,
   DialogDescription,
@@ -86,11 +86,6 @@ const COMING_SOON_DRIVER_OPTIONS: readonly ComingSoonDriverOption[] = [
     value: ProviderDriverKind.make("acpRegistry"),
     label: "ACP Registry",
     icon: ACPRegistryIcon,
-  },
-  {
-    value: ProviderDriverKind.make("piAgent"),
-    label: "Pi Agent",
-    icon: PiAgentIcon,
   },
 ];
 
@@ -442,6 +437,17 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
                     variant="dialog"
                     onChange={setConfigDraft}
                   />
+                  {driver === ProviderDriverKind.make("piAgent") ? (
+                    <div className="flex gap-2.5 border-l-2 border-amber-500/70 bg-amber-500/5 px-3 py-2.5 text-xs text-muted-foreground">
+                      <ShieldAlertIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                      <div className="grid gap-0.5">
+                        <span className="font-medium text-foreground">
+                          {t("providers.pi.trustTitle")}
+                        </span>
+                        <span>{t("providers.pi.trustNotice")}</span>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : wizardStep === 2 ? (
                 <div className="grid gap-2">

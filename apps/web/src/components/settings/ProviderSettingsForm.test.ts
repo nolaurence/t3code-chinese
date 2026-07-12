@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 import { ProviderDriverKind } from "@t3tools/contracts";
+import { createTranslator } from "../../i18n";
 
 import { DRIVER_OPTION_BY_VALUE } from "./providerDriverMeta";
 import {
   deriveProviderSettingsFields,
+  localizeProviderSettingsFields,
   nextProviderConfigWithFieldValue,
   readProviderConfigBoolean,
   readProviderConfigString,
@@ -34,6 +36,26 @@ describe("ProviderSettingsForm helpers", () => {
       description: "Stored in plain text on disk.",
       control: "password",
     });
+  });
+
+  it("registers localized Pi binary and home directory settings", () => {
+    const pi = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("piAgent")];
+    expect(pi).toBeDefined();
+
+    const fields = deriveProviderSettingsFields(pi!);
+    expect(fields.map((field) => field.key)).toEqual(["binaryPath", "homePath"]);
+    expect(localizeProviderSettingsFields(pi!, fields, createTranslator("en"))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "binaryPath", label: "Binary path" }),
+        expect.objectContaining({ key: "homePath", label: "Pi agent home path" }),
+      ]),
+    );
+    expect(localizeProviderSettingsFields(pi!, fields, createTranslator("zh-CN"))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "binaryPath", label: "可执行文件路径" }),
+        expect.objectContaining({ key: "homePath", label: "Pi Agent 主目录" }),
+      ]),
+    );
   });
 
   it("preserves unknown config keys while omitting empty configurable fields", () => {
