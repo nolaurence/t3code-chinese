@@ -48,6 +48,7 @@ describe("toolActivityHeading", () => {
 
   it("localizes known persisted English headings and lifecycle suffixes", () => {
     expect(toolActivityHeading(entry({ label: "Command run completed" }), zhCN)).toBe("运行命令");
+    expect(toolActivityHeading(entry({ label: "Ran command" }), zhCN)).toBe("运行命令");
     expect(toolActivityHeading(entry({ label: "Read File failed" }), zhCN)).toBe("读取文件");
     expect(toolActivityHeading(entry({ label: "Tool call stopped" }), zhCN)).toBe("工具调用");
   });

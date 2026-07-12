@@ -42,6 +42,7 @@ const ITEM_TYPE_KEYS: Partial<Record<NonNullable<WorkLogEntry["itemType"]>, Mess
 
 const LEGACY_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
   "command run": "chat.toolActivity.runCommand",
+  "ran command": "chat.toolActivity.runCommand",
   "run command": "chat.toolActivity.runCommand",
   "file change": "chat.toolActivity.editFile",
   "read file": "chat.toolActivity.readFile",

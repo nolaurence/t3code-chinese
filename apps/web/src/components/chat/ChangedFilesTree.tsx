@@ -11,6 +11,7 @@ import { cn } from "~/lib/utils";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { Button } from "../ui/button";
+import { useI18n } from "../../i18n";
 
 const EMPTY_DIRECTORY_OVERRIDES: Record<string, boolean> = {};
 
@@ -22,6 +23,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
   onToggleAllDirectories: () => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
 }) {
+  const { t } = useI18n();
   const {
     turnId,
     files,
@@ -36,7 +38,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
     <div className="relative mt-4 rounded-2xl bg-card/40 shadow-xs/5 not-dark:bg-clip-padding after:pointer-events-none after:absolute after:inset-0 after:z-20 after:rounded-2xl after:border after:border-input">
       <div className="sticky top-0 z-10 mb-3 flex items-center justify-between gap-2 rounded-t-2xl bg-card/72 p-3 backdrop-blur-md">
         <p className="flex items-center gap-1 font-medium text-foreground text-xs leading-4">
-          <span>{files.length} changed files</span>
+          <span>{t("chat.changedFiles.count", { count: files.length })}</span>
           {hasNonZeroStat(summaryStat) && (
             <DiffStatLabel
               additions={summaryStat.additions}
@@ -54,7 +56,9 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
             data-scroll-anchor-ignore
             onClick={onToggleAllDirectories}
           >
-            {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
+            {allDirectoriesExpanded
+              ? t("chat.changedFiles.collapseAll")
+              : t("chat.changedFiles.expandAll")}
           </Button>
           <Button
             type="button"
@@ -62,7 +66,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
             variant="outline"
             onClick={() => onOpenTurnDiff(turnId, files[0]?.path)}
           >
-            View diff
+            {t("chat.changedFiles.viewDiff")}
           </Button>
         </div>
       </div>

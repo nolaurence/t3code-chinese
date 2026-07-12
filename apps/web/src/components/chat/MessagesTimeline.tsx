@@ -1054,6 +1054,7 @@ function ProposedPlanTimelineRow({
 }
 
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
+  const { t } = useI18n();
   return (
     <div className="py-0.5 pl-1.5">
       <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70 tabular-nums">
@@ -1063,13 +1064,7 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
           <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
         </span>
         <span>
-          {row.createdAt ? (
-            <>
-              Working for <WorkingTimer createdAt={row.createdAt} />
-            </>
-          ) : (
-            "Working..."
-          )}
+          {row.createdAt ? <WorkingTimer createdAt={row.createdAt} /> : t("chat.timeline.working")}
         </span>
       </div>
     </div>
@@ -1083,19 +1078,24 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
 
 /** Live "Working for Xs" label. */
 function WorkingTimer({ createdAt }: { createdAt: string }) {
+  const { t } = useI18n();
   const textRef = useRef<HTMLSpanElement>(null);
-  const initialText = formatWorkingTimerNow(createdAt);
+  const formatText = useCallback(
+    () => t("chat.timeline.workingFor", { duration: formatWorkingTimerNow(createdAt) }),
+    [createdAt, t],
+  );
+  const initialText = formatText();
 
   useEffect(() => {
     const updateText = () => {
       if (textRef.current) {
-        textRef.current.textContent = formatWorkingTimerNow(createdAt);
+        textRef.current.textContent = formatText();
       }
     };
     updateText();
     const id = setInterval(updateText, 1000);
     return () => clearInterval(id);
-  }, [createdAt]);
+  }, [formatText]);
 
   return (
     <span ref={textRef} className="tabular-nums">
@@ -1115,6 +1115,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
 }: {
   groupedEntries: Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
 }) {
+  const { t } = useI18n();
   const { workspaceRoot } = use(TimelineRowCtx);
   const nonEmptyEntries = useMemo(
     () => groupedEntries.filter((entry) => !workEntryIndicatesToolNeutralStatus(entry)),
@@ -1123,9 +1124,9 @@ const WorkGroupSection = memo(function WorkGroupSection({
   const onlyToolEntries = nonEmptyEntries.every((entry) => workLogEntryIsToolLike(entry));
   const groupLabel = onlyToolEntries
     ? nonEmptyEntries.length === 1
-      ? "1 tool call"
-      : `${nonEmptyEntries.length} tool calls`
-    : "Work Log";
+      ? t("chat.timeline.toolCallOne")
+      : t("chat.timeline.toolCalls", { count: nonEmptyEntries.length })
+    : t("chat.timeline.workLog");
 
   if (nonEmptyEntries.length === 0) return null;
 
@@ -1154,8 +1155,15 @@ function WorkGroupToggleTimelineRow({
 }: {
   row: Extract<TimelineRow, { kind: "work-toggle" }>;
 }) {
+  const { t } = useI18n();
   const ctx = use(TimelineRowCtx);
-  const labelNoun = row.onlyToolEntries ? "tool call" : "log entry";
+  const collapsedLabel = row.onlyToolEntries
+    ? row.hiddenCount === 1
+      ? t("chat.timeline.previousToolCallOne")
+      : t("chat.timeline.previousToolCalls", { count: row.hiddenCount })
+    : row.hiddenCount === 1
+      ? t("chat.timeline.previousLogEntryOne")
+      : t("chat.timeline.previousLogEntries", { count: row.hiddenCount });
 
   return (
     <button
@@ -1178,13 +1186,12 @@ function WorkGroupToggleTimelineRow({
       </span>
       {row.expanded ? (
         <span className="font-medium text-foreground/82">
-          Show fewer {row.onlyToolEntries ? "tool calls" : "log entries"}
+          {row.onlyToolEntries
+            ? t("chat.timeline.showFewerToolCalls")
+            : t("chat.timeline.showFewerLogEntries")}
         </span>
       ) : (
-        <span className="font-medium text-foreground/82">
-          +{row.hiddenCount} previous {labelNoun}
-          {row.hiddenCount === 1 ? "" : "s"}
-        </span>
+        <span className="font-medium text-foreground/82">{collapsedLabel}</span>
       )}
     </button>
   );
@@ -1233,6 +1240,7 @@ function AssistantChangedFilesSectionInner({
   resolvedTheme: "light" | "dark";
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
 }) {
+  const { t } = useI18n();
   const allDirectoriesExpanded = useUiStateStore(
     (store) => store.threadChangedFilesExpandedById[routeThreadKey]?.[turnSummary.turnId] ?? true,
   );
@@ -1244,7 +1252,7 @@ function AssistantChangedFilesSectionInner({
     <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
       <div className="sticky top-2 z-10 mb-1.5 flex items-center justify-between gap-2 bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:content-['']">
         <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/65">
-          <span>Changed files ({changedFileCountLabel})</span>
+          <span>{t("chat.changedFiles.heading", { count: changedFileCountLabel })}</span>
           {hasNonZeroStat(summaryStat) && (
             <>
               <span className="mx-1">•</span>
@@ -1260,7 +1268,9 @@ function AssistantChangedFilesSectionInner({
             data-scroll-anchor-ignore
             onClick={() => setExpanded(routeThreadKey, turnSummary.turnId, !allDirectoriesExpanded)}
           >
-            {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
+            {allDirectoriesExpanded
+              ? t("chat.changedFiles.collapseAll")
+              : t("chat.changedFiles.expandAll")}
           </Button>
           <Button
             type="button"
@@ -1268,7 +1278,7 @@ function AssistantChangedFilesSectionInner({
             variant="outline"
             onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
           >
-            View diff
+            {t("chat.changedFiles.viewDiff")}
           </Button>
         </div>
       </div>
