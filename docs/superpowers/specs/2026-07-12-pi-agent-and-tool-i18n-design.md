@@ -1,103 +1,103 @@
-# Pi Agent Integration and Tool Activity Localization Design
+# Pi Agent 接入与工具活动中文化设计
 
-## Goal
+## 目标
 
-Add Pi Coding Agent as a complete first-class desktop provider and localize the known, currently hard-coded tool activity labels in the conversation timeline for English and Simplified Chinese.
+将 Pi Coding Agent 作为完整的一等桌面端供应商接入，并为对话时间线中已知且当前写死的工具活动文案增加英文和简体中文支持。
 
-Mobile applications are out of scope.
+手机应用不在本次范围内。
 
-## Decisions
+## 已确定事项
 
-- Pi runs as the user's externally installed `pi` CLI. The desktop package does not bundle Pi.
-- T3 discovers `pi` from the environment and supports an explicit executable path in provider settings.
-- T3 launches Pi with `--mode rpc` and communicates using strict LF-delimited JSONL.
-- Each active T3 provider session owns one long-lived Pi RPC subprocess.
-- Pi keeps its native trusted-workspace behavior: built-in tools execute without a T3 approval round trip.
-- Pi extension UI requests for confirmation, selection, text input, and editor input are surfaced through T3's existing user-input flow when representable.
-- Known tool activity semantics are translated in the Web presentation layer. Commands, paths, outputs, model text, and unknown extension tool names remain unchanged.
+- Pi 使用用户在系统中单独安装的 `pi` CLI，桌面安装包不内置 Pi。
+- T3 自动从系统环境中发现 `pi`，同时允许在供应商设置中显式配置可执行文件路径。
+- T3 使用 `--mode rpc` 启动 Pi，并通过严格以 LF 分隔的 JSONL 通信。
+- 每个活跃的 T3 供应商会话独占一个长期运行的 Pi RPC 子进程。
+- 保持 Pi 原生的受信任工作区行为：内置工具执行时不经过 T3 的审批流程。
+- Pi 扩展发起的确认、选择、文本输入和编辑器输入请求，在现有 T3 用户输入流程可以表达的情况下，由 T3 界面承载。
+- 已知工具活动语义在 Web 展示层翻译。命令、路径、输出、模型文本和未知扩展工具名称保持不变。
 
-## Provider Architecture
+## 供应商架构
 
-The server adds a `piAgent` built-in driver following the existing provider-driver boundary. The driver owns settings decoding, executable discovery, provider status, model discovery, session creation, and adapter construction.
+服务端新增一个 `piAgent` 内置驱动，沿用现有供应商驱动边界。该驱动负责解析设置、发现可执行文件、提供供应商状态、发现模型、创建会话和构造适配器。
 
-The runtime is split into focused units:
+运行时拆分为职责明确的单元：
 
-1. A Pi RPC process client owns spawning, LF-only JSONL framing, request correlation, event streaming, graceful abort, and process-exit handling.
-2. A Pi event mapper converts Pi agent events into existing provider-neutral runtime events for assistant text, reasoning, tool lifecycle, errors, usage, and user-input requests.
-3. A Pi adapter implements the existing `ProviderAdapter` contract and manages active Pi sessions by T3 thread ID.
-4. A Pi driver registers the adapter and provider snapshot with the built-in registry.
+1. Pi RPC 进程客户端负责启动进程、仅按 LF 进行 JSONL 分帧、请求关联、事件流、优雅中止和进程退出处理。
+2. Pi 事件映射器将 Pi agent 事件转换为现有的供应商无关运行时事件，包括助手文本、推理、工具生命周期、错误、用量和用户输入请求。
+3. Pi 适配器实现现有 `ProviderAdapter` 契约，并按 T3 线程 ID 管理活跃的 Pi 会话。
+4. Pi 驱动将适配器和供应商快照注册到内置注册表中。
 
-The Web application must not branch on Pi when rendering conversations. It consumes the same provider-neutral activities used by Codex, Claude, OpenCode, Cursor, and Grok.
+Web 应用渲染对话时不得针对 Pi 增加分支，而是消费与 Codex、Claude、OpenCode、Cursor 和 Grok 相同的供应商无关活动。
 
-## Session Lifecycle
+## 会话生命周期
 
-Starting a new T3 thread launches `pi --mode rpc` in the project working directory. Provider configuration may add an explicit binary path, agent home path, model, and environment variables. The process otherwise inherits the user's Pi configuration under `~/.pi/agent`.
+启动新的 T3 线程时，在项目工作目录中运行 `pi --mode rpc`。供应商配置可以附加显式的可执行文件路径、agent 主目录、模型和环境变量；其他情况下继承用户位于 `~/.pi/agent` 的 Pi 配置。
 
-After startup, T3 requests Pi state and available models. Sending a turn issues an RPC `prompt`. Steering or follow-up messages use the corresponding Pi RPC behavior when the existing T3 command indicates that intent. Stopping a turn sends `abort`; stopping a session closes stdin and terminates the process after a bounded graceful period.
+进程启动后，T3 请求 Pi 当前状态和可用模型。发送一轮消息时发出 RPC `prompt`；当现有 T3 命令表达引导或后续消息意图时，使用对应的 Pi RPC 行为。停止一轮时发送 `abort`；停止会话时关闭标准输入，并在有限的优雅退出等待时间后终止进程。
 
-T3 persists the Pi session identity in the existing provider-session binding. Rehydrating a thread starts Pi with the saved session selector and rebuilds the visible thread snapshot from Pi messages when necessary. A stale or missing Pi session produces a recoverable provider error instead of silently starting an unrelated conversation.
+T3 在现有供应商会话绑定中持久化 Pi 会话标识。重新载入线程时，使用保存的会话选择信息启动 Pi，并在需要时根据 Pi 消息重建可见线程快照。Pi 会话过期或缺失时返回可恢复的供应商错误，不得静默创建无关的新对话。
 
-## Models and Capabilities
+## 模型与能力
 
-The provider exposes models returned by Pi's `get_available_models` RPC command. Model keys preserve both Pi provider and model ID so duplicate model IDs from different providers remain distinct. T3 maps supported Pi thinking levels to existing reasoning-effort options.
+供应商公开 Pi RPC `get_available_models` 返回的模型。模型键同时保留 Pi 供应商和模型 ID，从而区分来自不同供应商的同名模型。T3 将 Pi 支持的 thinking level 映射到现有推理强度选项。
 
-Pi advertises text, image input, session resume, stop, tool activity, and model selection capabilities when available. It does not advertise command/file approval capabilities because Pi built-in tools execute directly. The provider settings UI explains this trusted-workspace behavior.
+Pi 在能力可用时声明文本输入、图片输入、会话恢复、停止、工具活动和模型选择能力。由于 Pi 内置工具会直接执行，因此不声明命令或文件审批能力。供应商设置界面需要说明这种受信任工作区行为。
 
-## Event Mapping
+## 事件映射
 
-Pi message and agent lifecycle events are mapped as follows:
+Pi 消息和 agent 生命周期事件按以下规则映射：
 
-- Assistant text deltas and final text become existing assistant message events.
-- Thinking deltas become existing reasoning events.
-- `tool_execution_start`, updates, and completion become provider-neutral tool lifecycle activities with stable tool call IDs.
-- Pi `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls` calls carry canonical request kinds and structured data so the current timeline can choose icons, previews, and changed-file presentation.
-- Agent completion closes the T3 turn and records usage when Pi provides it.
-- Agent errors and unexpected process exits become runtime errors associated with the active turn.
-- Supported extension UI requests become T3 user-input requests and the answer is returned with `extension_ui_response`.
-- Unsupported presentational extension UI methods such as widgets and title changes are ignored or logged without failing the turn.
+- 助手文本增量和最终文本转换为现有助手消息事件。
+- Thinking 增量转换为现有推理事件。
+- `tool_execution_start`、更新和完成事件转换为供应商无关的工具生命周期活动，并使用稳定的工具调用 ID。
+- Pi 的 `read`、`write`、`edit`、`bash`、`grep`、`find` 和 `ls` 调用携带规范的请求类型和结构化数据，使现有时间线可以选择图标、预览和文件变更展示方式。
+- Agent 完成时结束 T3 当前轮，并在 Pi 提供用量信息时记录用量。
+- Agent 错误和意外进程退出转换为与当前轮关联的运行时错误。
+- 支持的扩展 UI 请求转换为 T3 用户输入请求，并通过 `extension_ui_response` 返回答案。
+- 小组件和标题变更等不支持的纯展示类扩展 UI 方法会被忽略或记录日志，不会导致当前轮失败。
 
-Raw Pi RPC payloads remain server-side diagnostic data and are not rendered directly as trusted UI text.
+原始 Pi RPC 载荷只作为服务端诊断数据，不直接作为可信 UI 文本渲染。
 
-## Tool Activity Localization
+## 工具活动中文化
 
-The localization boundary is a pure Web presentation helper. It receives a work-log entry plus the translation function and returns a localized heading for known semantics.
+中文化边界是一个纯 Web 展示辅助函数。它接收工作日志条目和翻译函数，为已知语义返回本地化标题。
 
-Localization covers:
+中文化范围包括：
 
-- Built-in actions: read file, write file, edit file, run command, search files, find files, list directory, web search, view image, and generic tool call.
-- Lifecycle suffixes and fallback labels: running, completed, failed, declined, and stopped.
-- Generic expanded-body labels such as MCP call where they are UI-owned text.
+- 内置动作：读取文件、写入文件、编辑文件、运行命令、搜索文件、查找文件、列出目录、网页搜索、查看图片和通用工具调用。
+- 生命周期后缀和兜底文案：运行中、已完成、失败、已拒绝和已停止。
+- 展开内容中由 UI 自身提供的通用标签，例如 MCP 调用。
 
-The helper first uses structured fields such as request kind, item type, lifecycle status, and canonical Pi tool name. It only falls back to matching known provider-generated English labels for compatibility with existing stored activities. Arbitrary model-generated summaries and unknown extension tool names are not translated.
+辅助函数优先使用请求类型、条目类型、生命周期状态和规范 Pi 工具名称等结构化字段。为了兼容已经保存的活动，只在兜底时匹配已知的供应商英文标签。模型生成的任意摘要和未知扩展工具名称不得翻译。
 
-English remains the source locale and Simplified Chinese receives equivalent keys. Translation must not change collapse keys or activity identity, so switching languages cannot split or merge tool lifecycle rows differently.
+英文继续作为源语言，简体中文提供对应的翻译键。翻译不得改变折叠键或活动标识，因此切换语言不能导致工具生命周期行出现不同的拆分或合并结果。
 
-## Errors and Recovery
+## 错误与恢复
 
-- Missing Pi binary: provider status is unavailable and includes the configured installation command.
-- Invalid executable path or unsupported Pi version: provider status includes the probe failure without crashing server startup.
-- Invalid JSONL: the malformed line is logged and the active request fails with a protocol error; subsequent process state is not trusted.
-- Request timeout: the correlated RPC request fails and the session is stopped.
-- Unexpected exit: all pending RPC requests fail, the active turn receives one terminal error, and the adapter removes the dead session.
-- Resume target missing: T3 reports a recoverable session error and does not create a new unrelated Pi history.
-- Abort timeout: T3 terminates the child process and marks the turn stopped.
+- Pi 可执行文件缺失：供应商状态显示不可用，并提供配置的安装命令。
+- 可执行文件路径无效或 Pi 版本不受支持：供应商状态包含探测失败原因，但不得导致服务端启动失败。
+- JSONL 无效：记录格式错误的行，并让当前请求以协议错误失败；后续不得继续信任该进程状态。
+- 请求超时：关联的 RPC 请求失败，并停止当前会话。
+- 意外退出：所有待处理 RPC 请求失败，当前轮只接收一个终止错误，适配器移除已失效的会话。
+- 恢复目标缺失：T3 报告可恢复的会话错误，不得创建无关的新 Pi 历史记录。
+- 中止超时：T3 终止子进程，并将当前轮标记为已停止。
 
-## Testing
+## 测试
 
-Development follows test-first cycles.
+开发采用测试优先循环。
 
-- Contract tests cover Pi settings and model/provider identifiers.
-- RPC client tests use a deterministic child-process fixture to cover LF framing, correlation, malformed messages, abort, timeout, and process exit.
-- Event mapper tests cover text, reasoning, every built-in tool category, completion, error, usage, and extension input.
-- Adapter tests cover start, continue, prompt, stop, resume, session cleanup, and model selection.
-- Driver/provider tests cover discovery, explicit binary path, status, capabilities, and model snapshots.
-- Web tests cover English and Chinese headings, lifecycle states, unknown-tool passthrough, and language-independent collapse behavior.
-- Repository completion gates are `vp check` and `vp run typecheck`; focused tests run through `vp test`.
+- 契约测试覆盖 Pi 设置以及模型和供应商标识。
+- RPC 客户端测试使用确定性的子进程夹具，覆盖 LF 分帧、请求关联、格式错误消息、中止、超时和进程退出。
+- 事件映射器测试覆盖文本、推理、每种内置工具类型、完成、错误、用量和扩展输入。
+- 适配器测试覆盖启动、继续、发送提示、停止、恢复、会话清理和模型选择。
+- 驱动和供应商测试覆盖自动发现、显式可执行文件路径、状态、能力和模型快照。
+- Web 测试覆盖英文和中文标题、生命周期状态、未知工具原样显示以及不受语言影响的折叠行为。
+- 仓库完成门槛为 `vp check` 和 `vp run typecheck`；聚焦测试通过 `vp test` 运行。
 
-## Out of Scope
+## 不在范围内
 
-- Bundling or automatically installing Pi in the desktop artifact.
-- Adding a T3 approval layer around Pi built-in tools.
-- Mobile UI or mobile provider support.
-- Translating model output, shell commands, paths, file contents, tool output, or third-party extension names.
-- Reimplementing Pi's model authentication or configuration UI inside T3.
+- 在桌面安装包中内置或自动安装 Pi。
+- 为 Pi 内置工具额外增加 T3 审批层。
+- 手机端 UI 或手机端供应商支持。
+- 翻译模型输出、Shell 命令、路径、文件内容、工具输出或第三方扩展名称。
+- 在 T3 中重新实现 Pi 的模型认证或配置界面。
