@@ -3,6 +3,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/unstable/process";
@@ -13,8 +14,10 @@ import {
   type PiRpcTransport,
   PiRpcClientError,
 } from "./PiRpcClient.ts";
+import { encodePiRpcJsonString } from "./PiRpcProtocol.ts";
 
 const encoder = new TextEncoder();
+const decodeUnknownJsonString = Schema.decodeUnknownSync(Schema.UnknownFromJsonString);
 
 const makeHarness = Effect.fn("makePiRpcClientTestHarness")(function* () {
   const output = yield* Queue.unbounded<Uint8Array>();
@@ -29,7 +32,7 @@ const makeHarness = Effect.fn("makePiRpcClientTestHarness")(function* () {
     write: (line) =>
       Effect.gen(function* () {
         writes.push(line);
-        yield* onWrite(JSON.parse(line) as Record<string, unknown>);
+        yield* onWrite(decodeUnknownJsonString(line) as Record<string, unknown>);
       }),
     close: Effect.sync(() => {
       closeCalls += 1;
@@ -67,11 +70,14 @@ describe("PiRpcClient", () => {
               kill: () => Effect.void,
               unref: Effect.succeed(Effect.void),
               stdin: Sink.forEach((bytes: Uint8Array) => {
-                const request = JSON.parse(new TextDecoder().decode(bytes));
+                const request = decodeUnknownJsonString(new TextDecoder().decode(bytes)) as Record<
+                  string,
+                  unknown
+                >;
                 return Queue.offer(
                   stdout,
                   encoder.encode(
-                    `${JSON.stringify({
+                    `${encodePiRpcJsonString({
                       type: "response",
                       id: request.id,
                       command: request.type,
@@ -135,7 +141,9 @@ describe("PiRpcClient", () => {
 
         expect(state).toMatchObject({ command: "get_state", success: true });
         expect(models).toMatchObject({ command: "get_available_models", success: true });
-        const ids = harness.writes.map((line) => JSON.parse(line).id);
+        const ids = harness.writes.map(
+          (line) => (decodeUnknownJsonString(line) as Record<string, unknown>).id,
+        );
         expect(new Set(ids).size).toBe(2);
       }),
     ),
@@ -189,6 +197,21 @@ describe("PiRpcClient", () => {
 
         const error = yield* Fiber.join(pending).pipe(Effect.flip);
         expect(error.detail).toContain("17");
+      }),
+    ),
+  );
+
+  it.effect("exposes process termination to the owning provider session", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeHarness();
+        const terminated = yield* harness.client.terminated.pipe(Effect.forkChild);
+
+        yield* harness.exit(23);
+
+        const error = yield* Fiber.join(terminated);
+        expect(error.operation).toBe("process-exit");
+        expect(error.detail).toContain("23");
       }),
     ),
   );

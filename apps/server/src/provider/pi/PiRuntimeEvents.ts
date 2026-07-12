@@ -1,3 +1,4 @@
+// @effect-diagnostics globalDate:off
 import {
   EventId,
   IsoDateTime,
@@ -185,7 +186,7 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
     };
     return [
       event("session.started", { message: "Pi RPC session started", resume }),
-      event("session.configured", { config: { sessionId: input.sessionId, ...resume } }),
+      event("session.configured", { config: resume }),
       event("session.state.changed", { state: "ready" }),
       event("thread.started", { providerThreadId: input.sessionId }),
       event("thread.state.changed", { state: "idle" }),

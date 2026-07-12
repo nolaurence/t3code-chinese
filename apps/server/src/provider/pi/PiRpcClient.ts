@@ -9,6 +9,7 @@ import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawne
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 
 import {
+  encodePiRpcJsonString,
   makePiRpcLineDecoder,
   type PiRpcCommand,
   type PiRpcOutput,
@@ -25,16 +26,17 @@ export class PiRpcClientError extends Schema.TaggedErrorClass<PiRpcClientError>(
 ) {}
 
 export interface PiRpcTransport {
-  readonly output: Stream.Stream<Uint8Array, unknown>;
-  readonly exitCode: Effect.Effect<number, unknown>;
-  readonly write: (line: string) => Effect.Effect<void, unknown>;
-  readonly close: Effect.Effect<void, unknown>;
+  readonly output: Stream.Stream<Uint8Array, PiRpcClientError>;
+  readonly exitCode: Effect.Effect<number, PiRpcClientError>;
+  readonly write: (line: string) => Effect.Effect<void, PiRpcClientError>;
+  readonly close: Effect.Effect<void, PiRpcClientError>;
 }
 
 export interface PiRpcClient {
   readonly request: (command: PiRpcCommand) => Effect.Effect<PiRpcResponse, PiRpcClientError>;
   readonly send: (command: PiRpcCommand) => Effect.Effect<void, PiRpcClientError>;
   readonly events: Stream.Stream<Exclude<PiRpcOutput, PiRpcResponse>>;
+  readonly terminated: Effect.Effect<PiRpcClientError>;
   readonly close: Effect.Effect<void>;
 }
 
@@ -56,6 +58,7 @@ function clientError(operation: string, detail: string, cause?: unknown): PiRpcC
 export const makePiRpcClient = Effect.fn("makePiRpcClient")(function* (transport: PiRpcTransport) {
   const events = yield* PubSub.unbounded<Exclude<PiRpcOutput, PiRpcResponse>>();
   const pending = new Map<string, Deferred.Deferred<PiRpcResponse, PiRpcClientError>>();
+  const terminated = yield* Deferred.make<PiRpcClientError>();
   const decoder = makePiRpcLineDecoder();
   let nextRequestId = 0;
   let terminalError: PiRpcClientError | undefined;
@@ -63,6 +66,7 @@ export const makePiRpcClient = Effect.fn("makePiRpcClient")(function* (transport
 
   const failPending = Effect.fn("PiRpcClient.failPending")(function* (error: PiRpcClientError) {
     terminalError ??= error;
+    yield* Deferred.succeed(terminated, error).pipe(Effect.ignore);
     const deferreds = [...pending.values()];
     pending.clear();
     yield* Effect.forEach(deferreds, (deferred) => Deferred.fail(deferred, error), {
@@ -126,21 +130,14 @@ export const makePiRpcClient = Effect.fn("makePiRpcClient")(function* (transport
     ),
   );
 
-  const write = (line: string) =>
-    transport
-      .write(line)
-      .pipe(
-        Effect.mapError((cause) =>
-          clientError("write", "Failed to write a command to the Pi RPC process.", cause),
-        ),
-      );
+  const write = (line: string) => transport.write(line);
 
   const request: PiRpcClient["request"] = Effect.fn("PiRpcClient.request")(function* (command) {
     if (terminalError) return yield* terminalError;
     const id = `t3-pi-${++nextRequestId}`;
     const deferred = yield* Deferred.make<PiRpcResponse, PiRpcClientError>();
     pending.set(id, deferred);
-    return yield* write(`${JSON.stringify({ ...command, id })}\n`).pipe(
+    return yield* write(`${encodePiRpcJsonString({ ...command, id })}\n`).pipe(
       Effect.andThen(Deferred.await(deferred)),
       Effect.ensuring(
         Effect.sync(() => {
@@ -152,7 +149,7 @@ export const makePiRpcClient = Effect.fn("makePiRpcClient")(function* (transport
 
   const send: PiRpcClient["send"] = Effect.fn("PiRpcClient.send")(function* (command) {
     if (terminalError) return yield* terminalError;
-    yield* write(`${JSON.stringify(command)}\n`);
+    yield* write(`${encodePiRpcJsonString(command)}\n`);
   });
 
   const close = Effect.gen(function* () {
@@ -169,6 +166,7 @@ export const makePiRpcClient = Effect.fn("makePiRpcClient")(function* (transport
     request,
     send,
     events: Stream.fromPubSub(events),
+    terminated: Deferred.await(terminated),
     close,
   } satisfies PiRpcClient;
 });
@@ -207,11 +205,20 @@ export const spawnPiRpcClient = Effect.fn("spawnPiRpcClient")(function* (
   yield* Stream.runDrain(child.stderr).pipe(Effect.ignore, Effect.forkScoped);
 
   const transport: PiRpcTransport = {
-    output: child.stdout,
-    exitCode: child.exitCode.pipe(Effect.map(Number)),
+    output: child.stdout.pipe(
+      Stream.mapError((cause) =>
+        clientError("read", "Failed to read Pi RPC process output.", cause),
+      ),
+    ),
+    exitCode: child.exitCode.pipe(
+      Effect.map(Number),
+      Effect.mapError((cause) =>
+        clientError("process-exit", "Failed to observe Pi RPC process exit.", cause),
+      ),
+    ),
     write: (line) =>
       transportClosed
-        ? Effect.fail(new Error("Pi RPC transport is closed."))
+        ? Effect.fail(clientError("write", "Pi RPC transport is closed."))
         : Queue.offer(input, new TextEncoder().encode(line)).pipe(Effect.asVoid),
     close: Effect.gen(function* () {
       if (transportClosed) return;

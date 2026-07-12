@@ -1,11 +1,20 @@
+import * as Schema from "effect/Schema";
+
 export class PiRpcProtocolError extends Error {
-  readonly line?: string;
+  readonly line: string | undefined;
 
   constructor(message: string, options?: { readonly line?: string; readonly cause?: unknown }) {
     super(message, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = "PiRpcProtocolError";
     this.line = options?.line;
   }
+}
+
+const decodeUnknownJsonString = Schema.decodeUnknownSync(Schema.UnknownFromJsonString);
+const encodeUnknownJsonString = Schema.encodeUnknownSync(Schema.UnknownFromJsonString);
+
+export function encodePiRpcJsonString(value: unknown): string {
+  return encodeUnknownJsonString(value);
 }
 
 export interface PiRpcImageContent {
@@ -100,6 +109,10 @@ export type PiAgentEvent = {
 
 export type PiRpcOutput = PiRpcResponse | PiExtensionUIRequest | PiAgentEvent;
 
+export function decodePiRpcJsonString(value: string): PiRpcOutput {
+  return decodePiRpcOutput(decodeUnknownJsonString(value));
+}
+
 const AGENT_EVENT_TYPES = new Set<PiAgentEvent["type"]>([
   "agent_start",
   "agent_end",
@@ -192,7 +205,7 @@ export function makePiRpcLineDecoder(): PiRpcLineDecoder {
     const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
     if (line.trim().length === 0) return null;
     try {
-      return decodePiRpcOutput(JSON.parse(line));
+      return decodePiRpcJsonString(line);
     } catch (cause) {
       if (cause instanceof PiRpcProtocolError) throw cause;
       throw new PiRpcProtocolError("Pi RPC emitted malformed JSON.", {
