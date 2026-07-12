@@ -461,6 +461,11 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
     ];
   };
 
+  const failRuntime = (message: string) => [
+    event("runtime.error", { message, class: "provider_error" }),
+    ...completeTurn("failed", message),
+  ];
+
   const resolveUserInput = (requestId: string, answer: unknown) => [
     event(
       "user-input.resolved",
@@ -474,6 +479,7 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
     startTurn,
     map,
     completeTurn,
+    failRuntime,
     updateTokenUsage,
     resolveUserInput,
   };

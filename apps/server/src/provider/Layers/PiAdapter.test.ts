@@ -1,3 +1,7 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
@@ -18,7 +22,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import { ServerConfig } from "../../config.ts";
-import type { PiRpcClient } from "../pi/PiRpcClient.ts";
+import { PiRpcClientError, type PiRpcClient } from "../pi/PiRpcClient.ts";
 import type {
   PiAgentEvent,
   PiExtensionUIRequest,
@@ -34,9 +38,10 @@ const INSTANCE_ID = ProviderInstanceId.make("piAgent");
 
 const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
   readonly resumeSessionFile?: string;
+  readonly messages?: ReadonlyArray<unknown>;
 }) {
   const nativeEvents = yield* Queue.unbounded<PiAgentEvent | PiExtensionUIRequest>();
-  const terminated = yield* Deferred.make<never>();
+  const terminated = yield* Deferred.make<PiRpcClientError>();
   const commands: PiRpcCommand[] = [];
   const factoryInputs: PiClientFactoryInput[] = [];
   const bindings: unknown[] = [];
@@ -51,7 +56,7 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
   });
   const client: PiRpcClient = {
     request: (command) =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         commands.push(command);
         switch (command.type) {
           case "get_state":
@@ -68,7 +73,7 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
               contextUsage: { contextWindow: 200000 },
             });
           case "get_messages":
-            return success(command, { messages: [] });
+            return success(command, { messages: options?.messages ?? [] });
           default:
             return success(command);
         }
@@ -116,6 +121,8 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
     factoryInputs,
     bindings,
     emit: (event: PiAgentEvent | PiExtensionUIRequest) => Queue.offer(nativeEvents, event),
+    terminate: (detail: string) =>
+      Deferred.succeed(terminated, new PiRpcClientError({ operation: "process-exit", detail })),
     closeCalls: () => closeCalls,
   };
 });
@@ -208,6 +215,98 @@ describe("PiAdapter", () => {
     ),
   );
 
+  it.effect("sends image attachments as Pi RPC base64 image content", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const attachment = {
+          type: "image" as const,
+          id: "thread-pi-image-12345678-1234-1234-1234-123456789abc",
+          name: "diagram.png",
+          mimeType: "image/png",
+          sizeBytes: 4,
+        };
+        const attachmentPath = NodePath.join(
+          "/tmp/t3-base/userdata/attachments",
+          `${attachment.id}.png`,
+        );
+        NodeFS.mkdirSync(NodePath.dirname(attachmentPath), { recursive: true });
+        NodeFS.writeFileSync(attachmentPath, Uint8Array.from([1, 2, 3, 4]));
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => NodeFS.rmSync(attachmentPath, { force: true })),
+        );
+
+        const harness = yield* makeHarness();
+        yield* harness.adapter.startSession({
+          threadId: THREAD_ID,
+          providerInstanceId: INSTANCE_ID,
+          cwd: "/tmp/project",
+          runtimeMode: "full-access",
+        });
+        yield* harness.adapter.sendTurn({
+          threadId: THREAD_ID,
+          input: "Inspect this image",
+          attachments: [attachment],
+        });
+
+        expect(harness.commands.at(-1)).toEqual({
+          type: "prompt",
+          message: "Inspect this image",
+          images: [{ type: "image", data: "AQIDBA==", mimeType: "image/png" }],
+        });
+      }),
+    ),
+  );
+
+  it.effect("maps restored Pi assistant messages into thread turns", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeHarness({
+          messages: [
+            { role: "user", content: "Hello", timestamp: 1 },
+            {
+              role: "assistant",
+              content: [{ type: "text", text: "Hi" }],
+              provider: "openai",
+              model: "gpt-5.5",
+              timestamp: 2,
+            },
+            {
+              role: "toolResult",
+              toolCallId: "call-1",
+              content: [{ type: "text", text: "done" }],
+              timestamp: 3,
+            },
+            {
+              id: "assistant-2",
+              role: "assistant",
+              content: [{ type: "text", text: "Finished" }],
+              timestamp: 4,
+            },
+          ],
+        });
+        yield* harness.adapter.startSession({
+          threadId: THREAD_ID,
+          providerInstanceId: INSTANCE_ID,
+          cwd: "/tmp/project",
+          runtimeMode: "full-access",
+        });
+
+        const snapshot = yield* harness.adapter.readThread(THREAD_ID);
+
+        expect(snapshot.turns).toEqual([
+          expect.objectContaining({
+            id: "pi-session-1-history-1",
+            items: [expect.objectContaining({ role: "assistant" })],
+          }),
+          expect.objectContaining({
+            id: "assistant-2",
+            items: [expect.objectContaining({ role: "assistant" })],
+          }),
+        ]);
+      }),
+    ),
+  );
+
   it.effect("maps Pi events and marks the session ready after agent_end", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -255,6 +354,37 @@ describe("PiAdapter", () => {
 
         expect(harness.commands.at(-1)).toEqual({ type: "abort" });
         expect((yield* harness.adapter.listSessions())[0]).toMatchObject({ status: "ready" });
+      }),
+    ),
+  );
+
+  it.effect("keeps a crashed session in error when a late agent_end arrives", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeHarness();
+        yield* harness.adapter.startSession({
+          threadId: THREAD_ID,
+          providerInstanceId: INSTANCE_ID,
+          runtimeMode: "full-access",
+        });
+        yield* harness.adapter.sendTurn({ threadId: THREAD_ID, input: "Crash" });
+        const eventsFiber = yield* harness.adapter.streamEvents.pipe(
+          Stream.take(12),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+
+        yield* harness.terminate("Pi RPC process exited with status 17.");
+        const events = [...(yield* Fiber.join(eventsFiber))];
+        yield* harness.emit({ type: "agent_end", messages: [] });
+        yield* Effect.yieldNow;
+
+        expect(events.filter((event) => event.type === "runtime.error")).toHaveLength(1);
+        expect(events.filter((event) => event.type === "turn.completed")).toHaveLength(1);
+        expect((yield* harness.adapter.listSessions())[0]).toMatchObject({
+          status: "error",
+          lastError: "Pi RPC process exited with status 17.",
+        });
       }),
     ),
   );

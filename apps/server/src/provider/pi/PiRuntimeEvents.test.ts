@@ -191,6 +191,31 @@ describe("PiRuntimeEvents", () => {
     expectValid(completed);
   });
 
+  it("reports a fatal runtime error and completes the active turn only once", () => {
+    const mapper = makeMapper();
+    mapper.startTurn({ turnId: TurnId.make("turn-pi-crash") });
+
+    const failed = mapper.failRuntime("Pi RPC process exited with status 17.");
+    const lateAgentEnd = mapper.map({ type: "agent_end", messages: [] });
+
+    expect(failed.map((event) => event.type)).toEqual([
+      "runtime.error",
+      "turn.completed",
+      "session.state.changed",
+      "thread.state.changed",
+    ]);
+    expect(failed[0]?.payload).toMatchObject({
+      message: "Pi RPC process exited with status 17.",
+      class: "provider_error",
+    });
+    expect(failed[1]?.payload).toMatchObject({
+      state: "failed",
+      errorMessage: "Pi RPC process exited with status 17.",
+    });
+    expect(lateAgentEnd).toEqual([]);
+    expectValid(failed);
+  });
+
   it("maps session token statistics", () => {
     const mapper = makeMapper();
     const events = mapper.updateTokenUsage({

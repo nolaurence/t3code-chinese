@@ -1,6 +1,5 @@
 // @effect-diagnostics globalDate:off
 import {
-  ApprovalRequestId,
   IsoDateTime,
   type PiAgentSettings,
   type ProviderRuntimeEvent,
@@ -26,7 +25,6 @@ import {
   ProviderAdapterRequestError,
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
-  type ProviderAdapterError,
 } from "../Errors.ts";
 import { spawnPiRpcClient, type PiRpcClient, type PiRpcClientError } from "../pi/PiRpcClient.ts";
 import { makePiRuntimeEventMapper, type PiRuntimeEventMapper } from "../pi/PiRuntimeEvents.ts";
@@ -67,6 +65,7 @@ interface PiSessionContext {
   readonly sessionFile?: string;
   activeTurnId: TurnId | undefined;
   readonly pendingInputMethods: Map<string, string>;
+  processFailed: boolean;
   stopped: boolean;
 }
 
@@ -100,6 +99,21 @@ function readResumeSessionFile(value: unknown): string | undefined {
   return typeof record?.sessionFile === "string" && record.sessionFile.trim().length > 0
     ? record.sessionFile.trim()
     : undefined;
+}
+
+function readMessageTurns(response: PiRpcResponse, sessionId: string) {
+  if (!response.success) return [];
+  const data = asRecord(response.data);
+  const messages = Array.isArray(data?.messages) ? data.messages : [];
+  return messages.flatMap((value, index) => {
+    const message = asRecord(value);
+    if (message?.role !== "assistant") return [];
+    const messageId =
+      (typeof message.id === "string" && message.id.trim()) ||
+      (typeof message.entryId === "string" && message.entryId.trim()) ||
+      `${sessionId}-history-${index}`;
+    return [{ id: TurnId.make(messageId), items: [value] }];
+  });
 }
 
 function splitPiModel(value: string): { provider: string; modelId: string } | null {
@@ -280,6 +294,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
         ...(state.sessionFile ? { sessionFile: state.sessionFile } : {}),
         activeTurnId: undefined,
         pendingInputMethods: new Map(),
+        processFailed: false,
         stopped: false,
       };
       sessions.set(input.threadId, context);
@@ -288,6 +303,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
       const handleNativeEvent = Effect.fn("PiAdapter.handleNativeEvent")(function* (
         raw: PiRpcOutput,
       ) {
+        if (context.processFailed) return;
         if (raw.type === "extension_ui_request") {
           const record = raw as Record<string, unknown>;
           if (typeof record.id === "string" && typeof record.method === "string") {
@@ -312,9 +328,10 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
           context.stopped
             ? Effect.void
             : Effect.gen(function* () {
+                context.processFailed = true;
                 context.activeTurnId = undefined;
                 updateSession(context, { status: "error", lastError: error.detail }, true);
-                yield* emit(mapper.completeTurn("failed", error.detail));
+                yield* emit(mapper.failRuntime(error.detail));
               }),
         ),
         Effect.forkIn(sessionScope, { startImmediately: true }),
@@ -384,7 +401,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
       const context = yield* getContext(threadId);
       if (!context.activeTurnId || (turnId && turnId !== context.activeTurnId)) return;
       yield* context.client
-        .request({ type: "abort" })
+        .send({ type: "abort" })
         .pipe(Effect.mapError((cause) => clientFailure("abort", cause)));
       yield* emit(context.mapper.completeTurn("interrupted"));
       context.activeTurnId = undefined;
@@ -434,10 +451,10 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
   const readThread: PiAdapterShape["readThread"] = Effect.fn("PiAdapter.readThread")(
     function* (threadId) {
       const context = yield* getContext(threadId);
-      yield* context.client
+      const response = yield* context.client
         .request({ type: "get_messages" })
         .pipe(Effect.mapError((cause) => clientFailure("get_messages", cause)));
-      return { threadId, turns: [] };
+      return { threadId, turns: readMessageTurns(response, context.sessionId) };
     },
   );
 

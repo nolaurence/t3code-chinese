@@ -90,13 +90,11 @@ export const deriveProviderInstanceConfigMap = (
     // built-in driver kinds.
     const legacyKey = driver.driverKind as keyof ServerSettings["providers"];
     const legacyConfig = settings.providers[legacyKey];
-    if (legacyConfig === undefined) {
-      continue;
-    }
+    const config = legacyConfig ?? driver.defaultConfig();
 
     merged[instanceId] = {
       driver: driver.driverKind,
-      config: legacyConfig,
+      config,
     };
   }
 
