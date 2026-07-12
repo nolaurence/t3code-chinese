@@ -32,7 +32,6 @@ import { spawnPiRpcClient, type PiRpcClient, type PiRpcClientError } from "../pi
 import { makePiRuntimeEventMapper, type PiRuntimeEventMapper } from "../pi/PiRuntimeEvents.ts";
 import type { PiRpcOutput, PiRpcResponse } from "../pi/PiRpcProtocol.ts";
 import type { PiAdapterShape } from "../Services/PiAdapter.ts";
-import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 
 const PROVIDER = ProviderDriverKind.make("piAgent");
 
@@ -132,7 +131,6 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
 ) {
   const serverConfig = yield* ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
-  const directory = yield* ProviderSessionDirectory;
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const instanceId = options.instanceId ?? ProviderInstanceId.make("piAgent");
   const createClient = options.createClient ?? defaultCreateClient;
@@ -144,20 +142,6 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
 
   const emit = (events: ReadonlyArray<ProviderRuntimeEvent>) =>
     events.length === 0 ? Effect.void : Queue.offerAll(runtimeEvents, events).pipe(Effect.asVoid);
-
-  const persist = (context: PiSessionContext, status: "running" | "ready" | "stopped") =>
-    directory.upsert({
-      threadId: context.session.threadId,
-      provider: PROVIDER,
-      providerInstanceId: instanceId,
-      adapterKey: String(instanceId),
-      runtimeMode: context.session.runtimeMode,
-      status: status === "ready" ? "running" : status,
-      resumeCursor: {
-        sessionId: context.sessionId,
-        ...(context.sessionFile ? { sessionFile: context.sessionFile } : {}),
-      },
-    });
 
   const updateSession = (
     context: PiSessionContext,
@@ -185,9 +169,6 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
     yield* context.client.close;
     yield* Scope.close(context.scope, Exit.void).pipe(Effect.ignore);
     updateSession(context, { status: "closed" }, true);
-    yield* persist(context, "stopped").pipe(
-      Effect.mapError((cause) => clientFailure("persist", cause)),
-    );
   });
 
   const buildImages = Effect.fn("PiAdapter.buildImages")(function* (input: ProviderSendTurnInput) {
@@ -303,9 +284,6 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
       };
       sessions.set(input.threadId, context);
       yield* emit(mapper.startSession(resumeCursor));
-      yield* persist(context, "ready").pipe(
-        Effect.mapError((cause) => clientFailure("persist", cause)),
-      );
 
       const handleNativeEvent = Effect.fn("PiAdapter.handleNativeEvent")(function* (
         raw: PiRpcOutput,
@@ -324,7 +302,6 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
         if (stats._tag === "Some" && stats.value.success) {
           yield* emit(mapper.updateTokenUsage((asRecord(stats.value.data) ?? {}) as never));
         }
-        yield* persist(context, "ready").pipe(Effect.ignore);
       });
       yield* Stream.runForEach(client.events, handleNativeEvent).pipe(
         Effect.ignoreCause({ log: true }),
@@ -338,16 +315,6 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
                 context.activeTurnId = undefined;
                 updateSession(context, { status: "error", lastError: error.detail }, true);
                 yield* emit(mapper.completeTurn("failed", error.detail));
-                yield* directory
-                  .upsert({
-                    threadId: context.session.threadId,
-                    provider: PROVIDER,
-                    providerInstanceId: instanceId,
-                    status: "error",
-                    runtimeMode: context.session.runtimeMode,
-                    resumeCursor,
-                  })
-                  .pipe(Effect.ignore);
               }),
         ),
         Effect.forkIn(sessionScope, { startImmediately: true }),
@@ -402,9 +369,6 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
         ...(effort ? { effort } : {}),
       }),
     );
-    yield* persist(context, "running").pipe(
-      Effect.mapError((cause) => clientFailure("persist", cause)),
-    );
     yield* context.client
       .request({
         type: "prompt",
@@ -425,9 +389,6 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
       yield* emit(context.mapper.completeTurn("interrupted"));
       context.activeTurnId = undefined;
       updateSession(context, { status: "ready" }, true);
-      yield* persist(context, "ready").pipe(
-        Effect.mapError((cause) => clientFailure("persist", cause)),
-      );
     },
   );
 

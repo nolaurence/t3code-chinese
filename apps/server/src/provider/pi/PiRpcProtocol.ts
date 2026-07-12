@@ -36,6 +36,7 @@ export type PiRpcCommand =
   | { readonly id?: string; readonly type: "abort" }
   | { readonly id?: string; readonly type: "get_state" }
   | { readonly id?: string; readonly type: "get_messages" }
+  | { readonly id?: string; readonly type: "get_last_assistant_text" }
   | { readonly id?: string; readonly type: "get_available_models" }
   | { readonly id?: string; readonly type: "get_session_stats" }
   | {

@@ -121,7 +121,7 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
 });
 
 describe("PiAdapter", () => {
-  it.effect("starts a Pi RPC session and persists its resume cursor", () =>
+  it.effect("starts a Pi RPC session and returns its resume cursor", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const harness = yield* makeHarness();
@@ -148,11 +148,9 @@ describe("PiAdapter", () => {
           binaryPath: "fake-pi",
           cwd: "/tmp/project",
         });
-        expect(harness.bindings.at(-1)).toMatchObject({
-          provider: "piAgent",
-          providerInstanceId: "piAgent",
-          status: "running",
-          resumeCursor: session.resumeCursor,
+        expect(session.resumeCursor).toEqual({
+          sessionId: "pi-session-1",
+          sessionFile: "/tmp/pi-session-1.jsonl",
         });
       }),
     ),
@@ -237,7 +235,7 @@ describe("PiAdapter", () => {
         const events = [...(yield* Fiber.join(eventsFiber))];
         expect(events.some((event) => event.type === "content.delta")).toBe(true);
         expect(events.some((event) => event.type === "turn.completed")).toBe(true);
-        expect(harness.bindings.at(-1)).toMatchObject({ status: "running" });
+        expect((yield* harness.adapter.listSessions())[0]).toMatchObject({ status: "ready" });
       }),
     ),
   );
@@ -256,7 +254,7 @@ describe("PiAdapter", () => {
         yield* harness.adapter.interruptTurn(THREAD_ID, turn.turnId);
 
         expect(harness.commands.at(-1)).toEqual({ type: "abort" });
-        expect(harness.bindings.at(-1)).toMatchObject({ status: "running" });
+        expect((yield* harness.adapter.listSessions())[0]).toMatchObject({ status: "ready" });
       }),
     ),
   );
