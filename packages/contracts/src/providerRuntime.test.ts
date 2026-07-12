@@ -6,6 +6,25 @@ import { ProviderRuntimeEvent } from "./providerRuntime.ts";
 const decodeRuntimeEvent = Schema.decodeUnknownSync(ProviderRuntimeEvent);
 
 describe("ProviderRuntimeEvent", () => {
+  it("accepts Pi RPC events as raw diagnostic context", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "session.started",
+      eventId: "event-pi-session",
+      provider: "piAgent",
+      providerInstanceId: "piAgent",
+      createdAt: "2026-07-12T00:00:00.000Z",
+      threadId: "thread-pi-1",
+      payload: { message: "started" },
+      raw: {
+        source: "pi.rpc.event",
+        messageType: "agent_start",
+        payload: { type: "agent_start" },
+      },
+    });
+
+    expect(parsed.raw?.source).toBe("pi.rpc.event");
+  });
+
   it("accepts fork-provided driver kinds as branded slugs", () => {
     const parsed = decodeRuntimeEvent({
       type: "session.started",

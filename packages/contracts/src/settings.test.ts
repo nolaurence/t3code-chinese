@@ -5,6 +5,7 @@ import { ProviderInstanceId } from "./providerInstance.ts";
 import {
   ClientSettingsSchema,
   DEFAULT_SERVER_SETTINGS,
+  PiAgentSettings,
   ServerSettings,
   ServerSettingsPatch,
 } from "./settings.ts";
@@ -13,6 +14,30 @@ const decodeClientSettings = Schema.decodeUnknownSync(ClientSettingsSchema);
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
 const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
+const decodePiAgentSettings = Schema.decodeUnknownSync(PiAgentSettings);
+
+describe("PiAgentSettings", () => {
+  it("defaults to the system pi binary and the user's standard agent home", () => {
+    expect(decodePiAgentSettings({})).toEqual({
+      enabled: true,
+      binaryPath: "pi",
+      homePath: "",
+      customModels: [],
+    });
+  });
+
+  it("trims explicit binary and agent home paths", () => {
+    expect(
+      decodePiAgentSettings({
+        binaryPath: "  /opt/homebrew/bin/pi  ",
+        homePath: "  ~/.pi/work  ",
+      }),
+    ).toMatchObject({
+      binaryPath: "/opt/homebrew/bin/pi",
+      homePath: "~/.pi/work",
+    });
+  });
+});
 
 describe("ClientSettings word wrap", () => {
   it("defaults word wrap on", () => {
