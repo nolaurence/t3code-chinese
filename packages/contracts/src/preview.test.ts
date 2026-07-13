@@ -14,6 +14,7 @@ import {
   PreviewAutomationOpenInput,
   PreviewAutomationResizeInput,
   PreviewAutomationResizeResult,
+  PreviewAutomationScrollInput,
   PreviewAutomationStatus,
 } from "./previewAutomation.ts";
 
@@ -28,6 +29,7 @@ const decodeResizeResult = Schema.decodeUnknownSync(PreviewAutomationResizeResul
 const decodeAutomationHost = Schema.decodeUnknownSync(PreviewAutomationHost);
 const decodeAutomationError = Schema.decodeUnknownSync(PreviewAutomationError);
 const decodeAutomationStatus = Schema.decodeUnknownSync(PreviewAutomationStatus);
+const decodeAutomationScroll = Schema.decodeUnknownSync(PreviewAutomationScrollInput);
 
 describe("PreviewNavStatus", () => {
   it("decodes Idle", () => {
@@ -144,6 +146,20 @@ describe("preview automation tab targeting", () => {
   });
 });
 
+describe("PreviewAutomationScrollInput", () => {
+  it("accepts a coordinate target and rejects ambiguous targets", () => {
+    expect(decodeAutomationScroll({ deltaY: 400, x: 120, y: 240 })).toMatchObject({
+      deltaY: 400,
+      x: 120,
+      y: 240,
+    });
+    expect(() => decodeAutomationScroll({ deltaY: 400, x: 120 })).toThrow();
+    expect(() =>
+      decodeAutomationScroll({ deltaY: 400, x: 120, y: 240, locator: "role=list" }),
+    ).toThrow();
+  });
+});
+
 describe("PreviewAutomationHost", () => {
   it("accepts legacy hosts and current operation advertisements", () => {
     expect(decodeAutomationHost({ clientId: "legacy", environmentId: "environment-1" })).toEqual({
@@ -155,8 +171,25 @@ describe("PreviewAutomationHost", () => {
         clientId: "current",
         environmentId: "environment-1",
         supportedOperations: ["status", "resize"],
+        supportedFeatures: ["coordinateScrollWheel"],
       }).supportedOperations,
     ).toEqual(["status", "resize"]);
+    expect(
+      decodeAutomationHost({
+        clientId: "current",
+        environmentId: "environment-1",
+        supportedOperations: ["scroll"],
+        supportedFeatures: ["coordinateScrollWheel"],
+      }).supportedFeatures,
+    ).toEqual(["coordinateScrollWheel"]);
+    expect(() =>
+      decodeAutomationHost({
+        clientId: "unsupported-feature",
+        environmentId: "environment-1",
+        supportedOperations: ["scroll"],
+        supportedFeatures: ["coordinateDomScroll"],
+      }),
+    ).toThrow();
   });
 });
 

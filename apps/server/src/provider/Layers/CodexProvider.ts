@@ -26,6 +26,7 @@ import { ServerSettingsError } from "@t3tools/contracts";
 
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import { initializeCodexAppServerWithBundledSkills } from "../../bundledSkills.ts";
 import {
   AUTH_PROBE_TIMEOUT_MS,
   buildServerProvider,
@@ -331,7 +332,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     Effect.provide(clientContext),
   );
 
-  const initialize = yield* client.request("initialize", {
+  const initialize = yield* initializeCodexAppServerWithBundledSkills(client, {
     clientInfo: {
       name: "t3code_desktop",
       title: "T3 Code Desktop",
@@ -341,7 +342,6 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
       experimentalApi: true,
     },
   });
-  yield* client.notify("initialized", undefined);
 
   // Extract the version string after the first '/' in userAgent, up to the next space or the end
   const versionMatch = initialize.userAgent.match(/\/([^\s]+)/);

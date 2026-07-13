@@ -2287,6 +2287,20 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     input: PreviewAutomationScrollInput,
     send: SendCommand,
   ) {
+    const deltaX = input.deltaX ?? 0;
+    const deltaY = input.deltaY ?? 0;
+    if (input.x !== undefined && input.y !== undefined) {
+      yield* prepareAutomationInput(send, false);
+      yield* send("Input.dispatchMouseEvent", {
+        type: "mouseWheel",
+        x: input.x,
+        y: input.y,
+        deltaX,
+        deltaY,
+      });
+      return;
+    }
+
     yield* send("Runtime.enable");
     const locator = automationLocator(input);
     if (locator) yield* ensurePlaywrightInjected(tabId, send);
@@ -2300,9 +2314,13 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       send,
       `(() => {
         try {
-          const target = ${locatorJson ? `(() => { const injected = globalThis.__t3PlaywrightInjected; return injected.querySelector(injected.parseSelector(${locatorJson}), document, true); })()` : "window"};
+          const target = ${
+            locatorJson
+              ? `(() => { const injected = globalThis.__t3PlaywrightInjected; return injected.querySelector(injected.parseSelector(${locatorJson}), document, true); })()`
+              : "window"
+          };
           if (!target) return { notFound: true };
-          target.scrollBy({ left: ${input.deltaX ?? 0}, top: ${input.deltaY ?? 0}, behavior: "instant" });
+          target.scrollBy({ left: ${deltaX}, top: ${deltaY}, behavior: "instant" });
           return { ok: true };
         } catch (error) {
           return { invalidSelector: true, message: String(error) };

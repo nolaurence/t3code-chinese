@@ -177,6 +177,11 @@ const buildCmd = Command.make(
         }),
       );
 
+      const bundledSkillsSource = path.join(serverDir, "src/bundled-skills");
+      const bundledSkillsTarget = path.join(serverDir, "dist/bundled-skills");
+      yield* fs.copy(bundledSkillsSource, bundledSkillsTarget);
+      yield* Effect.log("[cli] Bundled provider Skills into dist/bundled-skills");
+
       const webDist = path.join(repoRoot, "apps/web/dist");
       const clientTarget = path.join(serverDir, "dist/client");
 
@@ -239,7 +244,11 @@ const publishCmd = Command.make(
       const backupPath = `${packageJsonPath}.bak`;
 
       // Assert build assets exist
-      for (const relPath of ["dist/bin.mjs", "dist/client/index.html"]) {
+      for (const relPath of [
+        "dist/bin.mjs",
+        "dist/client/index.html",
+        "dist/bundled-skills/midscene-preview/SKILL.md",
+      ]) {
         const abs = path.join(serverDir, relPath);
         if (!(yield* fs.exists(abs))) {
           return yield* new ServerCliBuildAssetMissingError({ assetPath: abs });

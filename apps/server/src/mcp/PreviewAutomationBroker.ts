@@ -15,6 +15,7 @@ import {
   PreviewAutomationUnsupportedClientError,
   PreviewTabId,
   type PreviewAutomationError,
+  type PreviewAutomationFeature,
   type PreviewAutomationOperation,
   type PreviewAutomationHost,
   type PreviewAutomationHostFocus,
@@ -64,6 +65,7 @@ interface ClientConnection {
   readonly connectionId: string;
   readonly environmentId: PreviewAutomationHost["environmentId"];
   readonly supportedOperations: ReadonlySet<PreviewAutomationOperation>;
+  readonly supportedFeatures: ReadonlySet<PreviewAutomationFeature>;
   readonly focused: boolean;
   readonly focusOrder: number;
   readonly queue: Queue.Queue<PreviewAutomationStreamEvent>;
@@ -159,6 +161,25 @@ const supportsOperation = (
   connection: ClientConnection,
   operation: PreviewAutomationOperation,
 ): boolean => connection.supportedOperations.has(operation);
+
+const requiredFeatureForRequest = (
+  operation: PreviewAutomationOperation,
+  input: unknown,
+): PreviewAutomationFeature | undefined => {
+  if (operation !== "scroll" || typeof input !== "object" || input === null) return undefined;
+  const scrollInput = input as { readonly x?: unknown; readonly y?: unknown };
+  return scrollInput.x !== undefined || scrollInput.y !== undefined
+    ? "coordinateScrollWheel"
+    : undefined;
+};
+
+const supportsRequest = (
+  connection: ClientConnection,
+  operation: PreviewAutomationOperation,
+  requiredFeature: PreviewAutomationFeature | undefined,
+): boolean =>
+  supportsOperation(connection, operation) &&
+  (requiredFeature === undefined || connection.supportedFeatures.has(requiredFeature));
 
 type RemoteDetailKind = "null" | "array" | "object" | "string" | "number" | "boolean";
 
@@ -325,6 +346,7 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
       connectionId,
       environmentId: host.environmentId,
       supportedOperations: new Set(host.supportedOperations ?? PREVIEW_AUTOMATION_V1_OPERATIONS),
+      supportedFeatures: new Set(host.supportedFeatures ?? []),
       focused: false,
       focusOrder: 0,
       queue,
@@ -421,6 +443,7 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
     input: Parameters<PreviewAutomationBroker["Service"]["invoke"]>[0],
   ): Effect.fn.Return<A, PreviewAutomationError> {
     const timeoutMs = input.timeoutMs ?? 15_000;
+    const requiredFeature = requiredFeatureForRequest(input.operation, input.input);
     const deferred = yield* Deferred.make<unknown, PreviewAutomationError>();
     const now = yield* Clock.currentTimeMillis;
     const route = yield* SynchronizedRef.modify(state, (current) => {
@@ -445,7 +468,7 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
       // capability failure and can deliberately start a fresh provider
       // session. A dead lease is pruned above and may fail over.
       const connection =
-        hasLiveAssignment && supportsOperation(assignedConnection, input.operation)
+        hasLiveAssignment && supportsRequest(assignedConnection, input.operation, requiredFeature)
           ? assignedConnection
           : hasLiveAssignment
             ? undefined
@@ -453,11 +476,12 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
                 .filter(
                   (host) =>
                     host.environmentId === input.scope.environmentId &&
-                    supportsOperation(host, input.operation),
+                    supportsRequest(host, input.operation, requiredFeature),
                 )
                 .sort(
                   (left, right) =>
                     right.supportedOperations.size - left.supportedOperations.size ||
+                    right.supportedFeatures.size - left.supportedFeatures.size ||
                     Number(right.focused) - Number(left.focused) ||
                     right.focusOrder - left.focusOrder,
                 )[0];
@@ -511,6 +535,7 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
         threadId: input.scope.threadId,
         providerSessionId: input.scope.providerSessionId,
         providerInstanceId: input.scope.providerInstanceId,
+        ...(requiredFeature === undefined ? {} : { requiredFeature }),
       });
     }
     const { connection, requestId, requestContext, requestSequence } = route;

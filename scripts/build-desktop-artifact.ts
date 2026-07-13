@@ -263,6 +263,19 @@ export class BundledClientAssetsMissingError extends Schema.TaggedErrorClass<Bun
   }
 }
 
+export class DesktopStageRuntimeArtifactMissingError extends Schema.TaggedErrorClass<DesktopStageRuntimeArtifactMissingError>()(
+  "DesktopStageRuntimeArtifactMissingError",
+  {
+    artifact: Schema.String,
+    stageAppDir: Schema.String,
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {
+  override get message(): string {
+    return `Desktop stage is missing required runtime artifact '${this.artifact}'.`;
+  }
+}
+
 export class UnsupportedDesktopBuildPlatformError extends Schema.TaggedErrorClass<UnsupportedDesktopBuildPlatformError>()(
   "UnsupportedDesktopBuildPlatformError",
   {
@@ -575,6 +588,109 @@ interface StagePackageJson {
 
 export const STAGE_INSTALL_ARGS = ["install", "--prod"] as const;
 export const DESKTOP_ASAR_UNPACK = ["node_modules/@ff-labs/fff-bin-*/**/*"] as const;
+const MIDSCENE_BUNDLED_SKILL_PATH = "bundled-skills/midscene-preview/SKILL.md";
+const MIDSCENE_RUNTIME_ENTRYPOINTS = [
+  "@midscene/core/agent",
+  "@midscene/core/ai-model",
+  "@midscene/core/device",
+] as const;
+
+interface DesktopStageRuntimeValidationInput {
+  readonly stageAppDir: string;
+  readonly serverDistDir: string;
+  readonly platform: typeof BuildPlatform.Type;
+  readonly arch: typeof BuildArch.Type;
+}
+
+export function resolveMidsceneSharpRuntimeModules(
+  platform: typeof BuildPlatform.Type,
+  arch: typeof BuildArch.Type,
+): ReadonlyArray<string> {
+  const architectures = arch === "universal" ? (["arm64", "x64"] as const) : [arch];
+  const targets = architectures.flatMap((architecture) =>
+    platform === "win"
+      ? [
+          { runtime: `win32-${architecture}`, libvips: false },
+          { runtime: `linux-${architecture}`, libvips: true },
+        ]
+      : [
+          {
+            runtime: `${platform === "mac" ? "darwin" : "linux"}-${architecture}`,
+            libvips: true,
+          },
+        ],
+  );
+
+  return targets.flatMap(({ runtime, libvips }) => [
+    `@img/sharp-${runtime}/sharp.node`,
+    ...(libvips ? [`@img/sharp-libvips-${runtime}/lib`] : []),
+  ]);
+}
+
+const resolveStageRuntimeModule = Effect.fn("resolveStageRuntimeModule")(function* (
+  stageAppDir: string,
+  loadedFrom: string,
+  specifier: string,
+) {
+  return yield* Effect.try({
+    try: () => NodeModule.createRequire(loadedFrom).resolve(specifier),
+    catch: (cause) =>
+      new DesktopStageRuntimeArtifactMissingError({
+        artifact: `module:${specifier}`,
+        stageAppDir,
+        cause,
+      }),
+  });
+});
+
+export const validateDesktopStageRuntime = Effect.fn("validateDesktopStageRuntime")(function* (
+  input: DesktopStageRuntimeValidationInput,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const bundledSkillPath = path.join(input.serverDistDir, MIDSCENE_BUNDLED_SKILL_PATH);
+  if (!(yield* fs.exists(bundledSkillPath))) {
+    return yield* new DesktopStageRuntimeArtifactMissingError({
+      artifact: MIDSCENE_BUNDLED_SKILL_PATH,
+      stageAppDir: input.stageAppDir,
+    });
+  }
+
+  const stagePackageJsonPath = path.join(input.stageAppDir, "package.json");
+  const coreEntryPath = yield* resolveStageRuntimeModule(
+    input.stageAppDir,
+    stagePackageJsonPath,
+    MIDSCENE_RUNTIME_ENTRYPOINTS[0],
+  );
+  for (const specifier of MIDSCENE_RUNTIME_ENTRYPOINTS.slice(1)) {
+    yield* resolveStageRuntimeModule(input.stageAppDir, stagePackageJsonPath, specifier);
+  }
+
+  const sharedEntryPath = yield* resolveStageRuntimeModule(
+    input.stageAppDir,
+    coreEntryPath,
+    "@midscene/shared/img",
+  );
+  const photonEntryPath = yield* resolveStageRuntimeModule(
+    input.stageAppDir,
+    sharedEntryPath,
+    "@silvia-odwyer/photon-node",
+  );
+  if (!(yield* fs.exists(path.join(path.dirname(photonEntryPath), "photon_rs_bg.wasm")))) {
+    return yield* new DesktopStageRuntimeArtifactMissingError({
+      artifact: "module:@silvia-odwyer/photon-node/photon_rs_bg.wasm",
+      stageAppDir: input.stageAppDir,
+    });
+  }
+  const sharpEntryPath = yield* resolveStageRuntimeModule(
+    input.stageAppDir,
+    sharedEntryPath,
+    "sharp",
+  );
+  for (const specifier of resolveMidsceneSharpRuntimeModules(input.platform, input.arch)) {
+    yield* resolveStageRuntimeModule(input.stageAppDir, sharpEntryPath, specifier);
+  }
+});
 
 export interface MacPasskeySigningConfiguration {
   readonly appId: string;
@@ -1800,6 +1916,12 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     { label: "vp install --prod", verbose: options.verbose },
   );
   yield* stageClerkPasskeyNativeBinaries(stageAppDir, options.platform, options.arch);
+  yield* validateDesktopStageRuntime({
+    stageAppDir,
+    serverDistDir: path.join(stageAppDir, "apps/server/dist"),
+    platform: options.platform,
+    arch: options.arch,
+  });
 
   // WSL is Windows-only, so only the Windows artifact carries the Linux backend
   // binary; other platforms ignore the prebuild input.

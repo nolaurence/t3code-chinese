@@ -1,8 +1,9 @@
-import type {
-  DesktopBridge,
-  DesktopPreviewPointerEvent,
-  DesktopPreviewRecordingFrame,
-  DesktopPreviewTabState,
+import {
+  PREVIEW_AUTOMATION_FEATURES,
+  type DesktopBridge,
+  type DesktopPreviewPointerEvent,
+  type DesktopPreviewRecordingFrame,
+  type DesktopPreviewTabState,
 } from "@t3tools/contracts";
 import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer } from "electron";
@@ -186,6 +187,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       },
     },
     automation: {
+      supportedFeatures: [...PREVIEW_AUTOMATION_FEATURES],
       status: (tabId) =>
         ipcRenderer.invoke(IpcChannels.PREVIEW_AUTOMATION_STATUS_CHANNEL, { tabId }),
       snapshot: (tabId) =>

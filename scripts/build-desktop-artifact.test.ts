@@ -2,8 +2,10 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/unstable/process";
@@ -14,6 +16,7 @@ import {
   createStagePatchedDependencies,
   createBuildConfig,
   DESKTOP_ASAR_UNPACK,
+  DesktopStageRuntimeArtifactMissingError,
   InvalidMacPasskeyRpDomainError,
   InvalidMacPasskeyPublishableKeyError,
   InvalidMockUpdateServerPortError,
@@ -33,9 +36,11 @@ import {
   resolveGitHubPublishConfig,
   resolveMockUpdateServerPort,
   resolveMockUpdateServerUrl,
+  resolveMidsceneSharpRuntimeModules,
   resolvePackageManagerUserAgent,
   stageLinuxIconSize,
   STAGE_INSTALL_ARGS,
+  validateDesktopStageRuntime,
 } from "./build-desktop-artifact.ts";
 import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
@@ -84,7 +89,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   });
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
-    assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Chinese)");
+    assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Browser)");
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
   });
 
@@ -148,6 +153,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       resolveDesktopRuntimeDependencies(
         {
           "@effect/platform-node": "catalog:",
+          "@midscene/core": "1.10.3",
           "@t3tools/contracts": "workspace:*",
           "@t3tools/shared": "workspace:*",
           "@t3tools/ssh": "workspace:*",
@@ -162,6 +168,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       ),
       {
         "@effect/platform-node": "4.0.0-beta.59",
+        "@midscene/core": "1.10.3",
         effect: "4.0.0-beta.59",
       },
     );
@@ -300,6 +307,60 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   it("unpacks the fff shared library for filesystem and FFI access", () => {
     assert.deepStrictEqual(DESKTOP_ASAR_UNPACK, ["node_modules/@ff-labs/fff-bin-*/**/*"]);
   });
+
+  it("requires sharp native runtimes for the desktop target and Windows WSL backend", () => {
+    assert.deepStrictEqual(resolveMidsceneSharpRuntimeModules("mac", "universal"), [
+      "@img/sharp-darwin-arm64/sharp.node",
+      "@img/sharp-libvips-darwin-arm64/lib",
+      "@img/sharp-darwin-x64/sharp.node",
+      "@img/sharp-libvips-darwin-x64/lib",
+    ]);
+    assert.deepStrictEqual(resolveMidsceneSharpRuntimeModules("win", "x64"), [
+      "@img/sharp-win32-x64/sharp.node",
+      "@img/sharp-linux-x64/sharp.node",
+      "@img/sharp-libvips-linux-x64/lib",
+    ]);
+  });
+
+  it.effect("rejects a desktop stage without the bundled Midscene Skill", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const stageAppDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "t3code-desktop-runtime-stage-test-",
+      });
+      const error = yield* validateDesktopStageRuntime({
+        stageAppDir,
+        serverDistDir: stageAppDir,
+        platform: "mac",
+        arch: "arm64",
+      }).pipe(Effect.flip);
+
+      assert.instanceOf(error, DesktopStageRuntimeArtifactMissingError);
+      assert.equal(error.artifact, "bundled-skills/midscene-preview/SKILL.md");
+      assert.equal(error.stageAppDir, stageAppDir);
+      assert.notProperty(error, "cause");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("resolves the installed Midscene, Photon WASM, and native sharp runtime chain", () =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const hostPlatform = yield* HostProcessPlatform;
+      const hostArchitecture = yield* HostProcessArchitecture;
+      const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
+      const serverDir = path.join(repoRoot, "apps/server");
+      const platform =
+        hostPlatform === "darwin" ? "mac" : hostPlatform === "win32" ? "win" : "linux";
+      const arch = hostArchitecture === "arm64" ? "universal" : "x64";
+
+      yield* validateDesktopStageRuntime({
+        stageAppDir: serverDir,
+        serverDistDir: path.join(serverDir, "src"),
+        platform,
+        arch,
+      });
+    }),
+  );
 
   it.effect("preserves both Linux icon resize failures with structural context", () => {
     const commands: Array<{ readonly command: string; readonly args: ReadonlyArray<string> }> = [];
@@ -470,6 +531,23 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.deepStrictEqual(mac.protocols, [
         { name: "T3 Code", schemes: ["t3code", "t3code-dev"] },
       ]);
+    }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
+  );
+
+  it.effect("unpacks bundled Skills and Midscene dependencies for external processes", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "dmg",
+        "1.2.3",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+
+      assert.include(config.asarUnpack as ReadonlyArray<string>, "apps/server/dist/**");
+      assert.include(config.asarUnpack as ReadonlyArray<string>, "**/node_modules/**");
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 

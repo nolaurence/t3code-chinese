@@ -86,11 +86,23 @@ const DESKTOP_BACKEND_ENV_NAMES = [
   "T3CODE_TAILSCALE_SERVE_PORT",
 ] as const;
 
-// Sensitive env vars that the WSL backend needs but Windows process.env won't
-// forward across the wsl.exe boundary without WSLENV. The dev-server URL is
-// handled separately via a `--dev-url` CLI flag because WSLENV translation of
-// URL-shaped values (colons / slashes) is unreliable.
-const WSL_FORWARDED_ENV_NAMES = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"] as const;
+// Model configuration that the WSL backend needs but Windows process.env won't
+// forward across the wsl.exe boundary without WSLENV. Midscene adds settings
+// over time, so discover its model-scoped variables instead of maintaining a
+// partial allowlist. Only non-empty values are added to WSLENV below.
+const WSL_STATIC_FORWARDED_ENV_NAMES = [
+  "OPENAI_API_KEY",
+  "OPENAI_BASE_URL",
+  "ANTHROPIC_API_KEY",
+] as const;
+const WSL_MIDSCENE_MODEL_ENV_NAME_PATTERN = /^MIDSCENE_(?:(?:INSIGHT|PLANNING)_)?MODEL_/u;
+
+const resolveWslForwardedEnvNames = (environment: NodeJS.ProcessEnv): ReadonlyArray<string> => [
+  ...WSL_STATIC_FORWARDED_ENV_NAMES,
+  ...Object.keys(environment)
+    .filter((name) => WSL_MIDSCENE_MODEL_ENV_NAME_PATTERN.test(name))
+    .sort(),
+];
 
 const WSL_SERVER_SYSTEM_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
@@ -462,7 +474,7 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
   const distroArgs = distroForConfig ? ["-d", distroForConfig] : [];
   const forwardedEnv: Record<string, string> = {};
   const forwardedEnvNames: string[] = [];
-  for (const name of WSL_FORWARDED_ENV_NAMES) {
+  for (const name of resolveWslForwardedEnvNames(process.env)) {
     const value = process.env[name];
     if (value !== undefined && value.length > 0) {
       forwardedEnv[name] = value;

@@ -448,11 +448,29 @@ describe("DesktopBackendConfiguration", () => {
 
       const previousWslEnv = process.env.WSLENV;
       const previousOpenAiKey = process.env.OPENAI_API_KEY;
+      const previousOpenAiBaseUrl = process.env.OPENAI_BASE_URL;
       const previousAnthropicKey = process.env.ANTHROPIC_API_KEY;
+      const midsceneModelVariablePattern = /^MIDSCENE_(?:(?:INSIGHT|PLANNING)_)?MODEL_/u;
+      const previousMidsceneModelEnvironment = new Map(
+        Object.entries(process.env).filter(
+          (entry): entry is [string, string] =>
+            midsceneModelVariablePattern.test(entry[0]) && entry[1] !== undefined,
+        ),
+      );
       try {
+        for (const name of previousMidsceneModelEnvironment.keys()) delete process.env[name];
         process.env.WSLENV = "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u";
         process.env.OPENAI_API_KEY = "openai-key";
+        process.env.OPENAI_BASE_URL = "https://openai.example.test/v1";
         process.env.ANTHROPIC_API_KEY = "anthropic-key";
+        process.env.MIDSCENE_MODEL_NAME = "browser-model";
+        process.env.MIDSCENE_MODEL_FAMILY = "gpt-5";
+        process.env.MIDSCENE_MODEL_API_KEY = "midscene-key";
+        process.env.MIDSCENE_MODEL_BASE_URL = "https://midscene.example.test/v1";
+        process.env.MIDSCENE_MODEL_EXTRA_BODY_JSON = '{"reasoning":{"effort":"high"}}';
+        process.env.MIDSCENE_MODEL_TIMEOUT = "";
+        process.env.MIDSCENE_PLANNING_MODEL_API_KEY = "planning-key";
+        process.env.MIDSCENE_INSIGHT_MODEL_NAME = "insight-model";
 
         yield* Effect.gen(function* () {
           const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
@@ -469,15 +487,27 @@ describe("DesktopBackendConfiguration", () => {
           // avoid relying on wslhost forwarding.
           assert.equal(config.httpBaseUrl.href, "http://172.27.0.99:5050/");
           assert.equal(config.env.OPENAI_API_KEY, "openai-key");
+          assert.equal(config.env.OPENAI_BASE_URL, "https://openai.example.test/v1");
           assert.equal(config.env.ANTHROPIC_API_KEY, "anthropic-key");
+          assert.equal(config.env.MIDSCENE_MODEL_NAME, "browser-model");
+          assert.equal(config.env.MIDSCENE_MODEL_FAMILY, "gpt-5");
+          assert.equal(config.env.MIDSCENE_MODEL_API_KEY, "midscene-key");
+          assert.equal(config.env.MIDSCENE_MODEL_BASE_URL, "https://midscene.example.test/v1");
+          assert.equal(
+            config.env.MIDSCENE_MODEL_EXTRA_BODY_JSON,
+            '{"reasoning":{"effort":"high"}}',
+          );
+          assert.equal(config.env.MIDSCENE_PLANNING_MODEL_API_KEY, "planning-key");
+          assert.equal(config.env.MIDSCENE_INSIGHT_MODEL_NAME, "insight-model");
           // The existing WSLENV is preserved byte-for-byte (note the empty
           // "::" segment survives — WSL ignores it, so we don't normalize
-          // it away) and ANTHROPIC_API_KEY is appended. OPENAI_API_KEY is
-          // already declared, so it isn't forwarded twice.
+          // it away). OPENAI_API_KEY is already declared, so the static and
+          // discovered Midscene model settings are appended without duplicating it.
           assert.equal(
             config.env.WSLENV,
-            "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u:ANTHROPIC_API_KEY",
+            "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u:OPENAI_BASE_URL:ANTHROPIC_API_KEY:MIDSCENE_INSIGHT_MODEL_NAME:MIDSCENE_MODEL_API_KEY:MIDSCENE_MODEL_BASE_URL:MIDSCENE_MODEL_EXTRA_BODY_JSON:MIDSCENE_MODEL_FAMILY:MIDSCENE_MODEL_NAME:MIDSCENE_PLANNING_MODEL_API_KEY",
           );
+          assert.notInclude(config.env.WSLENV ?? "", "MIDSCENE_MODEL_TIMEOUT");
         }).pipe(
           Effect.provide(
             DesktopBackendConfiguration.layer.pipe(
@@ -497,7 +527,12 @@ describe("DesktopBackendConfiguration", () => {
       } finally {
         restoreEnv("WSLENV", previousWslEnv);
         restoreEnv("OPENAI_API_KEY", previousOpenAiKey);
+        restoreEnv("OPENAI_BASE_URL", previousOpenAiBaseUrl);
         restoreEnv("ANTHROPIC_API_KEY", previousAnthropicKey);
+        for (const name of Object.keys(process.env)) {
+          if (midsceneModelVariablePattern.test(name)) delete process.env[name];
+        }
+        for (const [name, value] of previousMidsceneModelEnvironment) process.env[name] = value;
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

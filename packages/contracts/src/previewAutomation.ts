@@ -50,6 +50,12 @@ export const PREVIEW_AUTOMATION_OPERATIONS = [
 export const PreviewAutomationOperation = Schema.Literals(PREVIEW_AUTOMATION_OPERATIONS);
 export type PreviewAutomationOperation = typeof PreviewAutomationOperation.Type;
 
+/** Optional host semantics that cannot be inferred from operation support alone. */
+export const PREVIEW_AUTOMATION_FEATURES = ["coordinateScrollWheel"] as const;
+
+export const PreviewAutomationFeature = Schema.Literals(PREVIEW_AUTOMATION_FEATURES);
+export type PreviewAutomationFeature = typeof PreviewAutomationFeature.Type;
+
 const PreviewAutomationTabTargetFields = {
   tabId: Schema.optional(
     PreviewTabId.annotate({
@@ -372,11 +378,29 @@ export const PreviewAutomationScrollInput = Schema.Struct({
   locator: Schema.optional(Locator).annotate({
     description: "Playwright selector for a scrollable container. Omit to scroll the viewport.",
   }),
+  x: Schema.optional(
+    Schema.Finite.annotate({
+      description:
+        "Viewport-relative X coordinate at which to dispatch a wheel event. Must be paired with y.",
+    }),
+  ),
+  y: Schema.optional(
+    Schema.Finite.annotate({
+      description:
+        "Viewport-relative Y coordinate at which to dispatch a wheel event. Must be paired with x.",
+    }),
+  ),
 })
   .check(
     Schema.makeFilter((input) => {
       if (input.selector !== undefined && input.locator !== undefined) {
         return "Provide at most one of selector or locator.";
+      }
+      const hasX = input.x !== undefined;
+      const hasY = input.y !== undefined;
+      if (hasX !== hasY) return "Coordinates require both x and y.";
+      if ((hasX || hasY) && (input.selector !== undefined || input.locator !== undefined)) {
+        return "Coordinates cannot be combined with locator or selector.";
       }
       return (
         input.deltaX !== undefined || input.deltaY !== undefined || "Provide deltaX or deltaY."
@@ -385,7 +409,7 @@ export const PreviewAutomationScrollInput = Schema.Struct({
   )
   .annotate({
     description:
-      "Scrolls the viewport, or a locator/selector container. Provide deltaX, deltaY, or both.",
+      "Scrolls the viewport or locator/selector container with DOM scrollBy, or dispatches a hit-tested wheel event at x/y coordinates. Provide deltaX, deltaY, or both.",
   });
 export type PreviewAutomationScrollInput = typeof PreviewAutomationScrollInput.Type;
 
@@ -555,6 +579,8 @@ export const PreviewAutomationHost = Schema.Struct({
    * a newer server safely coexist with an older desktop during rollout.
    */
   supportedOperations: Schema.optional(Schema.Array(PreviewAutomationOperation)),
+  /** Missing means no optional semantic features are available. */
+  supportedFeatures: Schema.optional(Schema.Array(PreviewAutomationFeature)),
 });
 export type PreviewAutomationHost = typeof PreviewAutomationHost.Type;
 
@@ -664,12 +690,15 @@ export class PreviewAutomationNoAvailableHostError extends Schema.TaggedErrorCla
     requestId: Schema.optional(TrimmedNonEmptyString),
     tabId: Schema.optional(PreviewTabId),
     timeoutMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+    requiredFeature: Schema.optional(PreviewAutomationFeature),
     ...PreviewAutomationOptionalRemoteDiagnosticFields,
   },
 ) {
   override get message(): string {
-    const summary = `No preview automation host is available for ${this.operation} in environment ${this.environmentId}.`;
-    return summary;
+    if (this.requiredFeature === "coordinateScrollWheel") {
+      return `No preview automation host with coordinate wheel scrolling is available for ${this.operation} in environment ${this.environmentId}. Omit x and y to fall back to legacy viewport scrolling.`;
+    }
+    return `No preview automation host is available for ${this.operation} in environment ${this.environmentId}.`;
   }
 }
 
