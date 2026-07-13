@@ -84,7 +84,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   });
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
-    assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Chinese)");
+    assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Browser)");
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
   });
 
@@ -148,6 +148,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       resolveDesktopRuntimeDependencies(
         {
           "@effect/platform-node": "catalog:",
+          "@midscene/core": "1.10.3",
           "@t3tools/contracts": "workspace:*",
           "@t3tools/shared": "workspace:*",
           "@t3tools/ssh": "workspace:*",
@@ -162,6 +163,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       ),
       {
         "@effect/platform-node": "4.0.0-beta.59",
+        "@midscene/core": "1.10.3",
         effect: "4.0.0-beta.59",
       },
     );
@@ -470,6 +472,23 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.deepStrictEqual(mac.protocols, [
         { name: "T3 Code", schemes: ["t3code", "t3code-dev"] },
       ]);
+    }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
+  );
+
+  it.effect("unpacks bundled Skills and Midscene dependencies for external processes", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "dmg",
+        "1.2.3",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+
+      assert.include(config.asarUnpack as ReadonlyArray<string>, "apps/server/dist/**");
+      assert.include(config.asarUnpack as ReadonlyArray<string>, "**/node_modules/**");
     }).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })))),
   );
 

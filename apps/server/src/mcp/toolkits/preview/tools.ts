@@ -133,7 +133,7 @@ export const PreviewPressTool = browserTool(
 export const PreviewScrollTool = safeBrowserTool(
   Tool.make("preview_scroll", {
     description:
-      "Scroll the tab selected by tabId, or this agent session's current tab when omitted. Positive deltaY scrolls down and positive deltaX scrolls right; a locator/selector targets a container.",
+      "Scroll the tab selected by tabId, or this agent session's current tab when omitted. Positive deltaY scrolls down and positive deltaX scrolls right; a locator, selector, or paired x/y coordinates target a container.",
     parameters: PreviewAutomationScrollInput,
     success: Schema.Null,
     failure: PreviewAutomationError,

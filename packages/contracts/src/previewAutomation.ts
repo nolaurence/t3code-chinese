@@ -372,11 +372,29 @@ export const PreviewAutomationScrollInput = Schema.Struct({
   locator: Schema.optional(Locator).annotate({
     description: "Playwright selector for a scrollable container. Omit to scroll the viewport.",
   }),
+  x: Schema.optional(
+    Schema.Finite.annotate({
+      description:
+        "Viewport-relative X coordinate inside a scrollable container. Must be paired with y.",
+    }),
+  ),
+  y: Schema.optional(
+    Schema.Finite.annotate({
+      description:
+        "Viewport-relative Y coordinate inside a scrollable container. Must be paired with x.",
+    }),
+  ),
 })
   .check(
     Schema.makeFilter((input) => {
       if (input.selector !== undefined && input.locator !== undefined) {
         return "Provide at most one of selector or locator.";
+      }
+      const hasX = input.x !== undefined;
+      const hasY = input.y !== undefined;
+      if (hasX !== hasY) return "Coordinates require both x and y.";
+      if ((hasX || hasY) && (input.selector !== undefined || input.locator !== undefined)) {
+        return "Coordinates cannot be combined with locator or selector.";
       }
       return (
         input.deltaX !== undefined || input.deltaY !== undefined || "Provide deltaX or deltaY."
@@ -385,7 +403,7 @@ export const PreviewAutomationScrollInput = Schema.Struct({
   )
   .annotate({
     description:
-      "Scrolls the viewport, or a locator/selector container. Provide deltaX, deltaY, or both.",
+      "Scrolls the viewport, a locator/selector container, or the container at x/y coordinates. Provide deltaX, deltaY, or both.",
   });
 export type PreviewAutomationScrollInput = typeof PreviewAutomationScrollInput.Type;
 

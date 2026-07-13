@@ -14,6 +14,7 @@ import {
   PreviewAutomationOpenInput,
   PreviewAutomationResizeInput,
   PreviewAutomationResizeResult,
+  PreviewAutomationScrollInput,
   PreviewAutomationStatus,
 } from "./previewAutomation.ts";
 
@@ -28,6 +29,7 @@ const decodeResizeResult = Schema.decodeUnknownSync(PreviewAutomationResizeResul
 const decodeAutomationHost = Schema.decodeUnknownSync(PreviewAutomationHost);
 const decodeAutomationError = Schema.decodeUnknownSync(PreviewAutomationError);
 const decodeAutomationStatus = Schema.decodeUnknownSync(PreviewAutomationStatus);
+const decodeAutomationScroll = Schema.decodeUnknownSync(PreviewAutomationScrollInput);
 
 describe("PreviewNavStatus", () => {
   it("decodes Idle", () => {
@@ -141,6 +143,20 @@ describe("preview automation tab targeting", () => {
       reuseExistingTab: true,
     });
     expect(() => decodeOpenInput({ tabId: "tab-app", reuseExistingTab: false })).toThrow();
+  });
+});
+
+describe("PreviewAutomationScrollInput", () => {
+  it("accepts a coordinate target and rejects ambiguous targets", () => {
+    expect(decodeAutomationScroll({ deltaY: 400, x: 120, y: 240 })).toMatchObject({
+      deltaY: 400,
+      x: 120,
+      y: 240,
+    });
+    expect(() => decodeAutomationScroll({ deltaY: 400, x: 120 })).toThrow();
+    expect(() =>
+      decodeAutomationScroll({ deltaY: 400, x: 120, y: 240, locator: "role=list" }),
+    ).toThrow();
   });
 });
 

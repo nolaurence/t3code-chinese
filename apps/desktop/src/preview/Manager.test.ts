@@ -888,6 +888,69 @@ describe("PreviewManager", () => {
     ),
   );
 
+  effectIt.effect("scrolls the nearest container at a viewport coordinate", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        const sendCommand = vi.fn(async (method: string, _params?: Record<string, unknown>) =>
+          method === "Runtime.evaluate" ? { result: { value: { ok: true } } } : undefined,
+        );
+        fromId.mockReturnValue({
+          id: 42,
+          isDestroyed: () => false,
+          getType: () => "webview",
+          getURL: () => "https://example.com",
+          getTitle: () => "Example",
+          isLoading: () => false,
+          isDevToolsOpened: () => false,
+          getZoomFactor: () => 1,
+          setZoomFactor: vi.fn(),
+          on: vi.fn(),
+          off: vi.fn(),
+          ipc: { on: vi.fn(), off: vi.fn() },
+          send: webviewSend,
+          navigationHistory: { canGoBack: () => false, canGoForward: () => false },
+          setWindowOpenHandler: vi.fn(),
+          debugger: {
+            isAttached: () => false,
+            attach: vi.fn(),
+            sendCommand,
+            on: vi.fn(),
+            off: vi.fn(),
+          },
+        } as never);
+
+        yield* manager.createTab("tab_scroll");
+        yield* manager.registerWebview("tab_scroll", 42);
+        yield* manager.automationScroll("tab_scroll", {
+          x: 160,
+          y: 240,
+          deltaX: 15,
+          deltaY: -20,
+        });
+
+        const scrollEvaluation = sendCommand.mock.calls.find(
+          ([method, params]) =>
+            method === "Runtime.evaluate" &&
+            typeof params === "object" &&
+            params !== null &&
+            "expression" in params &&
+            typeof params.expression === "string" &&
+            params.expression.includes("document.elementFromPoint(160, 240)"),
+        );
+        expect(scrollEvaluation).toBeDefined();
+        expect(scrollEvaluation?.[1]).toEqual(
+          expect.objectContaining({
+            expression: expect.stringMatching(
+              /element = element\.parentElement[\s\S]*element\.scrollHeight > element\.clientHeight[\s\S]*document\.scrollingElement \|\| window[\s\S]*target\.scrollBy\(\{ left: 15, top: -20, behavior: "instant" \}\)/,
+            ),
+            awaitPromise: true,
+            returnByValue: true,
+          }),
+        );
+      }),
+    ),
+  );
+
   effectIt.effect("still interrupts agent control for a different human pointer event", () =>
     withManager((manager) =>
       Effect.gen(function* () {

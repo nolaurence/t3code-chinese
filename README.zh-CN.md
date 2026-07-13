@@ -88,6 +88,37 @@ irm https://vite.plus/ps1 | iex
 vp i
 ```
 
+### 打包桌面应用
+
+请在仓库根目录中运行目标平台对应的命令。打包产物会输出到 `./release` 目录。
+
+#### macOS
+
+```bash
+# Apple Silicon
+vp run dist:desktop:dmg:arm64
+
+# Intel
+vp run dist:desktop:dmg:x64
+```
+
+#### Linux
+
+```bash
+# x64 AppImage
+vp run dist:desktop:linux
+```
+
+#### Windows
+
+```bash
+# x64 NSIS 安装包
+vp run dist:desktop:win:x64
+
+# ARM64 NSIS 安装包
+vp run dist:desktop:win:arm64
+```
+
 提交 Issue 或 PR 前，请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 需要支持时，可以加入 [Discord](https://discord.gg/jn4EGJjrvv)。

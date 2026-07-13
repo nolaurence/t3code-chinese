@@ -86,7 +86,7 @@ function resolveDesktopAppStageLabel(input: {
     return "Dev";
   }
 
-  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Chinese";
+  return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Browser";
 }
 
 function resolveDesktopAppBranding(input: {
