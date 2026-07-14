@@ -1,4 +1,5 @@
 import {
+  DEFAULT_SERVER_SETTINGS,
   PREVIEW_MIDSCENE_RESULT_MAX_BYTES,
   PreviewAutomationError,
   PreviewMidsceneConfigurationError,
@@ -18,6 +19,8 @@ import {
   type PreviewMidsceneQueryResult,
   type PreviewMidsceneUsage,
   type PreviewTabId,
+  type MidsceneSettings,
+  type ServerSettingsError,
 } from "@t3tools/contracts";
 import type { AIUsageInfo, MidsceneUsageMetrics } from "@midscene/core";
 import * as Cause from "effect/Cause";
@@ -32,6 +35,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import type { McpInvocationScope } from "./McpInvocationContext.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import * as PreviewAutomationBroker from "./PreviewAutomationBroker.ts";
 import * as PreviewMidsceneRuntime from "./preview-midscene/PreviewMidsceneRuntime.ts";
 import {
@@ -49,6 +53,7 @@ const REQUIRED_MODEL_VARIABLES = [
 const MODEL_BASE_URL_VARIABLE = "MIDSCENE_MODEL_BASE_URL";
 const LEGACY_MODEL_BASE_URL_VARIABLE = "OPENAI_BASE_URL";
 const MODEL_BASE_URL_REQUIREMENT = `${MODEL_BASE_URL_VARIABLE} (or legacy ${LEGACY_MODEL_BASE_URL_VARIABLE})`;
+const MIDSCENE_MODEL_ENV_NAME_PATTERN = /^MIDSCENE_(?:(?:INSIGHT|PLANNING)_)?MODEL_/u;
 
 type SemanticInput =
   | PreviewMidsceneActInput
@@ -81,7 +86,7 @@ const encodeUnknownJson = Schema.encodeUnknownSync(Schema.UnknownFromJsonString)
 const decodeUnknownJson = Schema.decodeUnknownSync(Schema.UnknownFromJsonString);
 
 export function missingMidsceneModelVariables(
-  environment: NodeJS.ProcessEnv,
+  environment: Readonly<Record<string, string | undefined>>,
 ): ReadonlyArray<string> {
   const missingVariables: Array<string> = REQUIRED_MODEL_VARIABLES.filter(
     (name) => !environment[name]?.trim(),
@@ -93,6 +98,30 @@ export function missingMidsceneModelVariables(
     missingVariables.push(MODEL_BASE_URL_REQUIREMENT);
   }
   return missingVariables;
+}
+
+export function resolveMidsceneModelConfig(
+  environment: Readonly<Record<string, string | undefined>>,
+  settings: MidsceneSettings,
+): Readonly<Record<string, string>> {
+  const modelConfig = Object.fromEntries(
+    Object.entries(environment).filter(
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined &&
+        (entry[0] === LEGACY_MODEL_BASE_URL_VARIABLE ||
+          MIDSCENE_MODEL_ENV_NAME_PATTERN.test(entry[0])),
+    ),
+  );
+  const settingOverrides = {
+    MIDSCENE_MODEL_API_KEY: settings.modelApiKey,
+    MIDSCENE_MODEL_NAME: settings.modelName,
+    MIDSCENE_MODEL_FAMILY: settings.modelFamily,
+    MIDSCENE_MODEL_BASE_URL: settings.modelBaseUrl,
+  } as const;
+  for (const [name, value] of Object.entries(settingOverrides)) {
+    if (value.trim().length > 0) modelConfig[name] = value;
+  }
+  return modelConfig;
 }
 
 const usageFromMetrics = (metrics: MidsceneUsageMetrics): PreviewMidsceneUsage => ({
@@ -198,7 +227,12 @@ export class PreviewMidsceneService extends Context.Service<
   PreviewMidsceneServiceShape
 >()("t3/mcp/PreviewMidsceneService") {}
 
-export const makeWithEnvironment = (environment: NodeJS.ProcessEnv) =>
+export const makeWithEnvironment = (
+  environment: NodeJS.ProcessEnv,
+  midsceneSettings: Effect.Effect<MidsceneSettings, ServerSettingsError> = Effect.succeed(
+    DEFAULT_SERVER_SETTINGS.midscene,
+  ),
+) =>
   Effect.gen(function* PreviewMidsceneServiceMake() {
     const broker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const runtimeService = yield* PreviewMidsceneRuntime.PreviewMidsceneRuntime;
@@ -239,19 +273,45 @@ export const makeWithEnvironment = (environment: NodeJS.ProcessEnv) =>
       input: SemanticInput,
       operation: PreviewMidsceneOperation,
     ) {
-      const missingVariables = missingMidsceneModelVariables(environment);
+      const settings = yield* midsceneSettings.pipe(
+        Effect.mapError(
+          () =>
+            new PreviewMidsceneExecutionError({
+              operation,
+              stage: "initialize",
+            }),
+        ),
+      );
+      const modelConfig = resolveMidsceneModelConfig(environment, settings);
+      const missingVariables = missingMidsceneModelVariables(modelConfig);
       if (missingVariables.length > 0) {
         return yield* new PreviewMidsceneConfigurationError({ operation, missingVariables });
       }
-      const status = yield* invokeBroker<PreviewAutomationStatus>(scope, "status", {}, input.tabId);
-      if (!status.available || !status.tabId || !status.viewport) {
+      let status = yield* invokeBroker<PreviewAutomationStatus>(scope, "status", {}, input.tabId);
+      const resolvedTabId = status.tabId;
+      if (status.available && resolvedTabId && !status.visible) {
+        status = yield* invokeBroker<PreviewAutomationStatus>(
+          scope,
+          "open",
+          { show: true, reuseExistingTab: true },
+          resolvedTabId,
+        );
+      }
+      const errorTabId = resolvedTabId ?? status.tabId;
+      if (
+        !status.available ||
+        !status.visible ||
+        !status.tabId ||
+        !status.viewport ||
+        (resolvedTabId !== null && status.tabId !== resolvedTabId)
+      ) {
         return yield* new PreviewMidsceneExecutionError({
           operation,
           stage: "observe",
-          ...(status.tabId ? { tabId: status.tabId } : {}),
+          ...(errorTabId ? { tabId: errorTabId } : {}),
         });
       }
-      return { tabId: status.tabId, status };
+      return { tabId: status.tabId, status, modelConfig };
     });
 
     const execute = <A>(
@@ -291,6 +351,7 @@ export const makeWithEnvironment = (environment: NodeJS.ProcessEnv) =>
                   controller,
                   agent: runtime.createAgent(
                     new T3PreviewInterface(operationsFor(controller.signal), runtime.defineActions),
+                    target.modelConfig,
                   ),
                 }),
                 catch: (cause) => new PreviewMidsceneStageFailure("initialize", cause),
@@ -392,6 +453,12 @@ export const makeWithEnvironment = (environment: NodeJS.ProcessEnv) =>
     return PreviewMidsceneService.of({ act, query, assert });
   });
 
-export const make = makeWithEnvironment(process.env);
+export const make = Effect.gen(function* PreviewMidsceneServiceMakeLive() {
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
+  return yield* makeWithEnvironment(
+    process.env,
+    serverSettings.getSettings.pipe(Effect.map((settings) => settings.midscene)),
+  );
+});
 
 export const layer = Layer.effect(PreviewMidsceneService, make);

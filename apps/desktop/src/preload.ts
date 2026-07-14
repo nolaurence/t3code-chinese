@@ -1,10 +1,10 @@
-import {
-  PREVIEW_AUTOMATION_FEATURES,
-  type DesktopBridge,
-  type DesktopPreviewPointerEvent,
-  type DesktopPreviewRecordingFrame,
-  type DesktopPreviewTabState,
+import type {
+  DesktopBridge,
+  DesktopPreviewPointerEvent,
+  DesktopPreviewRecordingFrame,
+  DesktopPreviewTabState,
 } from "@t3tools/contracts";
+import { PREVIEW_AUTOMATION_FEATURES } from "@t3tools/contracts/preview-automation-features";
 import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer } from "electron";
 

@@ -78,6 +78,15 @@ export function shouldWriteThreadErrorToCurrentServerThread(input: {
   );
 }
 
+export function resolveVisibleThreadError(input: {
+  readonly localError: string | null | undefined;
+  readonly serverError: string | null | undefined;
+  readonly dismissedError: string | null | undefined;
+}): string | null {
+  const candidate = input.localError ?? input.serverError ?? null;
+  return candidate !== null && candidate === input.dismissedError ? null : candidate;
+}
+
 export function buildThreadTurnInterruptInput(thread: Pick<Thread, "id" | "session">): {
   threadId: ThreadId;
   turnId?: TurnId;

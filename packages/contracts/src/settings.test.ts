@@ -124,6 +124,32 @@ describe("ServerSettings worktree defaults", () => {
   });
 });
 
+describe("ServerSettings Midscene configuration", () => {
+  it("defaults to environment fallback and trims configured values", () => {
+    expect(DEFAULT_SERVER_SETTINGS.midscene).toEqual({
+      modelApiKey: "",
+      modelApiKeyRedacted: false,
+      modelName: "",
+      modelFamily: "",
+      modelBaseUrl: "",
+    });
+
+    expect(
+      decodeServerSettingsPatch({
+        midscene: {
+          modelName: "  gpt-4o  ",
+          modelFamily: "  gpt-4o  ",
+          modelBaseUrl: "  https://models.example.test/v1  ",
+        },
+      }).midscene,
+    ).toEqual({
+      modelName: "gpt-4o",
+      modelFamily: "gpt-4o",
+      modelBaseUrl: "https://models.example.test/v1",
+    });
+  });
+});
+
 describe("ServerSettingsPatch.providerInstances", () => {
   it("treats providerInstances as an optional whole-map replacement", () => {
     const patch = decodeServerSettingsPatch({});

@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import {
+  DEFAULT_SERVER_SETTINGS,
   EnvironmentId,
   PreviewAutomationNoAvailableHostError,
   PreviewTabId,
@@ -11,6 +12,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
 import * as Fiber from "effect/Fiber";
+import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 
 import type { McpInvocationScope } from "./McpInvocationContext.ts";
@@ -152,6 +154,51 @@ it("accepts the canonical or legacy model base URL using Midscene's precedence",
   ).toEqual(["MIDSCENE_MODEL_BASE_URL (or legacy OPENAI_BASE_URL)"]);
 });
 
+it.effect("applies live settings over environment variables when creating an agent", () => {
+  const capturedConfigs: Array<Readonly<Record<string, string>>> = [];
+  const broker = makeBroker(() => Effect.succeed(status));
+  const runtime = makeRuntime((_device, modelConfig) => {
+    capturedConfigs.push(modelConfig);
+    return makeAgent();
+  });
+
+  return Effect.gen(function* () {
+    const settingsRef = yield* Ref.make({
+      ...DEFAULT_SERVER_SETTINGS.midscene,
+      modelApiKey: "settings-key",
+      modelName: "settings-model",
+      modelFamily: "settings-family",
+      modelBaseUrl: "https://settings.example.test/v1",
+    });
+    const service = yield* PreviewMidsceneService.makeWithEnvironment(
+      {
+        ...configuredEnvironment,
+        MIDSCENE_PLANNING_MODEL_NAME: "planning-model",
+        UNRELATED_SECRET: "must-not-be-forwarded",
+      },
+      Ref.get(settingsRef),
+    ).pipe(
+      Effect.provideService(PreviewAutomationBroker.PreviewAutomationBroker, broker),
+      Effect.provideService(PreviewMidsceneRuntime.PreviewMidsceneRuntime, runtime),
+    );
+
+    yield* service.act(scope, { instruction: "Click submit" });
+    yield* Ref.update(settingsRef, (current) => ({ ...current, modelName: "updated-model" }));
+    yield* service.act(scope, { instruction: "Click cancel" });
+
+    expect(capturedConfigs).toHaveLength(2);
+    expect(capturedConfigs[0]).toMatchObject({
+      MIDSCENE_MODEL_API_KEY: "settings-key",
+      MIDSCENE_MODEL_NAME: "settings-model",
+      MIDSCENE_MODEL_FAMILY: "settings-family",
+      MIDSCENE_MODEL_BASE_URL: "https://settings.example.test/v1",
+      MIDSCENE_PLANNING_MODEL_NAME: "planning-model",
+    });
+    expect(capturedConfigs[0]).not.toHaveProperty("UNRELATED_SECRET");
+    expect(capturedConfigs[1]?.MIDSCENE_MODEL_NAME).toBe("updated-model");
+  });
+});
+
 it.effect("pins the resolved tab and returns bounded query and assertion results", () => {
   const requests: PreviewAutomationBroker.PreviewAutomationInvokeInput[] = [];
   let destroyed = 0;
@@ -210,6 +257,65 @@ it.effect("pins the resolved tab and returns bounded query and assertion results
     expect(requests).toHaveLength(2);
     expect(requests.every((request) => request.operation === "status")).toBe(true);
     expect(requests.every((request) => request.tabId === undefined)).toBe(true);
+  });
+});
+
+it.effect("reveals a hidden target tab before creating the Midscene agent", () => {
+  const requests: PreviewAutomationBroker.PreviewAutomationInvokeInput[] = [];
+  const { viewport: _viewport, ...hiddenStatus } = status;
+  const broker = makeBroker((request) => {
+    requests.push(request);
+    if (request.operation === "status") {
+      return Effect.succeed({ ...hiddenStatus, visible: false });
+    }
+    if (request.operation === "open") {
+      return Effect.succeed(status);
+    }
+    return Effect.die(`Unexpected broker operation: ${request.operation}`);
+  });
+  const runtime = makeRuntime(() => makeAgent());
+
+  return Effect.gen(function* () {
+    const service = yield* makeService(broker, runtime);
+    const result = yield* service.act(scope, { instruction: "Click the visible submit button" });
+
+    expect(result.output).toBe("done");
+    expect(requests).toHaveLength(2);
+    expect(requests[0]).toMatchObject({ operation: "status" });
+    expect(requests[0]).not.toHaveProperty("tabId");
+    expect(requests[1]).toMatchObject({
+      operation: "open",
+      tabId,
+      input: { show: true, reuseExistingTab: true },
+    });
+  });
+});
+
+it.effect("stops before model execution when a hidden target cannot be revealed", () => {
+  let agentCreated = false;
+  const broker = makeBroker((request) =>
+    request.operation === "status"
+      ? Effect.succeed({ ...status, visible: false })
+      : Effect.succeed({ ...status, visible: false }),
+  );
+  const runtime = makeRuntime(() => {
+    agentCreated = true;
+    return makeAgent();
+  });
+
+  return Effect.gen(function* () {
+    const service = yield* makeService(broker, runtime);
+    const error = yield* Effect.flip(
+      service.act(scope, { instruction: "Click the visible submit button" }),
+    );
+
+    expect(error).toMatchObject({
+      _tag: "PreviewMidsceneExecutionError",
+      operation: "act",
+      stage: "observe",
+      tabId,
+    });
+    expect(agentCreated).toBe(false);
   });
 });
 

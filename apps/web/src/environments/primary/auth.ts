@@ -305,9 +305,21 @@ function waitForBootstrapRetry(delayMs: number): Promise<void> {
   });
 }
 
-function isTransientBootstrapError(error: unknown): boolean {
+function isTransientBootstrapError(error: unknown, seen = new Set<object>()): boolean {
+  if (typeof error === "object" && error !== null) {
+    if (seen.has(error)) return false;
+    seen.add(error);
+  }
+
   if (isPrimaryEnvironmentRequestError(error)) {
-    return TRANSIENT_BOOTSTRAP_STATUS_CODES.has(error.status);
+    return (
+      TRANSIENT_BOOTSTRAP_STATUS_CODES.has(error.status) ||
+      isTransientBootstrapError(error.cause, seen)
+    );
+  }
+
+  if (HttpClientError.isHttpClientError(error)) {
+    return error.reason._tag === "TransportError";
   }
 
   if (error instanceof TypeError) {

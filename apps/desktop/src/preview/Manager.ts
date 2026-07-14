@@ -39,6 +39,7 @@ import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -46,6 +47,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Scope from "effect/Scope";
@@ -103,6 +105,8 @@ const DIAGNOSTIC_BUFFER_LIMIT = 200;
 const MAX_ARTIFACT_SITE_SLUG_LENGTH = 80;
 const AGENT_CURSOR_MOVE_MS = 160;
 const AGENT_CURSOR_CLICK_LEAD_MS = 40;
+const AUTOMATION_SNAPSHOT_CAPTURE_RETRY_COUNT = 4;
+const AUTOMATION_SNAPSHOT_CAPTURE_RETRY_DELAY = Duration.millis(50);
 const encodeUnknownJson = Schema.encodeUnknownEffect(Schema.UnknownFromJsonString);
 const DEFAULT_ANNOTATION_THEME: DesktopPreviewAnnotationTheme = {
   colorScheme: "light",
@@ -123,6 +127,11 @@ const DEFAULT_ANNOTATION_THEME: DesktopPreviewAnnotationTheme = {
   fontSans: "system-ui, sans-serif",
   fontMono: "ui-monospace, monospace",
 };
+
+const isUnknownVizError = (cause: unknown): boolean =>
+  cause instanceof Error
+    ? cause.name === "UnknownVizError" || cause.message.includes("UnknownVizError")
+    : String(cause).includes("UnknownVizError");
 
 const artifactSiteSlug = (rawUrl: string): string => {
   try {
@@ -1924,6 +1933,12 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
             webContentsId: wc.id,
           },
           () => wc.capturePage(),
+        ).pipe(
+          Effect.retry({
+            times: AUTOMATION_SNAPSHOT_CAPTURE_RETRY_COUNT,
+            schedule: Schedule.spaced(AUTOMATION_SNAPSHOT_CAPTURE_RETRY_DELAY),
+            while: (error) => isUnknownVizError(error.cause),
+          }),
         ),
         Ref.get(diagnosticsRef),
         Ref.get(actionTimelineRef),

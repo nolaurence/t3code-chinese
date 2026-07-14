@@ -6,10 +6,12 @@ import { McpServer } from "effect/unstable/ai";
 
 import * as McpHttpServer from "../../McpHttpServer.ts";
 import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
+import * as ServerSettings from "../../../serverSettings.ts";
 
 const TestLayer = McpHttpServer.PreviewToolkitRegistrationLive.pipe(
   Layer.provideMerge(McpServer.McpServer.layer),
   Layer.provideMerge(PreviewAutomationBroker.layer.pipe(Layer.provide(NodeServices.layer))),
+  Layer.provide(ServerSettings.layerTest()),
 );
 
 it.effect("registers all Midscene tools in the shared preview MCP server", () =>

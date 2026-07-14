@@ -10,6 +10,9 @@ import {
   PreviewViewportSize,
 } from "./preview.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import { PREVIEW_AUTOMATION_FEATURES } from "./previewAutomationFeatures.ts";
+
+export { PREVIEW_AUTOMATION_FEATURES } from "./previewAutomationFeatures.ts";
 
 const BoundedUrl = Schema.String.check(Schema.isTrimmed())
   .check(
@@ -49,9 +52,6 @@ export const PREVIEW_AUTOMATION_OPERATIONS = [
 
 export const PreviewAutomationOperation = Schema.Literals(PREVIEW_AUTOMATION_OPERATIONS);
 export type PreviewAutomationOperation = typeof PreviewAutomationOperation.Type;
-
-/** Optional host semantics that cannot be inferred from operation support alone. */
-export const PREVIEW_AUTOMATION_FEATURES = ["coordinateScrollWheel"] as const;
 
 export const PreviewAutomationFeature = Schema.Literals(PREVIEW_AUTOMATION_FEATURES);
 export type PreviewAutomationFeature = typeof PreviewAutomationFeature.Type;

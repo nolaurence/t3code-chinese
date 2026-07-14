@@ -297,6 +297,20 @@ const common = defineMessages(
     "settings.delete.resetLabel": "delete confirmation",
     "settings.delete.title": "Delete confirmation",
     "settings.general.title": "General",
+    "settings.midscene.title": "Midscene browser automation",
+    "settings.midscene.apiKey.title": "API key",
+    "settings.midscene.apiKey.description":
+      "MIDSCENE_MODEL_API_KEY. Stored securely; leave blank to use the server environment.",
+    "settings.midscene.apiKey.stored": "Stored securely",
+    "settings.midscene.modelName.title": "Model name",
+    "settings.midscene.modelName.description":
+      "MIDSCENE_MODEL_NAME. The multimodal model used for browser understanding.",
+    "settings.midscene.modelFamily.title": "Model family",
+    "settings.midscene.modelFamily.description":
+      "MIDSCENE_MODEL_FAMILY. Used to parse visual element coordinates.",
+    "settings.midscene.baseUrl.title": "Base URL",
+    "settings.midscene.baseUrl.description":
+      "MIDSCENE_MODEL_BASE_URL. The OpenAI-compatible API endpoint.",
     "settings.newThreads.aria": "Default thread mode",
     "settings.newThreads.description":
       "Pick the default workspace mode for newly created draft threads.",
@@ -1772,6 +1786,18 @@ const common = defineMessages(
     "settings.delete.resetLabel": "删除确认",
     "settings.delete.title": "删除确认",
     "settings.general.title": "常规",
+    "settings.midscene.title": "Midscene 浏览器自动化",
+    "settings.midscene.apiKey.title": "API Key",
+    "settings.midscene.apiKey.description":
+      "MIDSCENE_MODEL_API_KEY。密钥会安全存储；留空时使用服务端环境变量。",
+    "settings.midscene.apiKey.stored": "已安全存储",
+    "settings.midscene.modelName.title": "模型名称",
+    "settings.midscene.modelName.description":
+      "MIDSCENE_MODEL_NAME。用于理解浏览器画面的多模态模型。",
+    "settings.midscene.modelFamily.title": "模型系列",
+    "settings.midscene.modelFamily.description": "MIDSCENE_MODEL_FAMILY。用于解析可视元素坐标。",
+    "settings.midscene.baseUrl.title": "Base URL",
+    "settings.midscene.baseUrl.description": "MIDSCENE_MODEL_BASE_URL。兼容 OpenAI 的 API 端点。",
     "settings.newThreads.aria": "默认任务模式",
     "settings.newThreads.description": "选择新建草稿任务默认使用的工作区模式。",
     "settings.newThreads.local": "本地",

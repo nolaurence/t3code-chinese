@@ -202,6 +202,35 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 
+  it.effect("stores the Midscene API key outside settings.json and redacts it for clients", () =>
+    Effect.gen(function* () {
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+
+      const updated = yield* serverSettings.updateSettings({
+        midscene: {
+          modelApiKey: "midscene-secret",
+          modelApiKeyRedacted: false,
+          modelName: "gpt-4o",
+        },
+      });
+      assert.strictEqual(updated.midscene.modelApiKey, "midscene-secret");
+      assert.isTrue(updated.midscene.modelApiKeyRedacted);
+
+      const persisted = yield* fileSystem.readFileString(serverConfig.settingsPath);
+      assert.notInclude(persisted, "midscene-secret");
+      assert.include(persisted, '"modelApiKeyRedacted": true');
+
+      const redacted = ServerSettingsModule.redactServerSettingsForClient(updated);
+      assert.strictEqual(redacted.midscene.modelApiKey, "");
+      assert.isTrue(redacted.midscene.modelApiKeyRedacted);
+
+      const reread = yield* serverSettings.getSettings;
+      assert.strictEqual(reread.midscene.modelApiKey, "midscene-secret");
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
   it.effect("preserves model when switching providers via textGenerationModelSelection", () =>
     Effect.gen(function* () {
       const serverSettings = yield* ServerSettingsModule.ServerSettingsService;

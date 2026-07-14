@@ -14,6 +14,7 @@ import {
   hasServerAcknowledgedLocalDispatch,
   reconcileMountedTerminalThreadIds,
   reconcileRetainedMountedThreadIds,
+  resolveVisibleThreadError,
   resolveSendEnvMode,
   shouldWriteThreadErrorToCurrentServerThread,
 } from "./ChatView.logic";
@@ -380,6 +381,35 @@ describe("shouldWriteThreadErrorToCurrentServerThread", () => {
         targetThreadId: threadId,
       }),
     ).toBe(false);
+  });
+});
+
+describe("resolveVisibleThreadError", () => {
+  it("hides the dismissed error without hiding a different server error", () => {
+    expect(
+      resolveVisibleThreadError({
+        localError: null,
+        serverError: "400 Bad Request",
+        dismissedError: "400 Bad Request",
+      }),
+    ).toBeNull();
+    expect(
+      resolveVisibleThreadError({
+        localError: null,
+        serverError: "502 Bad Gateway",
+        dismissedError: "400 Bad Request",
+      }),
+    ).toBe("502 Bad Gateway");
+  });
+
+  it("gives a local operation error priority over the server session error", () => {
+    expect(
+      resolveVisibleThreadError({
+        localError: "Failed to send message",
+        serverError: "400 Bad Request",
+        dismissedError: null,
+      }),
+    ).toBe("Failed to send message");
   });
 });
 

@@ -69,6 +69,7 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { isDefaultLocalePreference, LanguageSettings } from "./LanguageSettings";
+import { MidsceneSettingsSection } from "./MidsceneSettingsSection";
 import {
   canOneClickUpdateProviderCandidate,
   collectProviderUpdateCandidates,
@@ -1285,6 +1286,7 @@ export function ProviderSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      <MidsceneSettingsSection />
       <SettingsSection
         title={t("providers.title")}
         headerAction={

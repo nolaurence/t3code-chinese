@@ -33,7 +33,10 @@ export interface PreviewMidsceneAgentHandle {
 
 export interface LoadedPreviewMidsceneRuntime {
   readonly defineActions: DefineMidsceneActions;
-  readonly createAgent: (device: AbstractInterface) => PreviewMidsceneAgentHandle;
+  readonly createAgent: (
+    device: AbstractInterface,
+    modelConfig: Readonly<Record<string, string>>,
+  ) => PreviewMidsceneAgentHandle;
 }
 
 export class PreviewMidsceneRuntime extends Context.Service<
@@ -99,12 +102,13 @@ export const make = Effect.sync(() => {
       });
       return {
         defineActions: modules.defineActionsFromInputPrimitives,
-        createAgent: (device) => {
+        createAgent: (device, modelConfig) => {
           const agent = new modules.Agent(device, {
             generateReport: false,
             persistExecutionDump: false,
             autoPrintReportMsg: false,
             cache: false,
+            modelConfig,
           });
           return {
             act: (instruction, options) =>

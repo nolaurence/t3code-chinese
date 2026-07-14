@@ -396,6 +396,15 @@ export const ObservabilitySettings = Schema.Struct({
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
+export const MidsceneSettings = Schema.Struct({
+  modelApiKey: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  modelApiKeyRedacted: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  modelName: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  modelFamily: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  modelBaseUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+});
+export type MidsceneSettings = typeof MidsceneSettings.Type;
+
 export const DEFAULT_AUTOMATIC_GIT_FETCH_INTERVAL = Duration.seconds(30);
 
 export const ServerSettings = Schema.Struct({
@@ -443,6 +452,7 @@ export const ServerSettings = Schema.Struct({
   providerInstances: Schema.Record(ProviderInstanceId, ProviderInstanceConfig).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  midscene: MidsceneSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
@@ -545,6 +555,15 @@ export const ServerSettingsPatch = Schema.Struct({
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
+  midscene: Schema.optionalKey(
+    Schema.Struct({
+      modelApiKey: Schema.optionalKey(TrimmedString),
+      modelApiKeyRedacted: Schema.optionalKey(Schema.Boolean),
+      modelName: Schema.optionalKey(TrimmedString),
+      modelFamily: Schema.optionalKey(TrimmedString),
+      modelBaseUrl: Schema.optionalKey(TrimmedString),
+    }),
+  ),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),

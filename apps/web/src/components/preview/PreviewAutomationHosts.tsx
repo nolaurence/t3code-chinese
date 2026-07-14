@@ -61,18 +61,54 @@ import {
 } from "./previewAutomationTarget";
 import { isPreviewViewportReady } from "./previewViewportReadiness";
 
+interface ExecutablePreviewWebview extends Element {
+  readonly executeJavaScript: (code: string, userGesture?: boolean) => Promise<unknown>;
+}
+
+const findPreviewWebview = (tabId: string): ExecutablePreviewWebview | null =>
+  Array.from(document.querySelectorAll<ExecutablePreviewWebview>("webview[data-preview-tab]")).find(
+    (candidate) => candidate.getAttribute("data-preview-tab") === tabId,
+  ) ?? null;
+
+const isPreviewWebviewRendered = (tabId: string): boolean => {
+  const webview = findPreviewWebview(tabId);
+  if (!webview || webview.getAttribute("aria-hidden") === "true") return false;
+  const rect = webview.getBoundingClientRect();
+  return (
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.right > 0 &&
+    rect.bottom > 0 &&
+    rect.left < window.innerWidth &&
+    rect.top < window.innerHeight
+  );
+};
+
+const waitForCompositorFrame = (): Promise<void> =>
+  new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+
 const waitForDesktopOverlay = async (
   threadRef: ScopedThreadRef,
   requestId: string,
   tabId: string,
   timeoutMs: number,
+  requireVisible = false,
 ): Promise<void> => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
     const state = readThreadPreviewState(threadRef);
     if (state.desktopByTabId[tabId] && previewBridge) {
       const status = await previewBridge.automation.status(tabId);
-      if (status.available) return;
+      const surfaceVisible = useBrowserSurfaceStore.getState().byTabId[tabId]?.visible ?? false;
+      const rendered = surfaceVisible && isPreviewWebviewRendered(tabId);
+      if (status.available && (!requireVisible || rendered)) {
+        if (!requireVisible) return;
+        // The DOM position changes before Chromium's compositor surface is
+        // guaranteed to be capturable. Two frames cover layout and paint.
+        await waitForCompositorFrame();
+        await waitForCompositorFrame();
+        if (isPreviewWebviewRendered(tabId)) return;
+      }
     }
     await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
   }
@@ -115,15 +151,6 @@ const waitForNavigationReadiness = async (
     timeoutMs,
   });
 };
-
-interface ExecutablePreviewWebview extends Element {
-  readonly executeJavaScript: (code: string, userGesture?: boolean) => Promise<unknown>;
-}
-
-const findPreviewWebview = (tabId: string): ExecutablePreviewWebview | null =>
-  Array.from(document.querySelectorAll<ExecutablePreviewWebview>("webview[data-preview-tab]")).find(
-    (candidate) => candidate.getAttribute("data-preview-tab") === tabId,
-  ) ?? null;
 
 const readWebviewViewport = async (
   webview: ExecutablePreviewWebview,
@@ -380,6 +407,7 @@ function PreviewAutomationHost(props: { readonly environmentId: EnvironmentId })
                 request.requestId,
                 activeTabId,
                 request.timeoutMs,
+                input.show ?? true,
               );
             }
             if (reusedExistingTab && input.url && previewBridge) {
