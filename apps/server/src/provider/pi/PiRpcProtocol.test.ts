@@ -15,6 +15,7 @@ describe("PiRpcProtocol", () => {
     ).toMatchObject({ id: "request-1", command: "get_state", success: true });
 
     expect(decodePiRpcOutput({ type: "agent_start" })).toEqual({ type: "agent_start" });
+    expect(decodePiRpcOutput({ type: "agent_settled" })).toEqual({ type: "agent_settled" });
     expect(
       decodePiRpcOutput({
         type: "tool_execution_start",
@@ -72,10 +73,13 @@ describe("PiRpcProtocol", () => {
     expect(decoder.push('{"type":"agent_start"}\r\n')).toEqual([{ type: "agent_start" }]);
   });
 
-  it("rejects malformed JSON and unsupported message types", () => {
+  it("rejects malformed JSON while accepting forward-compatible event types", () => {
     const decoder = makePiRpcLineDecoder();
     expect(() => decoder.push('{"type":\n')).toThrow(PiRpcProtocolError);
-    expect(() => decodePiRpcOutput({ type: "unknown_pi_event" })).toThrow(PiRpcProtocolError);
+    expect(decodePiRpcOutput({ type: "future_pi_event", data: 1 })).toEqual({
+      type: "future_pi_event",
+      data: 1,
+    });
   });
 
   it("rejects an unterminated record when the stream ends", () => {

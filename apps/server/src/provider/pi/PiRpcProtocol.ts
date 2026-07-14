@@ -104,46 +104,33 @@ export type PiAgentEvent = {
     | "compaction_end"
     | "auto_retry_start"
     | "auto_retry_end"
-    | "extension_error";
+    | "extension_error"
+    | "agent_settled"
+    | "entry_appended"
+    | "session_info_changed"
+    | "thinking_level_changed";
   readonly [key: string]: unknown;
 };
 
-export type PiRpcOutput = PiRpcResponse | PiExtensionUIRequest | PiAgentEvent;
+/**
+ * Pi adds session lifecycle events independently of the request/response protocol.
+ * Keep these records open so a new informational event cannot invalidate an entire
+ * stdout chunk containing response deltas that we already understand.
+ */
+export type PiRpcEvent = {
+  readonly type: string;
+  readonly [key: string]: unknown;
+};
+
+export type PiRpcOutput = PiRpcResponse | PiExtensionUIRequest | PiAgentEvent | PiRpcEvent;
+
+export function isPiRpcResponse(output: PiRpcOutput): output is PiRpcResponse {
+  return output.type === "response";
+}
 
 export function decodePiRpcJsonString(value: string): PiRpcOutput {
   return decodePiRpcOutput(decodeUnknownJsonString(value));
 }
-
-const AGENT_EVENT_TYPES = new Set<PiAgentEvent["type"]>([
-  "agent_start",
-  "agent_end",
-  "turn_start",
-  "turn_end",
-  "message_start",
-  "message_update",
-  "message_end",
-  "tool_execution_start",
-  "tool_execution_update",
-  "tool_execution_end",
-  "queue_update",
-  "compaction_start",
-  "compaction_end",
-  "auto_retry_start",
-  "auto_retry_end",
-  "extension_error",
-]);
-
-const EXTENSION_UI_METHODS = new Set<PiExtensionUIRequest["method"]>([
-  "select",
-  "confirm",
-  "input",
-  "editor",
-  "notify",
-  "setStatus",
-  "setWidget",
-  "setTitle",
-  "set_editor_text",
-]);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -176,21 +163,13 @@ export function decodePiRpcOutput(value: unknown): PiRpcOutput {
   }
 
   if (record.type === "extension_ui_request") {
-    if (
-      typeof record.id !== "string" ||
-      typeof record.method !== "string" ||
-      !EXTENSION_UI_METHODS.has(record.method as PiExtensionUIRequest["method"])
-    ) {
+    if (typeof record.id !== "string" || typeof record.method !== "string") {
       throw new PiRpcProtocolError("Pi extension UI request has invalid fields.");
     }
     return record as PiExtensionUIRequest;
   }
 
-  if (AGENT_EVENT_TYPES.has(record.type as PiAgentEvent["type"])) {
-    return record as PiAgentEvent;
-  }
-
-  throw new PiRpcProtocolError(`Unsupported Pi RPC output type '${record.type}'.`);
+  return record as PiRpcEvent;
 }
 
 export interface PiRpcLineDecoder {

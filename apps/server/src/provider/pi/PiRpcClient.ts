@@ -10,6 +10,7 @@ import { resolveSpawnCommand } from "@t3tools/shared/shell";
 
 import {
   encodePiRpcJsonString,
+  isPiRpcResponse,
   makePiRpcLineDecoder,
   type PiRpcCommand,
   type PiRpcOutput,
@@ -75,7 +76,7 @@ export const makePiRpcClient = Effect.fn("makePiRpcClient")(function* (transport
   });
 
   const handleOutput = Effect.fn("PiRpcClient.handleOutput")(function* (output: PiRpcOutput) {
-    if (output.type !== "response") {
+    if (!isPiRpcResponse(output)) {
       yield* PubSub.publish(events, output);
       return;
     }

@@ -165,6 +165,39 @@ describe("PiRpcClient", () => {
     ),
   );
 
+  it.effect("preserves response events when Pi appends a newer lifecycle event in one chunk", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeHarness();
+        const eventsFiber = yield* harness.client.events.pipe(
+          Stream.take(3),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Effect.yieldNow;
+
+        yield* harness.emitRaw(
+          [
+            JSON.stringify({
+              type: "message_update",
+              assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "hi" },
+            }),
+            JSON.stringify({ type: "agent_end", messages: [], willRetry: false }),
+            JSON.stringify({ type: "agent_settled" }),
+            "",
+          ].join("\n"),
+        );
+
+        const events = [...(yield* Fiber.join(eventsFiber))];
+        expect(events.map((event) => event.type)).toEqual([
+          "message_update",
+          "agent_end",
+          "agent_settled",
+        ]);
+      }),
+    ),
+  );
+
   it.effect("fails a request when Pi returns an unsuccessful response", () =>
     Effect.scoped(
       Effect.gen(function* () {
