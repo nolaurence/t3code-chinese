@@ -44,7 +44,8 @@ const makeHarness = Effect.fn("makePiRpcClientTestHarness")(function* () {
   return {
     client,
     writes,
-    emit: (value: unknown) => Queue.offer(output, encoder.encode(`${JSON.stringify(value)}\n`)),
+    emit: (value: unknown) =>
+      Queue.offer(output, encoder.encode(`${encodePiRpcJsonString(value)}\n`)),
     emitRaw: (value: string) => Queue.offer(output, encoder.encode(value)),
     exit: (code: number) => Deferred.succeed(exitCode, code),
     setOnWrite: (handler: typeof onWrite) => {
@@ -178,12 +179,12 @@ describe("PiRpcClient", () => {
 
         yield* harness.emitRaw(
           [
-            JSON.stringify({
+            encodePiRpcJsonString({
               type: "message_update",
               assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "hi" },
             }),
-            JSON.stringify({ type: "agent_end", messages: [], willRetry: false }),
-            JSON.stringify({ type: "agent_settled" }),
+            encodePiRpcJsonString({ type: "agent_end", messages: [], willRetry: false }),
+            encodePiRpcJsonString({ type: "agent_settled" }),
             "",
           ].join("\n"),
         );

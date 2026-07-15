@@ -45,6 +45,7 @@ const WorkspaceConfig = Schema.Struct({
 type WorkspaceConfig = typeof WorkspaceConfig.Type;
 
 const StageWorkspaceConfig = Schema.Struct({
+  fetchTimeout: Schema.Number,
   supportedArchitectures: Schema.Struct({
     os: Schema.Array(Schema.String),
     cpu: Schema.Array(Schema.String),
@@ -586,6 +587,7 @@ interface StagePackageJson {
   };
 }
 
+export const STAGE_FETCH_TIMEOUT_MS = 10 * 60 * 1_000;
 export const STAGE_INSTALL_ARGS = ["install", "--prod"] as const;
 export const DESKTOP_ASAR_UNPACK = ["node_modules/@ff-labs/fff-bin-*/**/*"] as const;
 const MIDSCENE_BUNDLED_SKILL_PATH = "bundled-skills/midscene-preview/SKILL.md";
@@ -1029,6 +1031,9 @@ export function createStageWorkspaceConfig(input: {
           };
 
   return {
+    // Native provider packages can exceed 70 MB. pnpm's 60-second default aborts
+    // healthy but slower registry downloads before they can complete.
+    fetchTimeout: STAGE_FETCH_TIMEOUT_MS,
     supportedArchitectures,
     ...(allowBuilds && Object.keys(allowBuilds).length > 0 ? { allowBuilds } : {}),
     ...(patchedDependencies && Object.keys(patchedDependencies).length > 0
