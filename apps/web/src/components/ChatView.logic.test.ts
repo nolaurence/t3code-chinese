@@ -14,6 +14,7 @@ import {
   hasServerAcknowledgedLocalDispatch,
   reconcileMountedTerminalThreadIds,
   reconcileRetainedMountedThreadIds,
+  resolveTimelineLiveFollowAction,
   resolveVisibleThreadError,
   resolveSendEnvMode,
   shouldWriteThreadErrorToCurrentServerThread,
@@ -166,6 +167,38 @@ describe("deriveComposerSendState", () => {
         elementContextCount: 0,
       }).hasSendableContent,
     ).toBe(false);
+  });
+});
+
+describe("resolveTimelineLiveFollowAction", () => {
+  it("reveals a backfilled first message when all rows fit in the viewport", () => {
+    expect(
+      resolveTimelineLiveFollowAction({
+        realContentBottom: 180,
+        visibleScrollLength: 720,
+        scrollOffset: 96,
+      }),
+    ).toBe("scroll-to-start");
+  });
+
+  it("does nothing when fitting content is already at the start", () => {
+    expect(
+      resolveTimelineLiveFollowAction({
+        realContentBottom: 180,
+        visibleScrollLength: 720,
+        scrollOffset: 0,
+      }),
+    ).toBe("none");
+  });
+
+  it("follows the end when real content overflows the viewport", () => {
+    expect(
+      resolveTimelineLiveFollowAction({
+        realContentBottom: 900,
+        visibleScrollLength: 720,
+        scrollOffset: 120,
+      }),
+    ).toBe("scroll-to-end");
   });
 });
 

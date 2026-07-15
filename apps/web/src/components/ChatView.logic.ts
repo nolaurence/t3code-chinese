@@ -206,6 +206,29 @@ export function resolveSendEnvMode(input: {
   return input.isGitRepo ? input.requestedEnvMode : "local";
 }
 
+export type TimelineLiveFollowAction = "none" | "scroll-to-start" | "scroll-to-end";
+
+export function resolveTimelineLiveFollowAction(input: {
+  realContentBottom: number;
+  visibleScrollLength: number;
+  scrollOffset: number;
+}): TimelineLiveFollowAction {
+  if (
+    !Number.isFinite(input.realContentBottom) ||
+    !Number.isFinite(input.visibleScrollLength) ||
+    !Number.isFinite(input.scrollOffset)
+  ) {
+    return "none";
+  }
+  if (input.realContentBottom > input.visibleScrollLength + 1) {
+    return "scroll-to-end";
+  }
+  // LegendList can retain a positive offset when an older server message is
+  // backfilled ahead of the currently visible rows. If all real content fits,
+  // that offset only strands the first row above the viewport.
+  return input.scrollOffset > 1 ? "scroll-to-start" : "none";
+}
+
 export function cloneComposerImageForRetry(
   image: ComposerImageAttachment,
 ): ComposerImageAttachment {

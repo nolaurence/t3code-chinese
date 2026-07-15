@@ -228,6 +228,7 @@ import {
   readFileAsDataUrl,
   reconcileMountedTerminalThreadIds,
   resolveSendEnvMode,
+  resolveTimelineLiveFollowAction,
   resolveVisibleThreadError,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
@@ -3213,12 +3214,12 @@ function ChatViewContent(props: ChatViewProps) {
     cancelTimelineLiveFollowForUserNavigationRef.current =
       cancelTimelineLiveFollowForUserNavigation;
   }, [cancelTimelineLiveFollowForUserNavigation]);
-  const timelineRealContentOverflowsViewport = useCallback(
+  const resolveTimelineLiveFollow = useCallback(
     (list?: LegendListRef | null) => {
       const resolvedList = list ?? legendListRef.current;
       const state = resolvedList?.getState();
       if (!resolvedList || !state || state.data.length === 0) {
-        return false;
+        return "none" as const;
       }
 
       const lastRowIndex = state.data.length - 1;
@@ -3230,12 +3231,16 @@ function ChatViewContent(props: ChatViewProps) {
         !Number.isFinite(lastRowTop) ||
         !Number.isFinite(lastRowHeight)
       ) {
-        return false;
+        return "none" as const;
       }
 
       const realContentBottom = lastRowTop + Math.max(1, lastRowHeight);
       const visibleScrollLength = Math.max(0, (state.scrollLength ?? 0) - composerOverlayHeight);
-      return realContentBottom > visibleScrollLength;
+      return resolveTimelineLiveFollowAction({
+        realContentBottom,
+        visibleScrollLength,
+        scrollOffset: state.scroll ?? 0,
+      });
     },
     [composerOverlayHeight],
   );
@@ -3324,10 +3329,14 @@ function ChatViewContent(props: ChatViewProps) {
         if (timelineScrollModeRef.current !== "following-end") {
           return;
         }
-        if (!timelineRealContentOverflowsViewport(list)) {
+        const liveFollowAction = resolveTimelineLiveFollow(list);
+        if (liveFollowAction === "none") {
           return;
         }
-
+        if (liveFollowAction === "scroll-to-start") {
+          void list.scrollToOffset({ offset: 0, animated: false });
+          return;
+        }
         void list.scrollToEnd?.({ animated: false });
       });
     });
@@ -3338,7 +3347,7 @@ function ChatViewContent(props: ChatViewProps) {
         cancelAnimationFrame(secondFrame);
       }
     };
-  }, [activeThread?.id, timelineEntries, timelineRealContentOverflowsViewport]);
+  }, [activeThread?.id, resolveTimelineLiveFollow, timelineEntries]);
 
   useEffect(() => {
     setPullRequestDialogState(null);
