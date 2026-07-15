@@ -13,6 +13,8 @@ import {
   initializeCodexAppServerWithBundledSkills,
   registerBundledSkillsExtraRoot,
   resolveAsarUnpackedPath,
+  resolveBundledMidsceneSkillPath,
+  resolveBundledPiMcpExtensionPath,
   resolveBundledSkillsRoot,
 } from "./bundledSkills.ts";
 
@@ -60,6 +62,14 @@ describe("bundled Skills", () => {
         yield* resolveBundledSkillsRoot("/opt/t3/apps/server/dist"),
         "/opt/t3/apps/server/dist/bundled-skills",
       );
+      assert.equal(
+        yield* resolveBundledMidsceneSkillPath("/opt/t3/apps/server/dist"),
+        "/opt/t3/apps/server/dist/bundled-skills/midscene-preview/SKILL.md",
+      );
+      assert.equal(
+        yield* resolveBundledPiMcpExtensionPath("/opt/t3/apps/server/dist"),
+        "/opt/t3/apps/server/dist/bundled-pi-extension/index.ts",
+      );
     }).pipe(Effect.provide(NodePath.layer)),
   );
 
@@ -85,6 +95,12 @@ describe("bundled Skills", () => {
           String.raw`C:\Program Files\T3 Code\resources\app.asar\apps\server\dist`,
         ),
         String.raw`C:\Program Files\T3 Code\resources\app.asar.unpacked\apps\server\dist\bundled-skills`,
+      );
+      assert.equal(
+        yield* resolveBundledPiMcpExtensionPath(
+          String.raw`C:\Program Files\T3 Code\resources\app.asar\apps\server\dist`,
+        ),
+        String.raw`C:\Program Files\T3 Code\resources\app.asar.unpacked\apps\server\dist\bundled-pi-extension\index.ts`,
       );
     }).pipe(Effect.provide(NodePath.layerWin32)),
   );

@@ -350,24 +350,51 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("resolves the installed Midscene, Photon WASM, and native sharp runtime chain", () =>
+  it.effect("rejects a desktop stage without the bundled Pi MCP extension", () =>
     Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const hostPlatform = yield* HostProcessPlatform;
-      const hostArchitecture = yield* HostProcessArchitecture;
-      const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
-      const serverDir = path.join(repoRoot, "apps/server");
-      const platform =
-        hostPlatform === "darwin" ? "mac" : hostPlatform === "win32" ? "win" : "linux";
-      const arch = hostArchitecture === "arm64" ? "universal" : "x64";
-
-      yield* validateDesktopStageRuntime({
-        stageAppDir: serverDir,
-        serverDistDir: path.join(serverDir, "src"),
-        platform,
-        arch,
+      const stageAppDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "t3code-desktop-runtime-stage-test-",
       });
-    }),
+      const skillPath = path.join(stageAppDir, "bundled-skills", "midscene-preview", "SKILL.md");
+      yield* fs.makeDirectory(path.dirname(skillPath), { recursive: true });
+      yield* fs.writeFileString(skillPath, "---\nname: midscene-preview\n---\n");
+
+      const error = yield* validateDesktopStageRuntime({
+        stageAppDir,
+        serverDistDir: stageAppDir,
+        platform: "mac",
+        arch: "arm64",
+      }).pipe(Effect.flip);
+
+      assert.instanceOf(error, DesktopStageRuntimeArtifactMissingError);
+      assert.equal(error.artifact, "bundled-pi-extension/index.ts");
+      assert.equal(error.stageAppDir, stageAppDir);
+      assert.notProperty(error, "cause");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "resolves the installed Pi MCP, Midscene, Photon WASM, and native sharp runtime chain",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const hostPlatform = yield* HostProcessPlatform;
+        const hostArchitecture = yield* HostProcessArchitecture;
+        const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
+        const serverDir = path.join(repoRoot, "apps/server");
+        const platform =
+          hostPlatform === "darwin" ? "mac" : hostPlatform === "win32" ? "win" : "linux";
+        const arch = hostArchitecture === "arm64" ? "universal" : "x64";
+
+        yield* validateDesktopStageRuntime({
+          stageAppDir: serverDir,
+          serverDistDir: path.join(serverDir, "src"),
+          platform,
+          arch,
+        });
+      }),
   );
 
   it.effect("preserves both Linux icon resize failures with structural context", () => {

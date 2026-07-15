@@ -591,6 +591,7 @@ export const STAGE_FETCH_TIMEOUT_MS = 10 * 60 * 1_000;
 export const STAGE_INSTALL_ARGS = ["install", "--prod"] as const;
 export const DESKTOP_ASAR_UNPACK = ["node_modules/@ff-labs/fff-bin-*/**/*"] as const;
 const MIDSCENE_BUNDLED_SKILL_PATH = "bundled-skills/midscene-preview/SKILL.md";
+const PI_MCP_BUNDLED_EXTENSION_PATH = "bundled-pi-extension/index.ts";
 const MIDSCENE_RUNTIME_ENTRYPOINTS = [
   "@midscene/core/agent",
   "@midscene/core/ai-model",
@@ -657,6 +658,25 @@ export const validateDesktopStageRuntime = Effect.fn("validateDesktopStageRuntim
       stageAppDir: input.stageAppDir,
     });
   }
+
+  const bundledPiMcpExtensionPath = path.join(input.serverDistDir, PI_MCP_BUNDLED_EXTENSION_PATH);
+  if (!(yield* fs.exists(bundledPiMcpExtensionPath))) {
+    return yield* new DesktopStageRuntimeArtifactMissingError({
+      artifact: PI_MCP_BUNDLED_EXTENSION_PATH,
+      stageAppDir: input.stageAppDir,
+    });
+  }
+
+  yield* resolveStageRuntimeModule(
+    input.stageAppDir,
+    bundledPiMcpExtensionPath,
+    "@modelcontextprotocol/sdk/client/index.js",
+  );
+  yield* resolveStageRuntimeModule(
+    input.stageAppDir,
+    bundledPiMcpExtensionPath,
+    "@modelcontextprotocol/sdk/client/streamableHttp.js",
+  );
 
   const stagePackageJsonPath = path.join(input.stageAppDir, "package.json");
   const coreEntryPath = yield* resolveStageRuntimeModule(

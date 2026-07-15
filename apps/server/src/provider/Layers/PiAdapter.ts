@@ -20,7 +20,16 @@ import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
+import {
+  T3_MCP_BEARER_TOKEN_ENV,
+  T3_MCP_ENDPOINT_ENV,
+} from "../../bundled-pi-extension/contract.ts";
+import {
+  resolveBundledMidsceneSkillPath,
+  resolveBundledPiMcpExtensionPath,
+} from "../../bundledSkills.ts";
 import { ServerConfig } from "../../config.ts";
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import {
   ProviderAdapterRequestError,
   ProviderAdapterSessionNotFoundError,
@@ -41,7 +50,7 @@ export interface PiClientFactoryInput {
   readonly binaryPath: string;
   readonly cwd: string;
   readonly env?: NodeJS.ProcessEnv;
-  readonly resumeSessionFile?: string;
+  readonly args?: ReadonlyArray<string>;
 }
 
 export type PiClientFactory = (
@@ -149,7 +158,7 @@ const defaultCreateClient: PiClientFactory = (input) =>
     binaryPath: input.binaryPath,
     cwd: input.cwd,
     ...(input.env ? { env: input.env } : {}),
-    ...(input.resumeSessionFile ? { args: ["--session", input.resumeSessionFile] } : {}),
+    ...(input.args ? { args: input.args } : {}),
   });
 
 export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
@@ -159,6 +168,8 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
   const serverConfig = yield* ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const bundledPiMcpExtensionPath = yield* resolveBundledPiMcpExtensionPath();
+  const bundledMidsceneSkillPath = yield* resolveBundledMidsceneSkillPath();
   const instanceId = options.instanceId ?? ProviderInstanceId.make("piAgent");
   const createClient = options.createClient ?? defaultCreateClient;
   const now = options.now ?? (() => new Date().toISOString());
@@ -251,18 +262,53 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
           issue: `Thread '${input.threadId}' already has an active Pi session.`,
         });
       }
-      const sessionScope = yield* Scope.make();
       const cwd = input.cwd ?? serverConfig.cwd;
       const resumeSessionFile = readResumeSessionFile(input.resumeCursor);
+      const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
+      const piArgs: string[] = [];
+      if (mcpSession) {
+        for (const [artifact, artifactPath] of [
+          ["Pi MCP extension", bundledPiMcpExtensionPath],
+          ["Midscene Skill", bundledMidsceneSkillPath],
+        ] as const) {
+          const exists = yield* fileSystem.exists(artifactPath).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ProviderAdapterRequestError({
+                  provider: PROVIDER,
+                  method: "spawn",
+                  detail: `Failed to inspect bundled ${artifact} at '${artifactPath}'.`,
+                  cause,
+                }),
+            ),
+          );
+          if (!exists) {
+            return yield* new ProviderAdapterRequestError({
+              provider: PROVIDER,
+              method: "spawn",
+              detail: `Bundled ${artifact} is missing at '${artifactPath}'.`,
+            });
+          }
+        }
+        piArgs.push("--extension", bundledPiMcpExtensionPath, "--skill", bundledMidsceneSkillPath);
+      }
+      if (resumeSessionFile) piArgs.push("--session", resumeSessionFile);
       const environment = {
         ...options.environment,
         ...(settings.homePath ? { PI_CODING_AGENT_DIR: settings.homePath } : {}),
+        ...(mcpSession
+          ? {
+              [T3_MCP_ENDPOINT_ENV]: mcpSession.endpoint,
+              [T3_MCP_BEARER_TOKEN_ENV]: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
+            }
+          : {}),
       };
+      const sessionScope = yield* Scope.make();
       const client = yield* createClient({
         binaryPath: settings.binaryPath,
         cwd,
         ...(Object.keys(environment).length > 0 ? { env: environment } : {}),
-        ...(resumeSessionFile ? { resumeSessionFile } : {}),
+        ...(piArgs.length > 0 ? { args: piArgs } : {}),
       }).pipe(
         Effect.provideService(Scope.Scope, sessionScope),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),

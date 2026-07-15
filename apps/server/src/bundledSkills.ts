@@ -24,6 +24,21 @@ export const resolveBundledSkillsRoot = Effect.fn("resolveBundledSkillsRoot")(fu
   return resolveAsarUnpackedPath(path.join(moduleDirectory, "bundled-skills"));
 });
 
+export const resolveBundledMidsceneSkillPath = Effect.fn("resolveBundledMidsceneSkillPath")(
+  function* (moduleDirectory: string = import.meta.dirname) {
+    const path = yield* Path.Path;
+    const root = yield* resolveBundledSkillsRoot(moduleDirectory);
+    return path.join(root, "midscene-preview", "SKILL.md");
+  },
+);
+
+export const resolveBundledPiMcpExtensionPath = Effect.fn("resolveBundledPiMcpExtensionPath")(
+  function* (moduleDirectory: string = import.meta.dirname) {
+    const path = yield* Path.Path;
+    return resolveAsarUnpackedPath(path.join(moduleDirectory, "bundled-pi-extension", "index.ts"));
+  },
+);
+
 export const registerBundledSkillsExtraRoot = Effect.fn("registerBundledSkillsExtraRoot")(
   function* (client: Pick<CodexInitializationClient, "request">, bundledSkillsRoot?: string) {
     const extraRoot =

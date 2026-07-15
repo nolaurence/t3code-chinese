@@ -182,6 +182,11 @@ const buildCmd = Command.make(
       yield* fs.copy(bundledSkillsSource, bundledSkillsTarget);
       yield* Effect.log("[cli] Bundled provider Skills into dist/bundled-skills");
 
+      const bundledPiExtensionSource = path.join(serverDir, "src/bundled-pi-extension");
+      const bundledPiExtensionTarget = path.join(serverDir, "dist/bundled-pi-extension");
+      yield* fs.copy(bundledPiExtensionSource, bundledPiExtensionTarget);
+      yield* Effect.log("[cli] Bundled Pi extension into dist/bundled-pi-extension");
+
       const webDist = path.join(repoRoot, "apps/web/dist");
       const clientTarget = path.join(serverDir, "dist/client");
 
@@ -248,6 +253,7 @@ const publishCmd = Command.make(
         "dist/bin.mjs",
         "dist/client/index.html",
         "dist/bundled-skills/midscene-preview/SKILL.md",
+        "dist/bundled-pi-extension/index.ts",
       ]) {
         const abs = path.join(serverDir, relPath);
         if (!(yield* fs.exists(abs))) {

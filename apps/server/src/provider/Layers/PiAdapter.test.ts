@@ -5,8 +5,9 @@ import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
-  PiAgentSettings,
   ApprovalRequestId,
+  EnvironmentId,
+  PiAgentSettings,
   ProviderDriverKind,
   ProviderInstanceId,
   ThreadId,
@@ -22,6 +23,11 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import { ServerConfig } from "../../config.ts";
+import {
+  T3_MCP_BEARER_TOKEN_ENV,
+  T3_MCP_ENDPOINT_ENV,
+} from "../../bundled-pi-extension/contract.ts";
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import { PiRpcClientError, type PiRpcClient } from "../pi/PiRpcClient.ts";
 import type {
   PiAgentEvent,
@@ -178,7 +184,46 @@ describe("PiAdapter", () => {
           },
         });
 
-        expect(harness.factoryInputs[0]?.resumeSessionFile).toBe("/tmp/restored.jsonl");
+        expect(harness.factoryInputs[0]?.args).toEqual(["--session", "/tmp/restored.jsonl"]);
+      }),
+    ),
+  );
+
+  it.effect("loads the bundled preview extension and Midscene Skill with scoped MCP auth", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        McpProviderSession.setMcpProviderSession({
+          environmentId: EnvironmentId.make("environment-pi-adapter"),
+          threadId: THREAD_ID,
+          providerSessionId: "provider-session-pi-adapter",
+          providerInstanceId: INSTANCE_ID,
+          endpoint: "http://127.0.0.1:43123/mcp",
+          authorizationHeader: "Bearer pi-mcp-secret",
+        });
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => McpProviderSession.clearMcpProviderSession(THREAD_ID)),
+        );
+
+        const harness = yield* makeHarness();
+        yield* harness.adapter.startSession({
+          threadId: THREAD_ID,
+          providerInstanceId: INSTANCE_ID,
+          cwd: "/tmp/project",
+          runtimeMode: "full-access",
+        });
+
+        const factoryInput = harness.factoryInputs[0];
+        expect(factoryInput?.env).toMatchObject({
+          [T3_MCP_ENDPOINT_ENV]: "http://127.0.0.1:43123/mcp",
+          [T3_MCP_BEARER_TOKEN_ENV]: "pi-mcp-secret",
+        });
+        expect(factoryInput?.args).toHaveLength(4);
+        expect(factoryInput?.args?.[0]).toBe("--extension");
+        expect(factoryInput?.args?.[1]).toMatch(/bundled-pi-extension[\\/]index\.ts$/u);
+        expect(factoryInput?.args?.[2]).toBe("--skill");
+        expect(factoryInput?.args?.[3]).toMatch(
+          /bundled-skills[\\/]midscene-preview[\\/]SKILL\.md$/u,
+        );
       }),
     ),
   );
