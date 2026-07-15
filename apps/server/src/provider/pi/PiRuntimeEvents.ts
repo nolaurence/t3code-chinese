@@ -62,6 +62,24 @@ function nonNegativeInt(value: unknown): number | undefined {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
+function agentEndErrorMessage(record: Record<string, unknown>): string | undefined {
+  if (!Array.isArray(record.messages)) return undefined;
+  for (let index = record.messages.length - 1; index >= 0; index -= 1) {
+    const message = asRecord(record.messages[index]);
+    if (message?.role !== "assistant" || message.stopReason !== "error") continue;
+    return nonEmptyString(message.errorMessage) ?? "Pi request failed";
+  }
+  return undefined;
+}
+
+export function isPiTurnSettledEvent(raw: PiRpcOutput): boolean {
+  if (raw.type === "agent_settled") return true;
+  if (raw.type !== "agent_end") return false;
+  // Pi versions with agent_settled also add willRetry to agent_end. Keep
+  // supporting older versions where agent_end was the terminal event.
+  return typeof (raw as Record<string, unknown>).willRetry !== "boolean";
+}
+
 function extractText(value: unknown): string | undefined {
   if (typeof value === "string") return nonEmptyString(value);
   if (Array.isArray(value)) {
@@ -144,6 +162,8 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
   const nextId = options.nextId ?? ((prefix: string) => `${prefix}-${++sequence}`);
   let activeTurnId: TurnId | undefined;
   let turnFailed = false;
+  let turnErrorMessage: string | undefined;
+  let attemptErrorMessage: string | undefined;
   const contentItems = new Map<string, RuntimeItemId>();
   const tools = new Map<string, PiToolState>();
 
@@ -200,6 +220,8 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
   }) => {
     activeTurnId = input.turnId;
     turnFailed = false;
+    turnErrorMessage = undefined;
+    attemptErrorMessage = undefined;
     contentItems.clear();
     tools.clear();
     return [
@@ -255,7 +277,13 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
         },
         { turnId, ...(raw ? { raw } : {}) },
       ),
-      event("session.state.changed", { state: "ready" }, { turnId }),
+      event(
+        "session.state.changed",
+        state === "failed"
+          ? { state: "error", ...(errorMessage ? { reason: errorMessage } : {}) }
+          : { state: "ready" },
+        { turnId },
+      ),
       event("thread.state.changed", { state: "idle" }, { turnId }),
     ];
   };
@@ -264,10 +292,9 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
     const delta = asRecord(record.assistantMessageEvent);
     if (!delta || typeof delta.type !== "string") return [];
     if (delta.type === "error") {
-      turnFailed = true;
-      const message =
+      attemptErrorMessage =
         nonEmptyString(delta.error) ?? nonEmptyString(delta.reason) ?? "Pi request failed";
-      return [event("runtime.error", { message, class: "provider_error", detail: delta }, { raw })];
+      return [];
     }
     const isText = delta.type.startsWith("text_");
     const isThinking = delta.type.startsWith("thinking_");
@@ -389,14 +416,49 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
       case "tool_execution_update":
       case "tool_execution_end":
         return mapTool(raw, record);
-      case "agent_end":
+      case "agent_end": {
+        const events = [...completeOpenContent(raw)];
+        const errorMessage = agentEndErrorMessage(record) ?? attemptErrorMessage;
+        attemptErrorMessage = undefined;
+        if (record.willRetry !== true && errorMessage) {
+          turnFailed = true;
+          turnErrorMessage = errorMessage;
+          events.push(
+            event(
+              "runtime.error",
+              { message: errorMessage, class: "provider_error", detail: raw },
+              { raw },
+            ),
+          );
+        }
+        if (isPiTurnSettledEvent(raw)) {
+          events.push(...completeTurn(turnFailed ? "failed" : "completed", turnErrorMessage, raw));
+        }
+        return events;
+      }
+      case "agent_settled": {
+        const events = [...completeOpenContent(raw)];
+        if (attemptErrorMessage) {
+          turnFailed = true;
+          turnErrorMessage = attemptErrorMessage;
+          events.push(
+            event(
+              "runtime.error",
+              { message: attemptErrorMessage, class: "provider_error" },
+              { raw },
+            ),
+          );
+          attemptErrorMessage = undefined;
+        }
         return [
-          ...completeOpenContent(raw),
-          ...completeTurn(turnFailed ? "failed" : "completed", undefined, raw),
+          ...events,
+          ...completeTurn(turnFailed ? "failed" : "completed", turnErrorMessage, raw),
         ];
+      }
       case "extension_error": {
         turnFailed = true;
         const message = nonEmptyString(record.error) ?? "Pi extension failed";
+        turnErrorMessage = message;
         return [event("runtime.error", { message, class: "provider_error", detail: raw }, { raw })];
       }
       case "extension_ui_request": {

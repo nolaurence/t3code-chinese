@@ -307,7 +307,7 @@ describe("PiAdapter", () => {
     ),
   );
 
-  it.effect("maps Pi events and marks the session ready after agent_end", () =>
+  it.effect("maps Pi events and marks the session ready after agent_settled", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const harness = yield* makeHarness();
@@ -319,7 +319,7 @@ describe("PiAdapter", () => {
         });
         yield* harness.adapter.sendTurn({ threadId: THREAD_ID, input: "Hello" });
         const eventsFiber = yield* harness.adapter.streamEvents.pipe(
-          Stream.take(12),
+          Stream.takeUntil((event) => event.type === "turn.completed"),
           Stream.runCollect,
           Effect.forkChild,
         );
@@ -329,12 +329,50 @@ describe("PiAdapter", () => {
           message: {},
           assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "Hi" },
         });
-        yield* harness.emit({ type: "agent_end", messages: [] });
+        yield* harness.emit({ type: "agent_end", messages: [], willRetry: false });
+        yield* Effect.yieldNow;
+        expect((yield* harness.adapter.listSessions())[0]).toMatchObject({ status: "running" });
+        yield* harness.emit({ type: "agent_settled" });
 
         const events = [...(yield* Fiber.join(eventsFiber))];
         expect(events.some((event) => event.type === "content.delta")).toBe(true);
         expect(events.some((event) => event.type === "turn.completed")).toBe(true);
         expect((yield* harness.adapter.listSessions())[0]).toMatchObject({ status: "ready" });
+      }),
+    ),
+  );
+
+  it.effect("keeps a failed Pi turn visible in the session after agent_settled", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeHarness();
+        yield* harness.adapter.startSession({
+          threadId: THREAD_ID,
+          providerInstanceId: INSTANCE_ID,
+          cwd: "/tmp/project",
+          runtimeMode: "full-access",
+        });
+        yield* harness.adapter.sendTurn({ threadId: THREAD_ID, input: "Hello" });
+
+        yield* harness.emit({
+          type: "agent_end",
+          willRetry: false,
+          messages: [
+            {
+              role: "assistant",
+              content: [],
+              stopReason: "error",
+              errorMessage: "401 authentication_error",
+            },
+          ],
+        });
+        yield* harness.emit({ type: "agent_settled" });
+        yield* Effect.yieldNow;
+
+        expect((yield* harness.adapter.listSessions())[0]).toMatchObject({
+          status: "error",
+          lastError: "401 authentication_error",
+        });
       }),
     ),
   );

@@ -49,6 +49,7 @@ import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeInge
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { makePiRuntimeEventMapper } from "../../provider/pi/PiRuntimeEvents.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 
 function makeTestServerSettingsLayer(overrides: Partial<ServerSettings> = {}) {
@@ -2434,6 +2435,46 @@ describe("ProviderRuntimeIngestion", () => {
 
     expect(activity?.kind).toBe("runtime.error");
     expect(activityPayload?.message).toBe("runtime activity exploded");
+  });
+
+  it("keeps a Pi provider error projected after the agent settles", async () => {
+    const harness = await createHarness();
+    let id = 0;
+    const mapper = makePiRuntimeEventMapper({
+      providerInstanceId: ProviderInstanceId.make("piAgent"),
+      threadId: asThreadId("thread-1"),
+      now: () => "2026-01-01T00:00:00.000Z",
+      nextId: (prefix) => `${prefix}-${++id}`,
+    });
+    const emitAll = (events: ReadonlyArray<ProviderRuntimeEvent>) => {
+      for (const event of events) harness.emit(event);
+    };
+
+    emitAll(mapper.startTurn({ turnId: asTurnId("turn-pi-auth-error") }));
+    emitAll(
+      mapper.map({
+        type: "agent_end",
+        willRetry: false,
+        messages: [
+          {
+            role: "assistant",
+            content: [],
+            stopReason: "error",
+            errorMessage: "401 authentication_error",
+          },
+        ],
+      }),
+    );
+    emitAll(mapper.map({ type: "agent_settled" }));
+
+    const thread = await waitForThread(
+      harness.readModel,
+      (entry) =>
+        entry.session?.status === "error" &&
+        entry.session?.activeTurnId === null &&
+        entry.session?.lastError === "401 authentication_error",
+    );
+    expect(thread.session?.lastError).toBe("401 authentication_error");
   });
 
   it("keeps the session running when a runtime.warning arrives during an active turn", async () => {

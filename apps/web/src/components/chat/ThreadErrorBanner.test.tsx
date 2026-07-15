@@ -2,8 +2,21 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import { ThreadErrorBanner } from "./ThreadErrorBanner";
+import { resolveVisibleThreadError } from "../ChatView.logic";
 
 describe("ThreadErrorBanner", () => {
+  it("renders a projected provider authentication error", () => {
+    const error = resolveVisibleThreadError({
+      localError: null,
+      serverError: "401 authentication_error",
+      dismissedError: null,
+    });
+    const markup = renderToStaticMarkup(<ThreadErrorBanner error={error} />);
+
+    expect(markup).toContain("401 authentication_error");
+    expect(markup).toContain('data-slot="alert"');
+  });
+
   it("keeps long error text in the content column and the dismiss action compact", () => {
     const error =
       "ProviderModelNotFoundError: Model not found: openai/gpt-5.6-some-very-long-model-name";

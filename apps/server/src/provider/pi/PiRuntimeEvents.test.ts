@@ -174,13 +174,15 @@ describe("PiRuntimeEvents", () => {
     expectValid(events);
   });
 
-  it("completes the active T3 turn once when the Pi agent ends", () => {
+  it("completes the active T3 turn once when the Pi agent settles", () => {
     const mapper = makeMapper();
     mapper.startTurn({ turnId: TurnId.make("turn-pi-end") });
 
-    const completed = mapper.map({ type: "agent_end", messages: [] });
-    const duplicate = mapper.map({ type: "agent_end", messages: [] });
+    const ended = mapper.map({ type: "agent_end", messages: [], willRetry: false });
+    const completed = mapper.map({ type: "agent_settled" });
+    const duplicate = mapper.map({ type: "agent_settled" });
 
+    expect(ended).toEqual([]);
     expect(completed.map((event) => event.type)).toEqual([
       "turn.completed",
       "session.state.changed",
@@ -188,6 +190,76 @@ describe("PiRuntimeEvents", () => {
     ]);
     expect(completed[0]?.payload).toMatchObject({ state: "completed" });
     expect(duplicate).toEqual([]);
+    expectValid(completed);
+  });
+
+  it("surfaces an assistant error from agent_end and fails the settled turn", () => {
+    const mapper = makeMapper();
+    mapper.startTurn({ turnId: TurnId.make("turn-pi-auth-error") });
+
+    const ended = mapper.map({
+      type: "agent_end",
+      willRetry: false,
+      messages: [
+        { role: "user", content: [{ type: "text", text: "Hello" }] },
+        {
+          role: "assistant",
+          content: [],
+          stopReason: "error",
+          errorMessage: "401 authentication_error",
+        },
+      ],
+    });
+    const settled = mapper.map({ type: "agent_settled" });
+
+    expect(ended).toHaveLength(1);
+    expect(ended[0]).toMatchObject({
+      type: "runtime.error",
+      payload: { message: "401 authentication_error", class: "provider_error" },
+    });
+    expect(settled[0]).toMatchObject({
+      type: "turn.completed",
+      payload: { state: "failed", errorMessage: "401 authentication_error" },
+    });
+    expect(settled[1]).toMatchObject({
+      type: "session.state.changed",
+      payload: { state: "error", reason: "401 authentication_error" },
+    });
+    expectValid([...ended, ...settled]);
+  });
+
+  it("waits through a retried agent run before completing the turn", () => {
+    const mapper = makeMapper();
+    mapper.startTurn({ turnId: TurnId.make("turn-pi-retry") });
+
+    const retrying = mapper.map({
+      type: "agent_end",
+      willRetry: true,
+      messages: [
+        {
+          role: "assistant",
+          content: [],
+          stopReason: "error",
+          errorMessage: "temporary provider failure",
+        },
+      ],
+    });
+    const succeeded = mapper.map({ type: "agent_end", willRetry: false, messages: [] });
+    const settled = mapper.map({ type: "agent_settled" });
+
+    expect(retrying).toEqual([]);
+    expect(succeeded).toEqual([]);
+    expect(settled[0]?.payload).toMatchObject({ state: "completed" });
+    expectValid(settled);
+  });
+
+  it("keeps legacy Pi versions terminal on agent_end", () => {
+    const mapper = makeMapper();
+    mapper.startTurn({ turnId: TurnId.make("turn-pi-legacy") });
+
+    const completed = mapper.map({ type: "agent_end", messages: [] });
+
+    expect(completed[0]?.payload).toMatchObject({ state: "completed" });
     expectValid(completed);
   });
 

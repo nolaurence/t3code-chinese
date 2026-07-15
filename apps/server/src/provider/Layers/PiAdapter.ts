@@ -27,7 +27,11 @@ import {
   ProviderAdapterValidationError,
 } from "../Errors.ts";
 import { spawnPiRpcClient, type PiRpcClient, type PiRpcClientError } from "../pi/PiRpcClient.ts";
-import { makePiRuntimeEventMapper, type PiRuntimeEventMapper } from "../pi/PiRuntimeEvents.ts";
+import {
+  isPiTurnSettledEvent,
+  makePiRuntimeEventMapper,
+  type PiRuntimeEventMapper,
+} from "../pi/PiRuntimeEvents.ts";
 import type { PiRpcOutput, PiRpcResponse } from "../pi/PiRpcProtocol.ts";
 import type { PiAdapterShape } from "../Services/PiAdapter.ts";
 
@@ -131,6 +135,15 @@ function clientFailure(method: string, cause: unknown): ProviderAdapterRequestEr
   });
 }
 
+function failedTurnMessage(events: ReadonlyArray<ProviderRuntimeEvent>): string | undefined {
+  const completed = events.find(
+    (event) => event.type === "turn.completed" && event.payload.state === "failed",
+  );
+  return completed?.type === "turn.completed"
+    ? (completed.payload.errorMessage ?? "Pi turn failed.")
+    : undefined;
+}
+
 const defaultCreateClient: PiClientFactory = (input) =>
   spawnPiRpcClient({
     binaryPath: input.binaryPath,
@@ -161,11 +174,13 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
     context: PiSessionContext,
     patch: Partial<ProviderSession>,
     clearActiveTurn = false,
+    clearLastError = false,
   ) => {
     const updated = { ...context.session, ...patch, updatedAt: IsoDateTime.make(now()) } as
       | ProviderSession
       | (ProviderSession & { activeTurnId?: never });
     if (clearActiveTurn) delete (updated as { activeTurnId?: TurnId }).activeTurnId;
+    if (clearLastError) delete (updated as { lastError?: string }).lastError;
     context.session = updated;
   };
 
@@ -310,10 +325,17 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
             context.pendingInputMethods.set(record.id, record.method);
           }
         }
-        yield* emit(mapper.map(raw));
-        if (raw.type !== "agent_end") return;
+        const mappedEvents = mapper.map(raw);
+        yield* emit(mappedEvents);
+        if (!isPiTurnSettledEvent(raw)) return;
         context.activeTurnId = undefined;
-        updateSession(context, { status: "ready" }, true);
+        const turnFailure = failedTurnMessage(mappedEvents);
+        updateSession(
+          context,
+          turnFailure ? { status: "error", lastError: turnFailure } : { status: "ready" },
+          true,
+          turnFailure === undefined,
+        );
         const stats = yield* client.request({ type: "get_session_stats" }).pipe(Effect.option);
         if (stats._tag === "Some" && stats.value.success) {
           yield* emit(mapper.updateTokenUsage((asRecord(stats.value.data) ?? {}) as never));
