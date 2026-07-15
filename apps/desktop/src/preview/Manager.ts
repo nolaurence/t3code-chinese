@@ -1200,6 +1200,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       if (isPreviewInputSignal(rawSignal) && (yield* consumeExpectedAgentInput(tabId, rawSignal))) {
         return;
       }
+      yield* detachControlSession(wc.id);
       yield* Ref.update(controlEpochRef, (epochs) =>
         replaceMap(epochs, (copy) => {
           copy.set(tabId, (epochs.get(tabId) ?? 0) + 1);
@@ -1395,7 +1396,6 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
             wc.getZoomFactor(),
           );
     yield* attachListeners(tabId, wc);
-    runFork(ensureControlSession(wc).pipe(Effect.ignore));
     const registeredAt = yield* currentIso;
     const registration = yield* SynchronizedRef.modify(tabsRef, (tabs) => {
       const current = tabs.get(tabId);
@@ -1533,9 +1533,6 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     }
     yield* detachControlSession(wc.id);
     yield* attempt({ operation: "openDevTools", tabId, webContentsId: wc.id }, () => {
-      wc.once("devtools-closed", () => {
-        if (!wc.isDestroyed()) runFork(ensureControlSession(wc).pipe(Effect.ignore));
-      });
       wc.openDevTools({ mode: "detach" });
     });
   });

@@ -1025,6 +1025,8 @@ const common = defineMessages(
     "providers.updateProviderFailed": "Could not update {provider}",
     "providers.updateStartFailed": "The provider update command could not be started.",
     "providers.refreshStatus": "Refresh provider status",
+    "providers.retryStatus": "Retry {provider} status check",
+    "providers.retryingStatus": "Retrying {provider} status check",
     "providers.status.checking": "Checking provider status",
     "providers.status.checkingDetail":
       "Waiting for the server to report installation and authentication details.",
@@ -2474,6 +2476,8 @@ const common = defineMessages(
     "providers.updateProviderFailed": "无法更新 {provider}",
     "providers.updateStartFailed": "无法启动供应商更新命令。",
     "providers.refreshStatus": "刷新供应商状态",
+    "providers.retryStatus": "重试 {provider} 状态检查",
+    "providers.retryingStatus": "正在重新检查 {provider} 状态",
     "providers.status.checking": "正在检查供应商状态",
     "providers.status.checkingDetail": "正在等待服务器报告安装和认证详情。",
     "providers.status.disabled": "已禁用",

@@ -1,0 +1,7 @@
+{"mode":"chromium","step":"start"}
+{"mode":"chromium","step":"landing-loaded","url":"https://framia.converge.ai/zh-CN/"}
+{"mode":"chromium","step":"login-clicked","login":{"tag":"BUTTON","text":"登录","href":null}}
+{"mode":"chromium","step":"auth0-loaded","url":"https://auth.converge.ai/u/login/identifier?state=hKFo2SA5NGVpb1I3bVRTUXRVUnBOcUpHd2NJTEV4TDk1dHhCa6Fur3VuaXZlcnNhbC1sb2dpbqN0aWTZIGtuLVlkS2t6akYzN1NnUG55ZHdHMUE3TUtrQlR2dUtUo2NpZNkgelJUUGlxTW5nQ3ZYNE9YSlhiV3FCVlpQanJmY1NZUEc"}
+{"mode":"chromium","login":{"tag":"BUTTON","text":"登录","href":null},"result":{"url":"https://auth.converge.ai/u/login/identifier?state=hKFo2SA5NGVpb1I3bVRTUXRVUnBOcUpHd2NJTEV4TDk1dHhCa6Fur3VuaXZlcnNhbC1sb2dpbqN0aWTZIGtuLVlkS2t6akYzN1NnUG55ZHdHMUE3TUtrQlR2dUtUo2NpZNkgelJUUGlxTW5nQ3ZYNE9YSlhiV3FCVlpQanJmY1NZUEc","text":"Welcome\n\nLog in to Converge AI to continue to Framia.\n\nContinue\nEmail address *\nContinue\n\nDon't have an account? Sign up\n\nOR\nContinue with Google\n\nDifferent login methods may access different accounts.","userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.216 Safari/537.36","brands":[{"brand":"Not-A.Brand","version":"24"},{"brand":"Chromium","version":"146"}],"webdriver":false,"processType":"undefined"},"consoleEntries":[{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}]}
+{"mode":"preload","step":"start"}
+{"mode":"preload","step":"landing-loaded","url":"https://framia.converge.ai/zh-CN/"}

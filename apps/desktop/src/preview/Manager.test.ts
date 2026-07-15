@@ -544,6 +544,7 @@ describe("PreviewManager", () => {
           .mockRejectedValueOnce(new Error("UnknownVizError"))
           .mockRejectedValueOnce(new Error("UnknownVizError"))
           .mockResolvedValue(image);
+        const attach = vi.fn();
         const sendCommand = vi.fn(async (method: string) => {
           if (method === "Runtime.evaluate") {
             return {
@@ -579,7 +580,7 @@ describe("PreviewManager", () => {
           setWindowOpenHandler: vi.fn(),
           debugger: {
             isAttached: () => false,
-            attach: vi.fn(),
+            attach,
             sendCommand,
             on: vi.fn(),
             off: vi.fn(),
@@ -589,6 +590,8 @@ describe("PreviewManager", () => {
 
         yield* manager.createTab("tab_snapshot");
         yield* manager.registerWebview("tab_snapshot", 42);
+        yield* Effect.yieldNow;
+        expect(attach).not.toHaveBeenCalled();
         const snapshotFiber = yield* manager
           .automationSnapshot("tab_snapshot")
           .pipe(Effect.forkChild({ startImmediately: true }));
@@ -596,6 +599,7 @@ describe("PreviewManager", () => {
         yield* TestClock.adjust(250);
         const snapshot = yield* Fiber.join(snapshotFiber);
 
+        expect(attach).toHaveBeenCalledOnce();
         expect(capturePage).toHaveBeenCalledTimes(3);
         expect(snapshot.screenshot).toEqual({
           mimeType: "image/png",
@@ -1062,6 +1066,13 @@ describe("PreviewManager", () => {
     withManager((manager) =>
       Effect.gen(function* () {
         let humanInput: ((_event: unknown, signal: unknown) => void) | undefined;
+        let debuggerAttached = false;
+        const attach = vi.fn(() => {
+          debuggerAttached = true;
+        });
+        const detach = vi.fn(() => {
+          debuggerAttached = false;
+        });
         const sendCommand = vi.fn(async (method: string) => {
           if (method === "Runtime.evaluate") {
             return {
@@ -1097,8 +1108,9 @@ describe("PreviewManager", () => {
           navigationHistory: { canGoBack: () => false, canGoForward: () => false },
           setWindowOpenHandler: vi.fn(),
           debugger: {
-            isAttached: () => false,
-            attach: vi.fn(),
+            isAttached: () => debuggerAttached,
+            attach,
+            detach,
             sendCommand,
             on: vi.fn(),
             off: vi.fn(),
@@ -1127,6 +1139,8 @@ describe("PreviewManager", () => {
           expect(error.name).toBe("PreviewAutomationControlInterruptedError");
         }
         expect("cause" in error).toBe(false);
+        expect(attach).toHaveBeenCalledOnce();
+        expect(detach).toHaveBeenCalledOnce();
       }),
     ),
   );

@@ -98,6 +98,10 @@ import { useAtomCommand } from "../../state/use-atom-command";
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
 
+type ProviderRefreshTarget =
+  | { readonly kind: "all" }
+  | { readonly kind: "instance"; readonly instanceId: ProviderInstanceId };
+
 function withoutProviderInstanceKey<V>(
   record: Readonly<Record<ProviderInstanceId, V>> | undefined,
   key: ProviderInstanceId,
@@ -1004,7 +1008,9 @@ export function ProviderSettingsPanel() {
   const updateProvider = useAtomCommand(serverEnvironment.updateProvider, {
     reportFailure: false,
   });
-  const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
+  const [providerRefreshTarget, setProviderRefreshTarget] = useState<ProviderRefreshTarget | null>(
+    null,
+  );
   const [isAddInstanceDialogOpen, setIsAddInstanceDialogOpen] = useState(false);
   const [updatingProviderDrivers, setUpdatingProviderDrivers] = useState<
     ReadonlySet<ProviderDriverKind>
@@ -1038,31 +1044,43 @@ export function ProviderSettingsPanel() {
         )
       : null;
 
-  const refreshProviders = useCallback(() => {
-    if (refreshingRef.current) return;
-    refreshingRef.current = true;
-    setIsRefreshingProviders(true);
-    if (!primaryEnvironment) {
-      refreshingRef.current = false;
-      setIsRefreshingProviders(false);
-      return;
-    }
-    void (async () => {
-      const result = await refreshServerProviders({
-        environmentId: primaryEnvironment.environmentId,
-        input: {},
-      });
-      refreshingRef.current = false;
-      setIsRefreshingProviders(false);
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        console.warn("Failed to refresh providers", {
-          operation: "refresh-providers",
-          environmentId: primaryEnvironment.environmentId,
-          ...safeErrorLogAttributes(squashAtomCommandFailure(result)),
-        });
+  const refreshProviders = useCallback(
+    (instanceId?: ProviderInstanceId) => {
+      if (refreshingRef.current) return;
+      refreshingRef.current = true;
+      setProviderRefreshTarget(
+        instanceId === undefined ? { kind: "all" } : { kind: "instance", instanceId },
+      );
+      if (!primaryEnvironment) {
+        refreshingRef.current = false;
+        setProviderRefreshTarget(null);
+        return;
       }
-    })();
-  }, [primaryEnvironment, refreshServerProviders]);
+      void (async () => {
+        try {
+          const result = await refreshServerProviders({
+            environmentId: primaryEnvironment.environmentId,
+            input: instanceId === undefined ? {} : { instanceId },
+          });
+          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+            console.warn("Failed to refresh providers", {
+              operation: instanceId === undefined ? "refresh-providers" : "retry-provider-status",
+              environmentId: primaryEnvironment.environmentId,
+              ...(instanceId === undefined ? {} : { providerInstanceId: instanceId }),
+              ...safeErrorLogAttributes(squashAtomCommandFailure(result)),
+            });
+          }
+        } finally {
+          refreshingRef.current = false;
+          setProviderRefreshTarget(null);
+        }
+      })();
+    },
+    [primaryEnvironment, refreshServerProviders],
+  );
+
+  const isRefreshingProviders = providerRefreshTarget !== null;
+  const isRefreshingAllProviders = providerRefreshTarget?.kind === "all";
 
   const runProviderUpdate = useCallback(
     async (candidate: ProviderUpdateCandidate) => {
@@ -1319,7 +1337,7 @@ export function ProviderSettingsPanel() {
                     onClick={() => void refreshProviders()}
                     aria-label={t("providers.refreshStatus")}
                   >
-                    {isRefreshingProviders ? (
+                    {isRefreshingAllProviders ? (
                       <LoaderIcon className="size-3 animate-spin" />
                     ) : (
                       <RefreshCwIcon className="size-3" />
@@ -1427,6 +1445,12 @@ export function ProviderSettingsPanel() {
                   : undefined
               }
               isUpdating={showInlineUpdateButton ? isDriverUpdateRunning : undefined}
+              onRetryStatusCheck={() => refreshProviders(row.instanceId)}
+              isRetryingStatusCheck={
+                providerRefreshTarget?.kind === "instance" &&
+                providerRefreshTarget.instanceId === row.instanceId
+              }
+              isRetryStatusCheckDisabled={isRefreshingProviders}
             />
           );
         })}

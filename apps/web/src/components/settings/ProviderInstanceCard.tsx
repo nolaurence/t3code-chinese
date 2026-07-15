@@ -7,6 +7,7 @@ import {
   DownloadIcon,
   LoaderIcon,
   PlusIcon,
+  RefreshCwIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -46,6 +47,7 @@ import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import {
   getProviderVersionAdvisoryPresentation,
   PROVIDER_STATUS_STYLES,
+  canRetryProviderStatusCheck,
   getProviderSummary,
   getProviderVersionLabel,
   type ProviderStatusKey,
@@ -354,6 +356,9 @@ interface ProviderInstanceCardProps {
   readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
   readonly onRunUpdate?: (() => void) | undefined;
   readonly isUpdating?: boolean | undefined;
+  readonly onRetryStatusCheck?: (() => void) | undefined;
+  readonly isRetryingStatusCheck?: boolean | undefined;
+  readonly isRetryStatusCheckDisabled?: boolean | undefined;
 }
 
 /**
@@ -398,6 +403,9 @@ export function ProviderInstanceCard({
   onModelOrderChange,
   onRunUpdate,
   isUpdating = false,
+  onRetryStatusCheck,
+  isRetryingStatusCheck = false,
+  isRetryStatusCheckDisabled = false,
 }: ProviderInstanceCardProps) {
   const { t } = useI18n();
   const enabled = instance.enabled ?? true;
@@ -422,6 +430,12 @@ export function ProviderInstanceCard({
   const displayName =
     instance.displayName?.trim() || driverOption?.label || String(instance.driver);
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
+  const showRetryStatusCheck =
+    onRetryStatusCheck !== undefined && canRetryProviderStatusCheck(liveProvider);
+  const retryStatusCheckLabel = t(
+    isRetryingStatusCheck ? "providers.retryingStatus" : "providers.retryStatus",
+    { provider: displayName },
+  );
   const { copyToClipboard } = useCopyToClipboard<{ providerName: string }>({
     onCopy: ({ providerName }) => {
       toastManager.add({
@@ -584,21 +598,47 @@ export function ProviderInstanceCard({
   );
 
   const authRowNode = (
-    <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs text-muted-foreground/80">
-      {hasAuthenticatedEmail ? (
-        <>
-          <span>{t("providers.authenticatedAs")}</span>
-          <ProviderAuthEmail email={authEmail} />
-          {authenticatedDetail ? <span>· {authenticatedDetail}</span> : null}
-        </>
-      ) : (
-        <>
-          <span>{summary.headline}</span>
-          <ProviderAuthEmail email={authEmail} separator prefix={t("providers.email")} />
-        </>
-      )}
-      {summary.detail ? <span>- {summary.detail}</span> : null}
-    </p>
+    <div className="flex min-w-0 items-center gap-1.5">
+      <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs text-muted-foreground/80">
+        {hasAuthenticatedEmail ? (
+          <>
+            <span>{t("providers.authenticatedAs")}</span>
+            <ProviderAuthEmail email={authEmail} />
+            {authenticatedDetail ? <span>· {authenticatedDetail}</span> : null}
+          </>
+        ) : (
+          <>
+            <span>{summary.headline}</span>
+            <ProviderAuthEmail email={authEmail} separator prefix={t("providers.email")} />
+          </>
+        )}
+        {summary.detail ? <span>- {summary.detail}</span> : null}
+      </p>
+      {showRetryStatusCheck ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                className="size-5 shrink-0 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                disabled={isRetryStatusCheckDisabled || isRetryingStatusCheck}
+                onClick={onRetryStatusCheck}
+                aria-label={retryStatusCheckLabel}
+              >
+                {isRetryingStatusCheck ? (
+                  <LoaderIcon className="size-3 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="size-3" />
+                )}
+              </Button>
+            }
+          />
+          <TooltipPopup side="top">{retryStatusCheckLabel}</TooltipPopup>
+        </Tooltip>
+      ) : null}
+    </div>
   );
 
   const versionCodeNode = versionLabel ? (
