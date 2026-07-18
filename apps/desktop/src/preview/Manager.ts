@@ -311,6 +311,8 @@ interface BrowserControlSession {
   readonly webContentsId: number;
   readonly semaphore: Semaphore.Semaphore;
   readonly scope: Scope.Closeable;
+  /** Active and retained operations sharing this debugger attachment. */
+  readonly leases: number;
   readonly onMessage: (
     event: Electron.Event,
     method: string,
@@ -689,21 +691,47 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
   const detachControlSession = Effect.fn("PreviewManager.detachControlSession")(function* (
     webContentsId: number,
   ) {
-    const control = yield* SynchronizedRef.modify(controlSessionsRef, (sessions) => [
-      sessions.get(webContentsId),
-      replaceMap(sessions, (copy) => {
+    yield* SynchronizedRef.modifyEffect(controlSessionsRef, (sessions) => {
+      const control = sessions.get(webContentsId);
+      const remaining = replaceMap(sessions, (copy) => {
         copy.delete(webContentsId);
-      }),
-    ]);
-    if (control) {
-      yield* Scope.close(control.scope, Exit.void).pipe(Effect.ignore);
-      return;
-    }
-    yield* Ref.update(diagnosticsRef, (diagnostics) =>
-      replaceMap(diagnostics, (copy) => {
-        copy.delete(webContentsId);
-      }),
-    );
+      });
+      return (
+        control
+          ? Scope.close(control.scope, Exit.void).pipe(Effect.ignore)
+          : Ref.update(diagnosticsRef, (diagnostics) =>
+              replaceMap(diagnostics, (copy) => {
+                copy.delete(webContentsId);
+              }),
+            )
+      ).pipe(Effect.as([undefined, remaining] as const));
+    });
+  });
+
+  const releaseControlSession = Effect.fn("PreviewManager.releaseControlSession")(function* (
+    webContentsId: number,
+  ) {
+    yield* SynchronizedRef.modifyEffect(controlSessionsRef, (sessions) => {
+      const control = sessions.get(webContentsId);
+      if (!control) return Effect.succeed([undefined, sessions] as const);
+      if (control.leases > 1) {
+        return Effect.succeed([
+          undefined,
+          replaceMap(sessions, (copy) => {
+            copy.set(webContentsId, { ...control, leases: control.leases - 1 });
+          }),
+        ] as const);
+      }
+      return Scope.close(control.scope, Exit.void).pipe(
+        Effect.ignore,
+        Effect.as([
+          undefined,
+          replaceMap(sessions, (copy) => {
+            copy.delete(webContentsId);
+          }),
+        ] as const),
+      );
+    });
   });
 
   const ensureControlSession = Effect.fn("PreviewManager.ensureControlSession")(function* (
@@ -718,7 +746,15 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         PreviewManagerError
       > => {
         const existing = sessions.get(wc.id);
-        if (existing) return Effect.succeed([existing, sessions] as const);
+        if (existing) {
+          const leased = { ...existing, leases: existing.leases + 1 };
+          return Effect.succeed([
+            leased,
+            replaceMap(sessions, (copy) => {
+              copy.set(wc.id, leased);
+            }),
+          ] as const);
+        }
         if (wc.isDevToolsOpened()) {
           return Effect.fail(
             new PreviewAutomationDevToolsOpenError({
@@ -801,6 +837,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
             webContentsId: wc.id,
             semaphore,
             scope,
+            leases: 1,
             onMessage,
           };
           const initialize = Effect.fn("PreviewManager.initializeControlSession")(function* () {
@@ -884,6 +921,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     wc: Electron.WebContents,
     action: string,
     use: (send: SendCommand, sendCleanup: SendCommand) => Effect.Effect<A, PreviewManagerError>,
+    options: { readonly retainOnSuccess?: boolean } = {},
   ) {
     const sequence = yield* nextCounter(actionSequenceRef);
     const startedAt = yield* currentIso;
@@ -973,7 +1011,16 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
       const tabs = yield* SynchronizedRef.get(tabsRef);
       if (tabs.has(tabId)) yield* update(tabId, { controller: "none" });
     });
-    return yield* control.semaphore.withPermit(execute().pipe(Effect.onExit(finalize)));
+    return yield* control.semaphore.withPermit(execute().pipe(Effect.onExit(finalize))).pipe(
+      // A persistent debugger attachment is observable by bot protection such
+      // as Turnstile. Release it as soon as the operation is done; recording
+      // explicitly retains one lease until stopRecording.
+      Effect.onExit((exit) =>
+        options.retainOnSuccess === true && Exit.isSuccess(exit)
+          ? Effect.void
+          : releaseControlSession(wc.id),
+      ),
+    );
   });
 
   const evaluateWithDebugger = <A = unknown>(
@@ -1764,8 +1811,11 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
         activeTabId: recordingTabId.value,
       });
     }
+    if (Option.isSome(recordingTabId)) return;
     const wc = yield* requireWebContents(tabId);
-    yield* withControlSession(tabId, wc, "recording.start", startScreencast);
+    yield* withControlSession(tabId, wc, "recording.start", startScreencast, {
+      retainOnSuccess: true,
+    });
     yield* Ref.set(recordingTabIdRef, Option.some(tabId));
   });
 
@@ -1775,7 +1825,7 @@ const makeNativeOperations = Effect.fn("PreviewManager.makeOperations")(function
     const wc = yield* requireWebContents(tabId);
     yield* withControlSession(tabId, wc, "recording.stop", (send) =>
       send("Page.stopScreencast").pipe(Effect.asVoid),
-    );
+    ).pipe(Effect.ensuring(detachControlSession(wc.id)));
     yield* Ref.set(recordingTabIdRef, Option.none());
   });
 

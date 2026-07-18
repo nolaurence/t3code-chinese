@@ -544,7 +544,13 @@ describe("PreviewManager", () => {
           .mockRejectedValueOnce(new Error("UnknownVizError"))
           .mockRejectedValueOnce(new Error("UnknownVizError"))
           .mockResolvedValue(image);
-        const attach = vi.fn();
+        let debuggerAttached = false;
+        const attach = vi.fn(() => {
+          debuggerAttached = true;
+        });
+        const detach = vi.fn(() => {
+          debuggerAttached = false;
+        });
         const sendCommand = vi.fn(async (method: string) => {
           if (method === "Runtime.evaluate") {
             return {
@@ -579,8 +585,9 @@ describe("PreviewManager", () => {
           navigationHistory: { canGoBack: () => false, canGoForward: () => false },
           setWindowOpenHandler: vi.fn(),
           debugger: {
-            isAttached: () => false,
+            isAttached: () => debuggerAttached,
             attach,
+            detach,
             sendCommand,
             on: vi.fn(),
             off: vi.fn(),
@@ -600,6 +607,8 @@ describe("PreviewManager", () => {
         const snapshot = yield* Fiber.join(snapshotFiber);
 
         expect(attach).toHaveBeenCalledOnce();
+        expect(detach).toHaveBeenCalledOnce();
+        expect(debuggerAttached).toBe(false);
         expect(capturePage).toHaveBeenCalledTimes(3);
         expect(snapshot.screenshot).toEqual({
           mimeType: "image/png",
@@ -613,6 +622,64 @@ describe("PreviewManager", () => {
         const failed = yield* Effect.exit(manager.automationSnapshot("tab_snapshot"));
         expect(Exit.isFailure(failed)).toBe(true);
         expect(capturePage).toHaveBeenCalledOnce();
+      }),
+    ),
+  );
+
+  effectIt.effect("retains the debugger only for the active recording lifetime", () =>
+    withManager((manager) =>
+      Effect.gen(function* () {
+        let debuggerAttached = false;
+        const attach = vi.fn(() => {
+          debuggerAttached = true;
+        });
+        const detach = vi.fn(() => {
+          debuggerAttached = false;
+        });
+        const sendCommand = vi.fn(async () => undefined);
+        fromId.mockReturnValue({
+          id: 42,
+          isDestroyed: () => false,
+          getType: () => "webview",
+          getURL: () => "https://example.com",
+          getTitle: () => "Example",
+          isLoading: () => false,
+          isDevToolsOpened: () => false,
+          getZoomFactor: () => 1,
+          setZoomFactor: vi.fn(),
+          on: vi.fn(),
+          off: vi.fn(),
+          ipc: { on: vi.fn(), off: vi.fn() },
+          send: webviewSend,
+          navigationHistory: { canGoBack: () => false, canGoForward: () => false },
+          setWindowOpenHandler: vi.fn(),
+          debugger: {
+            isAttached: () => debuggerAttached,
+            attach,
+            detach,
+            sendCommand,
+            on: vi.fn(),
+            off: vi.fn(),
+          },
+        } as never);
+
+        yield* manager.createTab("tab_recording");
+        yield* manager.registerWebview("tab_recording", 42);
+        yield* manager.startRecording("tab_recording");
+
+        expect(attach).toHaveBeenCalledOnce();
+        expect(detach).not.toHaveBeenCalled();
+        expect(debuggerAttached).toBe(true);
+
+        // Starting the same recording twice is idempotent and must not leak a lease.
+        yield* manager.startRecording("tab_recording");
+        expect(attach).toHaveBeenCalledOnce();
+
+        yield* manager.stopRecording("tab_recording");
+
+        expect(sendCommand).toHaveBeenCalledWith("Page.stopScreencast", undefined);
+        expect(detach).toHaveBeenCalledOnce();
+        expect(debuggerAttached).toBe(false);
       }),
     ),
   );
