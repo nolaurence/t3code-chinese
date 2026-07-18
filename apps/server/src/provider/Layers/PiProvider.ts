@@ -24,8 +24,12 @@ import {
 } from "../providerSnapshot.ts";
 
 const PROVIDER = ProviderDriverKind.make("piAgent");
-const VERSION_PROBE_TIMEOUT_MS = 4_000;
-const MODEL_DISCOVERY_TIMEOUT_MS = 15_000;
+// Pi loads most of its CLI dependency graph before handling `--version` and
+// starting RPC mode. Cold starts can exceed 15 seconds on Windows, especially
+// while antivirus scanning is active, so these probes need a larger startup
+// allowance than lightweight provider CLIs.
+const VERSION_PROBE_TIMEOUT_MS = 30_000;
+const MODEL_DISCOVERY_TIMEOUT_MS = 30_000;
 
 const PI_PRESENTATION = {
   displayName: "Pi",
