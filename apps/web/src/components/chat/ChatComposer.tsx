@@ -150,6 +150,7 @@ function getRuntimeModeConfig(
 }
 
 const runtimeModeOptions: RuntimeMode[] = ["approval-required", "auto-accept-edits", "full-access"];
+const COMPOSER_FOOTER_CONTROL_TEXT_CLASS_NAME = "sm:text-[13px]";
 const COMPOSER_FLOATING_LAYER_SELECTOR = [
   '[data-slot="popover-popup"]',
   '[data-slot="menu-popup"]',
@@ -223,6 +224,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
               variant="ghost"
               className={cn(
                 "shrink-0 whitespace-nowrap px-2 sm:px-3",
+                COMPOSER_FOOTER_CONTROL_TEXT_CLASS_NAME,
                 props.interactionMode === "plan"
                   ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 hover:text-blue-300"
                   : "text-muted-foreground/70 hover:text-foreground/80",
@@ -264,7 +266,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
               <SelectTrigger
                 variant="ghost"
                 size="sm"
-                className="font-medium"
+                className={cn("font-medium", COMPOSER_FOOTER_CONTROL_TEXT_CLASS_NAME)}
                 aria-label={t("chat.composer.runtimeMode")}
               />
             }
@@ -307,6 +309,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
                   variant="ghost"
                   className={cn(
                     "shrink-0 whitespace-nowrap px-2 sm:px-3",
+                    COMPOSER_FOOTER_CONTROL_TEXT_CLASS_NAME,
                     props.planSidebarOpen
                       ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 hover:text-blue-300"
                       : "text-muted-foreground/70 hover:text-foreground/80",
@@ -1128,6 +1131,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     modelOptions: composerModelOptions?.[selectedInstanceId],
     prompt,
     onPromptChange: setPromptFromTraits,
+    triggerClassName: COMPOSER_FOOTER_CONTROL_TEXT_CLASS_NAME,
   });
   const pendingPrimaryAction = useMemo(
     () =>
@@ -2470,7 +2474,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               data-chat-composer-footer="true"
               data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
               className={cn(
-                "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2.5 sm:px-3 sm:pb-3 sm:[&_[data-slot=button]]:text-[13px] sm:[&_[data-slot=select-trigger]]:text-[13px]",
+                "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2.5 sm:px-3 sm:pb-3",
                 pendingUserInputs.length > 0 && "pt-2",
                 isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
                 showMobilePendingAnswerActions && "hidden sm:flex",
@@ -2486,6 +2490,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   instanceEntries={providerInstanceEntries}
                   keybindings={keybindings}
                   modelOptionsByInstance={modelOptionsByInstance}
+                  triggerClassName={COMPOSER_FOOTER_CONTROL_TEXT_CLASS_NAME}
                   terminalOpen={terminalOpen}
                   open={isComposerModelPickerOpen}
                   {...(composerProviderState.modelPickerIconClassName

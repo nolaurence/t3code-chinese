@@ -11,6 +11,7 @@ import {
   renderProviderTraitsMenuContent,
   renderProviderTraitsPicker,
 } from "./composerProviderState";
+import { DraftId } from "../../composerDraftStore";
 
 // Everything in composerProviderState is now data-driven by the model's
 // optionDescriptors, so these tests use a single synthetic provider/model and
@@ -244,5 +245,23 @@ describe("provider traits render guards", () => {
 
     expect(renderProviderTraitsPicker(args)).toBeNull();
     expect(renderProviderTraitsMenuContent(args)).toBeNull();
+  });
+
+  it("forwards trigger classes to the rendered picker", () => {
+    const triggerClassName = "sm:text-[13px]";
+    const rendered = renderProviderTraitsPicker({
+      provider: PROVIDER,
+      draftId: DraftId.make("draft-1"),
+      model: MODEL,
+      models: modelWith([
+        selectDescriptor("effort", [{ id: "high", label: "High", isDefault: true }]),
+      ]),
+      modelOptions: undefined,
+      prompt: "",
+      onPromptChange: () => {},
+      triggerClassName,
+    });
+
+    expect(rendered).toMatchObject({ props: { triggerClassName } });
   });
 });
