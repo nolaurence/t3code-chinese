@@ -121,6 +121,14 @@ describe("bundled Skills", () => {
 
       assert.equal(skill.name, "midscene-preview");
       assert.match(skill.description, /built-in browser/);
+      assert.match(
+        skillMarkdown,
+        /If configuration is unknown, do not call Midscene merely to probe it/,
+      );
+      assert.match(
+        skillMarkdown,
+        /Continue in the same built-in browser with deterministic `preview_\*` tools/,
+      );
       assert.equal(openAi.interface.display_name, "Midscene Preview");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
