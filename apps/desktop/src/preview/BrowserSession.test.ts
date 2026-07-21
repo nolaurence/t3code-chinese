@@ -13,7 +13,6 @@ const { fromPartition, sessions } = vi.hoisted(() => ({
     {
       readonly clearCache: ReturnType<typeof vi.fn>;
       readonly clearStorageData: ReturnType<typeof vi.fn>;
-      readonly getUserAgent: ReturnType<typeof vi.fn>;
       readonly setPermissionRequestHandler: ReturnType<typeof vi.fn>;
       readonly setUserAgent: ReturnType<typeof vi.fn>;
     }
@@ -38,10 +37,6 @@ describe("BrowserSession", () => {
       const browserSession = {
         clearCache: vi.fn(() => Promise.resolve()),
         clearStorageData: vi.fn(() => Promise.resolve()),
-        getUserAgent: vi.fn(
-          () =>
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) T3Code(Browser)/0.1.1 Chrome/146.0.7680.216 Safari/537.36 Electron/41.5.0",
-        ),
         setPermissionRequestHandler: vi.fn(),
         setUserAgent: vi.fn(),
       };
@@ -50,22 +45,7 @@ describe("BrowserSession", () => {
     });
   });
 
-  it("removes Electron and T3 product tokens without changing Chromium's identity", () => {
-    assert.equal(
-      BrowserSession.normalizePreviewUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) T3Code(Browser)/0.1.1 Chrome/146.0.7680.216 Safari/537.36 Electron/41.5.0",
-      ),
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/146.0.7680.216 Safari/537.36",
-    );
-    assert.equal(
-      BrowserSession.normalizePreviewUserAgent(
-        "Mozilla/5.0 Electron/41.5.0 t3code/0.0.27 Chrome/146.0.0.0 Example/1.0",
-      ),
-      "Mozilla/5.0 Chrome/146.0.0.0 Example/1.0",
-    );
-  });
-
-  it.effect("derives deterministic partitions and memoizes sessions", () =>
+  it.effect("derives deterministic partitions without overriding the browser identity", () =>
     Effect.gen(function* () {
       const browserSessions = yield* BrowserSession.BrowserSession;
 
@@ -76,9 +56,7 @@ describe("BrowserSession", () => {
       assert.strictEqual(partition, "persist:t3code-preview-f051bb2c68cb7b2fe969");
       assert.strictEqual(first, second);
       assert.strictEqual(fromPartition.mock.calls.length, 1);
-      assert.deepEqual(sessions.get(partition)?.setUserAgent.mock.calls, [
-        ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/146.0.7680.216 Safari/537.36"],
-      ]);
+      assert.deepEqual(sessions.get(partition)?.setUserAgent.mock.calls, []);
     }).pipe(Effect.provide(layer)),
   );
 
@@ -154,7 +132,7 @@ describe("BrowserSession", () => {
         assert.strictEqual(browserSession.clearStorageData.mock.calls.length, 1);
         assert.deepEqual(browserSession.clearStorageData.mock.calls[0], [
           {
-            storages: ["cookies", "localstorage", "indexdb", "websql", "serviceworkers"],
+            storages: ["cookies", "localstorage", "indexdb", "serviceworkers"],
           },
         ]);
         assert.strictEqual(browserSession.clearCache.mock.calls.length, 1);

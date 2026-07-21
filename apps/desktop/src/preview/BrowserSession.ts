@@ -10,13 +10,6 @@ import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 const PREVIEW_PARTITION_PREFIX = "persist:t3code-preview-";
-const PREVIEW_USER_AGENT_PRODUCT_PATTERN = /(?:^|\s)(?:Electron|T3Code(?:\([^)]*\))?)\/[^\s]+/gi;
-
-export const normalizePreviewUserAgent = (userAgent: string): string =>
-  userAgent
-    .replace(PREVIEW_USER_AGENT_PRODUCT_PATTERN, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
 
 export class BrowserSessionPartitionDerivationError extends Schema.TaggedErrorClass<BrowserSessionPartitionDerivationError>()(
   "BrowserSessionPartitionDerivationError",
@@ -121,7 +114,6 @@ export const make = Effect.gen(function* BrowserSessionMake() {
       return Effect.try({
         try: () => {
           const browserSession = session.fromPartition(partition);
-          browserSession.setUserAgent(normalizePreviewUserAgent(browserSession.getUserAgent()));
           browserSession.setPermissionRequestHandler((_webContents, permission, callback) => {
             const allowed = ["clipboard-read", "clipboard-write", "notifications", "geolocation"];
             callback(allowed.includes(permission));
@@ -151,7 +143,7 @@ export const make = Effect.gen(function* BrowserSessionMake() {
           Effect.tryPromise({
             try: () =>
               browserSession.clearStorageData({
-                storages: ["cookies", "localstorage", "indexdb", "websql", "serviceworkers"],
+                storages: ["cookies", "localstorage", "indexdb", "serviceworkers"],
               }),
             catch: (cause) =>
               new BrowserSessionStorageClearError({
