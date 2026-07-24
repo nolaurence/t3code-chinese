@@ -60,6 +60,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesTree } from "./ChangedFilesTree";
@@ -943,10 +944,20 @@ function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-
 function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
   const messageText = row.message.text || (row.message.streaming ? "" : "(empty response)");
+  const reasoningText = row.message.reasoningText ?? "";
 
   return (
     <>
       <div className="relative min-w-0 px-1 py-0.5">
+        {reasoningText.trim().length > 0 ? (
+          <AssistantReasoningBlock
+            text={reasoningText}
+            streaming={Boolean(row.message.streaming)}
+            markdownCwd={ctx.markdownCwd}
+            threadRef={ctx.threadRef ?? undefined}
+            skills={ctx.skills}
+          />
+        ) : null}
         <ChatMarkdown
           text={messageText}
           cwd={ctx.markdownCwd}
@@ -979,6 +990,70 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
         ) : null}
       </div>
     </>
+  );
+}
+
+/**
+ * Collapsible chain-of-thought / reasoning block rendered above the assistant
+ * message body. Auto-expands while the message is streaming so the user can
+ * watch the model think, then auto-collapses once the turn settles. The user
+ * can still toggle it manually at any time.
+ */
+function AssistantReasoningBlock({
+  text,
+  streaming,
+  markdownCwd,
+  threadRef,
+  skills,
+}: {
+  text: string;
+  streaming: boolean;
+  markdownCwd: string | undefined;
+  threadRef: ScopedThreadRef | undefined;
+  skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(streaming);
+
+  useEffect(() => {
+    // Keep the block in sync with the streaming lifecycle: expand to surface
+    // live reasoning, collapse when the message finalizes. Manual toggles in
+    // either state still work; this only re-syncs on lifecycle transitions.
+    setOpen(streaming);
+  }, [streaming]);
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="assistant-reasoning-block mb-2 border border-border/50 bg-muted/30 rounded-md"
+      data-reasoning-streaming={streaming ? "true" : "false"}
+      data-reasoning-open={open ? "true" : "false"}
+    >
+      <CollapsibleTrigger
+        className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted/50 rounded-md data-panel-open:[&_svg:first-child]:rotate-90"
+        data-scroll-anchor-ignore
+      >
+        <ChevronRightIcon className="size-3.5 shrink-0 transition-transform" aria-hidden />
+        <BotIcon className="size-3.5 shrink-0" aria-hidden />
+        <span>{t("chat.reasoning.thinking")}</span>
+        {streaming ? <span className="animate-pulse text-muted-foreground/70">…</span> : null}
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div
+          className="border-s-2 border-border/50 ms-2.5 ps-2.5 pe-2.5 pb-2.5 text-sm text-muted-foreground/90"
+          data-reasoning-content=""
+        >
+          <ChatMarkdown
+            text={text}
+            cwd={markdownCwd}
+            threadRef={threadRef}
+            isStreaming={streaming}
+            skills={skills}
+          />
+        </div>
+      </CollapsiblePanel>
+    </Collapsible>
   );
 }
 

@@ -39,6 +39,19 @@ function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error"
 }
 
 /**
+ * Merges a streamed content field (assistant text or reasoning/chain-of-thought)
+ * into its existing value. While `streaming`, deltas are appended. On the
+ * non-streaming completion event, a non-empty incoming value replaces the
+ * accumulated value; an empty one preserves what was already streamed.
+ */
+function mergeStreamedContent(existing: string, incoming: string, streaming: boolean): string {
+  if (streaming) {
+    return `${existing}${incoming}`;
+  }
+  return incoming.length > 0 ? incoming : existing;
+}
+
+/**
  * Turn state to settle a still-running latest turn with when its session
  * leaves the "running" status, or null while the session is (re)starting or
  * running and the turn must stay unsettled.
@@ -399,6 +412,7 @@ export function projectEvent(
             id: payload.messageId,
             role: payload.role,
             text: payload.text,
+            reasoningText: payload.reasoning,
             ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
             turnId: payload.turnId,
             streaming: payload.streaming,
@@ -415,11 +429,12 @@ export function projectEvent(
               entry.id === message.id
                 ? {
                     ...entry,
-                    text: message.streaming
-                      ? `${entry.text}${message.text}`
-                      : message.text.length > 0
-                        ? message.text
-                        : entry.text,
+                    text: mergeStreamedContent(entry.text, message.text, message.streaming),
+                    reasoningText: mergeStreamedContent(
+                      entry.reasoningText ?? "",
+                      message.reasoningText ?? "",
+                      message.streaming,
+                    ),
                     streaming: message.streaming,
                     updatedAt: message.updatedAt,
                     turnId: message.turnId,

@@ -484,6 +484,130 @@ describe("orchestration projector", () => {
     expect(message?.updatedAt).toBe(completeAt);
   });
 
+  it("appends reasoning (chain-of-thought) deltas into message.reasoningText", async () => {
+    const createdAt = "2026-02-23T09:00:00.000Z";
+    const reasoningAt = "2026-02-23T09:00:01.000Z";
+    const textAt = "2026-02-23T09:00:02.000Z";
+    const completeAt = "2026-02-23T09:00:03.500Z";
+    const model = createEmptyReadModel(createdAt);
+
+    const afterCreate = await Effect.runPromise(
+      projectEvent(
+        model,
+        makeEvent({
+          sequence: 1,
+          type: "thread.created",
+          aggregateKind: "thread",
+          aggregateId: "thread-1",
+          occurredAt: createdAt,
+          commandId: "cmd-create",
+          payload: {
+            threadId: "thread-1",
+            projectId: "project-1",
+            title: "demo",
+            modelSelection: {
+              provider: ProviderDriverKind.make("codex"),
+              model: "gpt-5.3-codex",
+            },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt,
+            updatedAt: createdAt,
+          },
+        }),
+      ),
+    );
+
+    // Reasoning delta (streaming) — should append into reasoningText, leave text empty.
+    const afterReasoning = await Effect.runPromise(
+      projectEvent(
+        afterCreate,
+        makeEvent({
+          sequence: 2,
+          type: "thread.message-sent",
+          aggregateKind: "thread",
+          aggregateId: "thread-1",
+          occurredAt: reasoningAt,
+          commandId: "cmd-reasoning-delta",
+          payload: {
+            threadId: "thread-1",
+            messageId: "assistant:msg-1",
+            role: "assistant",
+            text: "",
+            reasoning: "Let me think about this. ",
+            turnId: "turn-1",
+            streaming: true,
+            createdAt: reasoningAt,
+            updatedAt: reasoningAt,
+          },
+        }),
+      ),
+    );
+    const reasoningMessage = afterReasoning.threads[0]?.messages[0];
+    expect(reasoningMessage?.id).toBe("assistant:msg-1");
+    expect(reasoningMessage?.reasoningText).toBe("Let me think about this. ");
+    expect(reasoningMessage?.text).toBe("");
+    expect(reasoningMessage?.streaming).toBe(true);
+
+    // Assistant text delta (streaming) — should append into text, preserve reasoning.
+    const afterText = await Effect.runPromise(
+      projectEvent(
+        afterReasoning,
+        makeEvent({
+          sequence: 3,
+          type: "thread.message-sent",
+          aggregateKind: "thread",
+          aggregateId: "thread-1",
+          occurredAt: textAt,
+          commandId: "cmd-text-delta",
+          payload: {
+            threadId: "thread-1",
+            messageId: "assistant:msg-1",
+            role: "assistant",
+            text: "Here is the answer.",
+            turnId: "turn-1",
+            streaming: true,
+            createdAt: textAt,
+            updatedAt: textAt,
+          },
+        }),
+      ),
+    );
+    const combinedMessage = afterText.threads[0]?.messages[0];
+    expect(combinedMessage?.text).toBe("Here is the answer.");
+    expect(combinedMessage?.reasoningText).toBe("Let me think about this. ");
+
+    // Completion (non-streaming, empty reasoning/text) — preserves both fields.
+    const afterComplete = await Effect.runPromise(
+      projectEvent(
+        afterText,
+        makeEvent({
+          sequence: 4,
+          type: "thread.message-sent",
+          aggregateKind: "thread",
+          aggregateId: "thread-1",
+          occurredAt: completeAt,
+          commandId: "cmd-complete",
+          payload: {
+            threadId: "thread-1",
+            messageId: "assistant:msg-1",
+            role: "assistant",
+            text: "",
+            turnId: "turn-1",
+            streaming: false,
+            createdAt: completeAt,
+            updatedAt: completeAt,
+          },
+        }),
+      ),
+    );
+    const finalMessage = afterComplete.threads[0]?.messages[0];
+    expect(finalMessage?.text).toBe("Here is the answer.");
+    expect(finalMessage?.reasoningText).toBe("Let me think about this. ");
+    expect(finalMessage?.streaming).toBe(false);
+  });
+
   it("prunes reverted turn messages from in-memory thread snapshot", async () => {
     const createdAt = "2026-02-23T10:00:00.000Z";
     const model = createEmptyReadModel(createdAt);
