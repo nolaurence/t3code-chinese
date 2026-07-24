@@ -7,6 +7,7 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
+import { createTranslator } from "../i18n";
 
 import {
   buildLocalEnvironmentUpdateGroups,
@@ -288,6 +289,27 @@ describe("provider update launch notification logic", () => {
       type: "warning",
       title: "Update Available: Codex v1.1.0",
       description: "Install the update now or review provider settings.",
+    });
+  });
+
+  it("localizes provider update progress", () => {
+    const t = createTranslator("zh-CN");
+    const candidate = updateCandidate({ driver: driver("codex"), latestVersion: "1.1.0" });
+
+    expect(
+      getProviderUpdateInitialToastView(
+        { updateProviders: [candidate], oneClickProviders: [candidate] },
+        t,
+      ),
+    ).toMatchObject({
+      title: "有可用更新：Codex v1.1.0",
+      description: "立即安装更新，或查看提供商设置。",
+    });
+    expect(
+      getProviderUpdateProgressToastView({ providers: [candidate], providerCount: 1 }, t),
+    ).toMatchObject({
+      title: "正在更新提供商",
+      description: "正在运行提供商更新命令。",
     });
   });
 

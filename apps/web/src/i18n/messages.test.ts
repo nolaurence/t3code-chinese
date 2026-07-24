@@ -62,4 +62,13 @@ describe("translated messages", () => {
     expect(t("chat.changedFiles.expandAll")).toBe("全部展开");
     expect(t("chat.changedFiles.viewDiff")).toBe("查看差异");
   });
+
+  it("localizes provider update notifications", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(t("providerUpdate.running.title")).toBe("正在更新提供商");
+    expect(t("providerUpdate.running.description")).toBe("正在运行提供商更新命令。");
+    expect(t("providerUpdate.action.update")).toBe("更新");
+    expect(t("providerUpdate.action.settings")).toBe("设置");
+  });
 });

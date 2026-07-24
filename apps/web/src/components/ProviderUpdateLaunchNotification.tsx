@@ -15,6 +15,7 @@ import {
 } from "./ProviderUpdateLaunchNotification.logic";
 import { ProviderUpdatePrimaryNotification } from "./ProviderUpdatePrimaryNotification";
 import { stackedThreadToast, toastManager } from "./ui/toast";
+import { useI18n, type Translate } from "../i18n";
 
 /**
  * True when a desktop-local secondary backend (the parallel WSL backend) is
@@ -56,6 +57,7 @@ type ProviderUpdateToastId = ReturnType<typeof toastManager.add>;
 const SETTLING_GRACE_MS = 30_000;
 
 function ProviderUpdateEnvironmentsNotification() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { groups, isAnySettling } = useLocalEnvironmentUpdateGroups();
   const { dismissedNotificationKeys, dismissNotificationKey } =
@@ -64,6 +66,7 @@ function ProviderUpdateEnvironmentsNotification() {
   const activeToastRef = useRef<{
     readonly toastId: ProviderUpdateToastId;
     readonly key: string;
+    readonly translate: Translate;
   } | null>(null);
   const notificationKeyRef = useRef<string | null>(null);
   // Whether the user has triggered an update from the current toast. Until they
@@ -117,6 +120,14 @@ function ProviderUpdateEnvironmentsNotification() {
   }, [navigate]);
 
   useEffect(() => {
+    let active = activeToastRef.current;
+    if (active && active.translate !== t && !hasInteractedRef.current) {
+      toastManager.close(active.toastId);
+      activeToastRef.current = null;
+      seenProviderUpdateNotificationKeys.delete(active.key);
+      active = null;
+    }
+
     // Whether a fresh prompt can actually be shown for the current update set.
     const canShowPrompt =
       notificationKey !== null &&
@@ -129,7 +140,6 @@ function ProviderUpdateEnvironmentsNotification() {
     // and when a fresh set is ready to replace it. Keep it only while a backend
     // is re-settling (updates still exist, just gated) — and once an update is
     // in progress, so its rows survive.
-    const active = activeToastRef.current;
     if (
       active &&
       active.key !== notificationKey &&
@@ -160,10 +170,13 @@ function ProviderUpdateEnvironmentsNotification() {
     const toastId = toastManager.add(
       stackedThreadToast({
         type: "warning",
-        title: getProviderUpdateInitialToastView({
-          updateProviders: candidateUnion,
-          oneClickProviders: candidateUnion,
-        }).title,
+        title: getProviderUpdateInitialToastView(
+          {
+            updateProviders: candidateUnion,
+            oneClickProviders: candidateUnion,
+          },
+          t,
+        ).title,
         description: (
           <ProviderUpdateEnvironmentRows
             onInteract={() => {
@@ -173,7 +186,7 @@ function ProviderUpdateEnvironmentsNotification() {
         ),
         timeout: 0,
         actionProps: {
-          children: "Settings",
+          children: t("providerUpdate.action.settings"),
           onClick: openProviderSettings,
         },
         actionVariant: "outline",
@@ -184,7 +197,7 @@ function ProviderUpdateEnvironmentsNotification() {
         },
       }),
     );
-    activeToastRef.current = { toastId, key: notificationKey };
+    activeToastRef.current = { toastId, key: notificationKey, translate: t };
   }, [
     notificationKey,
     isGated,
@@ -192,6 +205,7 @@ function ProviderUpdateEnvironmentsNotification() {
     dismissedNotificationKeys,
     dismissNotificationKey,
     openProviderSettings,
+    t,
   ]);
 
   return null;
