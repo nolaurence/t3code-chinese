@@ -30,7 +30,28 @@ export interface ProviderUpdateToastView {
   readonly type: ProviderUpdateToastType;
   readonly title: string;
   readonly description: string;
+  readonly resolveText?: (t: Translate) => ProviderUpdateToastText;
   readonly dismissAfterVisibleMs?: number;
+}
+
+export interface ProviderUpdateToastText {
+  readonly title: string;
+  readonly description: string;
+}
+
+function localizedProviderUpdateToastView(
+  view: Omit<ProviderUpdateToastView, "title" | "description" | "resolveText">,
+  t: Translate,
+  resolveText: (t: Translate) => ProviderUpdateToastText,
+): ProviderUpdateToastView {
+  return { ...view, ...resolveText(t), resolveText };
+}
+
+export function resolveProviderUpdateToastText(
+  view: ProviderUpdateToastView,
+  t: Translate,
+): ProviderUpdateToastText {
+  return view.resolveText?.(t) ?? view;
 }
 
 /**
@@ -245,32 +266,28 @@ export function getProviderUpdateInitialToastView(
   },
   t: Translate = english,
 ): ProviderUpdateToastView {
-  return {
-    phase: "initial",
-    type: "warning",
-    title: getProviderUpdateInitialToastTitle(input.updateProviders, t),
+  return localizedProviderUpdateToastView({ phase: "initial", type: "warning" }, t, (nextT) => ({
+    title: getProviderUpdateInitialToastTitle(input.updateProviders, nextT),
     description:
       input.oneClickProviders.length > 0
-        ? t("providerUpdate.initial.description")
-        : t("providerUpdate.initial.manualDescription", {
-            providers: formatProviderList(input.updateProviders, t),
+        ? nextT("providerUpdate.initial.description")
+        : nextT("providerUpdate.initial.manualDescription", {
+            providers: formatProviderList(input.updateProviders, nextT),
           }),
-  };
+  }));
 }
 
 export function getProviderUpdateRunningToastView(
   providerCount: number,
   t: Translate = english,
 ): ProviderUpdateToastView {
-  return {
-    phase: "running",
-    type: "loading",
+  return localizedProviderUpdateToastView({ phase: "running", type: "loading" }, t, (nextT) => ({
     title:
       providerCount === 1
-        ? t("providerUpdate.running.title")
-        : t("providerUpdate.running.titleMany"),
-    description: t("providerUpdate.running.description"),
-  };
+        ? nextT("providerUpdate.running.title")
+        : nextT("providerUpdate.running.titleMany"),
+    description: nextT("providerUpdate.running.description"),
+  }));
 }
 
 export function getProviderUpdateRejectedToastView(
@@ -278,13 +295,14 @@ export function getProviderUpdateRejectedToastView(
   message: string,
   t: Translate = english,
 ): ProviderUpdateToastView {
-  return {
-    phase: "failed",
-    type: "error",
+  const isLocalizedFallback = message === t("providerUpdate.error.generic");
+  return localizedProviderUpdateToastView({ phase: "failed", type: "error" }, t, (nextT) => ({
     title:
-      providerCount === 1 ? t("providerUpdate.failed.title") : t("providerUpdate.failed.titleMany"),
-    description: message,
-  };
+      providerCount === 1
+        ? nextT("providerUpdate.failed.title")
+        : nextT("providerUpdate.failed.titleMany"),
+    description: isLocalizedFallback ? nextT("providerUpdate.error.generic") : message,
+  }));
 }
 
 export function getProviderUpdateProgressToastView(
@@ -297,35 +315,35 @@ export function getProviderUpdateProgressToastView(
   const providers = dedupeProvidersByDriver(input.providers);
   const failedProviders = providers.filter((provider) => provider.updateState?.status === "failed");
   if (failedProviders.length > 0) {
-    return {
-      phase: "failed",
-      type: "error",
+    return localizedProviderUpdateToastView({ phase: "failed", type: "error" }, t, (nextT) => ({
       title:
         failedProviders.length === 1
-          ? t("providerUpdate.failed.title")
-          : t("providerUpdate.failed.titleMany"),
-      description: getFailedProviderUpdateDescription(failedProviders, t),
-    };
+          ? nextT("providerUpdate.failed.title")
+          : nextT("providerUpdate.failed.titleMany"),
+      description: getFailedProviderUpdateDescription(failedProviders, nextT),
+    }));
   }
 
   const unchangedProviders = providers.filter(
     (provider) => provider.updateState?.status === "unchanged",
   );
   if (unchangedProviders.length > 0) {
-    return {
-      phase: "unchanged",
-      type: "warning",
-      title:
-        unchangedProviders.length === 1
-          ? t("providerUpdate.unchanged.title")
-          : t("providerUpdate.unchanged.titleMany"),
-      description: t(
-        unchangedProviders.length === 1
-          ? "providerUpdate.unchanged.description"
-          : "providerUpdate.unchanged.descriptionMany",
-        { providers: formatProviderList(unchangedProviders, t) },
-      ),
-    };
+    return localizedProviderUpdateToastView(
+      { phase: "unchanged", type: "warning" },
+      t,
+      (nextT) => ({
+        title:
+          unchangedProviders.length === 1
+            ? nextT("providerUpdate.unchanged.title")
+            : nextT("providerUpdate.unchanged.titleMany"),
+        description: nextT(
+          unchangedProviders.length === 1
+            ? "providerUpdate.unchanged.description"
+            : "providerUpdate.unchanged.descriptionMany",
+          { providers: formatProviderList(unchangedProviders, nextT) },
+        ),
+      }),
+    );
   }
 
   if (providers.some(isProviderUpdateActive)) {
@@ -340,16 +358,21 @@ export function getProviderUpdateProgressToastView(
         provider.updateState?.status === "succeeded" || !isProviderUpdateCandidate(provider),
     );
   if (allProvidersUpdated) {
-    return {
-      phase: "succeeded",
-      type: "success",
-      title:
-        input.providerCount === 1
-          ? t("providerUpdate.success.title")
-          : t("providerUpdate.success.titleMany"),
-      description: getProviderUpdatedDescription(input.providerCount, t),
-      dismissAfterVisibleMs: PROVIDER_UPDATE_SUCCESS_VISIBLE_MS,
-    };
+    return localizedProviderUpdateToastView(
+      {
+        phase: "succeeded",
+        type: "success",
+        dismissAfterVisibleMs: PROVIDER_UPDATE_SUCCESS_VISIBLE_MS,
+      },
+      t,
+      (nextT) => ({
+        title:
+          input.providerCount === 1
+            ? nextT("providerUpdate.success.title")
+            : nextT("providerUpdate.success.titleMany"),
+        description: getProviderUpdatedDescription(input.providerCount, nextT),
+      }),
+    );
   }
 
   return getProviderUpdateRunningToastView(input.providerCount, t);
@@ -370,25 +393,25 @@ export function getSingleProviderUpdateProgressToastView(
 
   switch (view.phase) {
     case "running":
-      return {
-        ...view,
-        title: t("providerUpdate.running.namedTitle", { provider: providerName }),
-      };
+      return localizedProviderUpdateToastView(view, t, (nextT) => ({
+        ...resolveProviderUpdateToastText(view, nextT),
+        title: nextT("providerUpdate.running.namedTitle", { provider: providerName }),
+      }));
     case "failed":
-      return {
-        ...view,
-        title: getProviderFailedUpdateTitle(provider, t),
-      };
+      return localizedProviderUpdateToastView(view, t, (nextT) => ({
+        ...resolveProviderUpdateToastText(view, nextT),
+        title: getProviderFailedUpdateTitle(provider, nextT),
+      }));
     case "unchanged":
-      return {
-        ...view,
-        title: t("providerUpdate.unchanged.named", { provider: providerName }),
-      };
+      return localizedProviderUpdateToastView(view, t, (nextT) => ({
+        ...resolveProviderUpdateToastText(view, nextT),
+        title: nextT("providerUpdate.unchanged.named", { provider: providerName }),
+      }));
     case "succeeded":
-      return {
-        ...view,
-        title: getProviderUpdatedTitle(provider, t),
-      };
+      return localizedProviderUpdateToastView(view, t, (nextT) => ({
+        ...resolveProviderUpdateToastText(view, nextT),
+        title: getProviderUpdatedTitle(provider, nextT),
+      }));
     default:
       return view;
   }
@@ -845,6 +868,11 @@ export interface ProviderUpdateRowStatus {
   readonly text: string;
 }
 
+export interface ProviderUpdateRowError {
+  readonly text: string;
+  readonly resolveText?: (t: Translate) => string;
+}
+
 function environmentProviderNames(group: LocalEnvironmentUpdateGroup): string {
   return group.candidates
     .map((candidate) => PROVIDER_DISPLAY_NAMES[candidate.driver] ?? candidate.driver)
@@ -865,7 +893,7 @@ function environmentProviderNames(group: LocalEnvironmentUpdateGroup): string {
 export function resolveEnvironmentUpdateRowStatus(
   input: {
     readonly group: LocalEnvironmentUpdateGroup;
-    readonly error: string | undefined;
+    readonly error: string | ProviderUpdateRowError | undefined;
     readonly result: ProviderUpdateToastView | undefined;
     readonly pill: ProviderUpdateSidebarPillView | null;
     readonly isPending: boolean;
@@ -873,16 +901,23 @@ export function resolveEnvironmentUpdateRowStatus(
   t: Translate = english,
 ): ProviderUpdateRowStatus {
   if (input.error) {
-    return { kind: "failed", text: input.error };
+    return {
+      kind: "failed",
+      text:
+        typeof input.error === "string"
+          ? input.error
+          : (input.error.resolveText?.(t) ?? input.error.text),
+    };
   }
   if (input.result) {
+    const resultText = resolveProviderUpdateToastText(input.result, t);
     switch (input.result.phase) {
       case "succeeded":
         return { kind: "success", text: t("providerUpdate.status.updated") };
       case "failed":
-        return { kind: "failed", text: input.result.description };
+        return { kind: "failed", text: resultText.description };
       case "unchanged":
-        return { kind: "unchanged", text: input.result.description };
+        return { kind: "unchanged", text: resultText.description };
       // "running" / "initial": non-terminal snapshot — fall through to live state.
     }
   }

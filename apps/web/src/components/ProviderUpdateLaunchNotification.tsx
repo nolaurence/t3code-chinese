@@ -12,10 +12,11 @@ import {
   environmentGroupsWithUpdates,
   getProviderUpdateInitialToastView,
   localEnvironmentUpdateNotificationKey,
+  resolveProviderUpdateToastText,
 } from "./ProviderUpdateLaunchNotification.logic";
 import { ProviderUpdatePrimaryNotification } from "./ProviderUpdatePrimaryNotification";
 import { stackedThreadToast, toastManager } from "./ui/toast";
-import { useI18n, type Translate } from "../i18n";
+import { I18nText, useI18n } from "../i18n";
 
 /**
  * True when a desktop-local secondary backend (the parallel WSL backend) is
@@ -66,7 +67,6 @@ function ProviderUpdateEnvironmentsNotification() {
   const activeToastRef = useRef<{
     readonly toastId: ProviderUpdateToastId;
     readonly key: string;
-    readonly translate: Translate;
   } | null>(null);
   const notificationKeyRef = useRef<string | null>(null);
   // Whether the user has triggered an update from the current toast. Until they
@@ -120,14 +120,7 @@ function ProviderUpdateEnvironmentsNotification() {
   }, [navigate]);
 
   useEffect(() => {
-    let active = activeToastRef.current;
-    if (active && active.translate !== t && !hasInteractedRef.current) {
-      toastManager.close(active.toastId);
-      activeToastRef.current = null;
-      seenProviderUpdateNotificationKeys.delete(active.key);
-      active = null;
-    }
-
+    const active = activeToastRef.current;
     // Whether a fresh prompt can actually be shown for the current update set.
     const canShowPrompt =
       notificationKey !== null &&
@@ -167,16 +160,19 @@ function ProviderUpdateEnvironmentsNotification() {
       activeToastRef.current = null;
     };
 
+    const initialView = getProviderUpdateInitialToastView(
+      {
+        updateProviders: candidateUnion,
+        oneClickProviders: candidateUnion,
+      },
+      t,
+    );
     const toastId = toastManager.add(
       stackedThreadToast({
         type: "warning",
-        title: getProviderUpdateInitialToastView(
-          {
-            updateProviders: candidateUnion,
-            oneClickProviders: candidateUnion,
-          },
-          t,
-        ).title,
+        title: (
+          <I18nText>{(nextT) => resolveProviderUpdateToastText(initialView, nextT).title}</I18nText>
+        ),
         description: (
           <ProviderUpdateEnvironmentRows
             onInteract={() => {
@@ -186,7 +182,7 @@ function ProviderUpdateEnvironmentsNotification() {
         ),
         timeout: 0,
         actionProps: {
-          children: t("providerUpdate.action.settings"),
+          children: <I18nText>{(nextT) => nextT("providerUpdate.action.settings")}</I18nText>,
           onClick: openProviderSettings,
         },
         actionVariant: "outline",
@@ -197,7 +193,7 @@ function ProviderUpdateEnvironmentsNotification() {
         },
       }),
     );
-    activeToastRef.current = { toastId, key: notificationKey, translate: t };
+    activeToastRef.current = { toastId, key: notificationKey };
   }, [
     notificationKey,
     isGated,

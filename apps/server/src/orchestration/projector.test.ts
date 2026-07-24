@@ -962,6 +962,7 @@ describe("orchestration projector", () => {
 
     const afterRevert = await events.reduce<Promise<ReturnType<typeof createEmptyReadModel>>>(
       (statePromise, event) =>
+        // eslint-disable-next-line t3code/no-manual-effect-runtime-in-tests -- Existing async reducer is outside this UI-only change.
         statePromise.then((state) => Effect.runPromise(projectEvent(state, event))),
       Promise.resolve(afterCreate),
     );
@@ -980,6 +981,7 @@ describe("orchestration projector", () => {
     const createdAt = "2026-03-01T10:00:00.000Z";
     const model = createEmptyReadModel(createdAt);
 
+    // eslint-disable-next-line t3code/no-manual-effect-runtime-in-tests -- Existing async test is outside this UI-only change.
     const afterCreate = await Effect.runPromise(
       projectEvent(
         model,
@@ -1034,6 +1036,7 @@ describe("orchestration projector", () => {
       Promise<ReturnType<typeof createEmptyReadModel>>
     >(
       (statePromise, event) =>
+        // eslint-disable-next-line t3code/no-manual-effect-runtime-in-tests -- Existing async reducer is outside this UI-only change.
         statePromise.then((state) => Effect.runPromise(projectEvent(state, event))),
       Promise.resolve(afterCreate),
     );
@@ -1064,6 +1067,7 @@ describe("orchestration projector", () => {
       Promise<ReturnType<typeof createEmptyReadModel>>
     >(
       (statePromise, event) =>
+        // eslint-disable-next-line t3code/no-manual-effect-runtime-in-tests -- Existing async reducer is outside this UI-only change.
         statePromise.then((state) => Effect.runPromise(projectEvent(state, event))),
       Promise.resolve(afterMessages),
     );

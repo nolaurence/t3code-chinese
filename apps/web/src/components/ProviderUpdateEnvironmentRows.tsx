@@ -10,7 +10,7 @@ import {
 import { cn } from "~/lib/utils";
 import { serverEnvironment } from "~/state/server";
 import { useAtomCommand } from "~/state/use-atom-command";
-import { useI18n } from "~/i18n";
+import { useI18n, type MessageKey, type Translate } from "~/i18n";
 import { useLocalEnvironmentUpdateGroups } from "./ProviderUpdateLaunchNotification.environments";
 import {
   collectProviderUpdateOutcomeSnapshots,
@@ -22,6 +22,7 @@ import {
   type LocalEnvironmentUpdateGroup,
   type LocalProviderUpdateOutcome,
   type ProviderUpdateRowStatus,
+  type ProviderUpdateRowError,
   type ProviderUpdateRowStatusKind,
   type ProviderUpdateToastView,
 } from "./ProviderUpdateLaunchNotification.logic";
@@ -94,6 +95,19 @@ function toProviderUpdateOutcome(input: {
 // update (npm installs routinely run tens of seconds) is never cut off and left
 // showing a dead, unresponsive Update button.
 const PENDING_EXPIRY_MS = 6 * 60_000;
+
+function localizedRowError(key: MessageKey, t: Translate): ProviderUpdateRowError {
+  return {
+    text: t(key),
+    resolveText: (nextT) => nextT(key),
+  };
+}
+
+function rowError(message: string, t: Translate): ProviderUpdateRowError {
+  return message === t("providerUpdate.error.generic")
+    ? localizedRowError("providerUpdate.error.generic", t)
+    : { text: message };
+}
 
 function rowToneClass(kind: ProviderUpdateRowStatusKind): string {
   switch (kind) {
@@ -195,9 +209,9 @@ export function ProviderUpdateEnvironmentRows({
   const [pendingEnvironments, setPendingEnvironments] = useState<ReadonlySet<EnvironmentId>>(
     () => new Set(),
   );
-  const [errorByEnvironment, setErrorByEnvironment] = useState<ReadonlyMap<EnvironmentId, string>>(
-    () => new Map(),
-  );
+  const [errorByEnvironment, setErrorByEnvironment] = useState<
+    ReadonlyMap<EnvironmentId, ProviderUpdateRowError>
+  >(() => new Map());
   const [resultByEnvironment, setResultByEnvironment] = useState<
     ReadonlyMap<EnvironmentId, ProviderUpdateToastView>
   >(() => new Map());
@@ -265,7 +279,10 @@ export function ProviderUpdateEnvironmentRows({
         inFlightEnvironmentsRef.current.delete(environmentId);
         clearPending(environmentId);
         setErrorByEnvironment((previous) =>
-          new Map(previous).set(environmentId, t("providerUpdate.error.timeout")),
+          new Map(previous).set(
+            environmentId,
+            localizedRowError("providerUpdate.error.timeout", t),
+          ),
         );
       }, PENDING_EXPIRY_MS);
       try {
@@ -312,14 +329,17 @@ export function ProviderUpdateEnvironmentRows({
         });
         if (results.length === 0) {
           setErrorByEnvironment((previous) =>
-            new Map(previous).set(environmentId, t("providerUpdate.error.disconnected")),
+            new Map(previous).set(
+              environmentId,
+              localizedRowError("providerUpdate.error.disconnected", t),
+            ),
           );
           return;
         }
         const rejectedMessage = firstRejectedProviderUpdateMessage(results, t);
         if (rejectedMessage) {
           setErrorByEnvironment((previous) =>
-            new Map(previous).set(environmentId, rejectedMessage),
+            new Map(previous).set(environmentId, rowError(rejectedMessage, t)),
           );
           return;
         }
@@ -347,7 +367,9 @@ export function ProviderUpdateEnvironmentRows({
           setErrorByEnvironment((previous) =>
             new Map(previous).set(
               environmentId,
-              error instanceof Error ? error.message : t("providerUpdate.error.generic"),
+              error instanceof Error
+                ? rowError(error.message, t)
+                : localizedRowError("providerUpdate.error.generic", t),
             ),
           );
         }
