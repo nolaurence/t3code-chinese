@@ -16,6 +16,7 @@ function formatPercentage(value: number | null): string | null {
 export function ContextWindowMeter(props: {
   usage: ContextWindowSnapshot;
   providerDisplayName?: string | null;
+  onOpenContextPanel?: (() => void) | undefined;
 }) {
   const { t } = useI18n();
   const { usage, providerDisplayName } = props;
@@ -38,6 +39,7 @@ export function ContextWindowMeter(props: {
         render={
           <button
             type="button"
+            onClick={props.onOpenContextPanel}
             className={cn(
               "inline-flex size-6 cursor-pointer items-center justify-center rounded-full border border-transparent text-muted-foreground outline-none transition-colors",
               "hover:bg-accent data-[pressed]:bg-accent",
@@ -131,6 +133,11 @@ export function ContextWindowMeter(props: {
               {t("chat.context.autoCompact", {
                 provider: providerDisplayName ?? t("chat.context.provider"),
               })}
+            </div>
+          ) : null}
+          {props.onOpenContextPanel ? (
+            <div className="mt-1 border-t border-border/60 pt-2 text-[11px] font-medium text-muted-foreground/60">
+              {t("chat.context.viewDetails")}
             </div>
           ) : null}
         </div>

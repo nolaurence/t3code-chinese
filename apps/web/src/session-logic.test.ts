@@ -21,6 +21,7 @@ import {
   workEntryIndicatesToolFailure,
   workEntryIndicatesToolNeutralStatus,
   workEntryIndicatesToolSuccess,
+  workEntryShouldBeVisible,
 } from "./session-logic";
 
 let nextActivityId = 0;
@@ -678,6 +679,23 @@ describe("workEntryIndicatesToolFailure", () => {
     ).toBe(false);
   });
 
+  it("keeps an in-progress subagent visible while ordinary neutral tools stay hidden", () => {
+    const inProgressTool = {
+      ...base,
+      tone: "tool" as const,
+      toolLifecycleStatus: "inProgress" as const,
+      detail: "Working",
+    };
+
+    expect(workEntryShouldBeVisible(inProgressTool)).toBe(false);
+    expect(
+      workEntryShouldBeVisible({
+        ...inProgressTool,
+        itemType: "collab_agent_tool_call",
+      }),
+    ).toBe(true);
+  });
+
   it("does not run heuristics on non-tool info rows", () => {
     expect(
       workEntryIndicatesToolFailure({
@@ -691,6 +709,34 @@ describe("workEntryIndicatesToolFailure", () => {
 });
 
 describe("deriveWorkLogEntries", () => {
+  it("preserves the title and call id for an in-progress OpenCode subagent", () => {
+    const [entry] = deriveWorkLogEntries([
+      makeActivity({
+        id: "opencode-subagent-running",
+        kind: "tool.updated",
+        summary: "Inspect the context tab",
+        payload: {
+          itemType: "collab_agent_tool_call",
+          status: "inProgress",
+          title: "Inspect the context tab",
+          detail: "Inspect the context tab",
+          data: {
+            toolCallId: "call-subagent-1",
+            tool: "task",
+          },
+        },
+      }),
+    ]);
+
+    expect(entry).toMatchObject({
+      itemType: "collab_agent_tool_call",
+      toolLifecycleStatus: "inProgress",
+      toolTitle: "Inspect the context tab",
+      detail: "Inspect the context tab",
+      toolCallId: "call-subagent-1",
+    });
+  });
+
   it("omits tool started entries and keeps completed entries", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

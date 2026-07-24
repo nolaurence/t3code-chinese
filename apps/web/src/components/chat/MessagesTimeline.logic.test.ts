@@ -1011,6 +1011,41 @@ describe("deriveMessagesTimelineRows", () => {
       expanded: true,
     });
   });
+
+  it("renders an in-progress subagent work row", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "subagent-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:01Z",
+          entry: {
+            id: "subagent-work",
+            createdAt: "2026-01-01T00:00:01Z",
+            label: "Inspect the context tab",
+            detail: "Inspect the context tab",
+            tone: "tool",
+            itemType: "collab_agent_tool_call",
+            toolLifecycleStatus: "inProgress",
+          },
+        },
+      ],
+      isWorking: true,
+      activeTurnStartedAt: "2026-01-01T00:00:00Z",
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "work",
+          id: "subagent-entry",
+          groupedEntries: [expect.objectContaining({ id: "subagent-work" })],
+        }),
+      ]),
+    );
+  });
 });
 
 describe("computeStableMessagesTimelineRows", () => {

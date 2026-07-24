@@ -259,6 +259,7 @@ const PreviewPanel = lazy(() =>
   import("./preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
 const DiffPanel = lazy(() => import("./DiffPanel"));
+const ContextPanel = lazy(() => import("./ContextPanel"));
 const FilePreviewPanel = lazy(() => import("./files/FilePreviewPanel"));
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
 const TYPE_TO_FOCUS_EDITABLE_SELECTOR = [
@@ -2142,6 +2143,11 @@ function ChatViewContent(props: ChatViewProps) {
     const defaultInstanceId = defaultInstanceIdForDriver(selectedProvider);
     return providerStatuses.find((status) => status.instanceId === defaultInstanceId) ?? null;
   }, [activeProviderInstanceId, providerStatuses, selectedProvider]);
+  const activeProviderDriver = activeProviderStatus?.driver ?? null;
+  const contextPanelAvailable =
+    activeProviderDriver === "codex" ||
+    activeProviderDriver === "piAgent" ||
+    activeProviderDriver === "opencode";
   const activeProjectCwd = activeProject?.workspaceRoot ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
@@ -2819,6 +2825,10 @@ function ChatViewContent(props: ChatViewProps) {
     if (!activeThreadRef || !activeProject) return;
     useRightPanelStore.getState().open(activeThreadRef, "files");
   }, [activeProject, activeThreadRef]);
+  const addContextSurface = useCallback(() => {
+    if (!activeThreadRef || !contextPanelAvailable) return;
+    useRightPanelStore.getState().open(activeThreadRef, "context");
+  }, [activeThreadRef, contextPanelAvailable]);
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
@@ -4860,6 +4870,13 @@ function ChatViewContent(props: ChatViewProps) {
         timestampFormat={timestampFormat}
         mode="embedded"
       />
+    ) : activeRightPanelSurface?.kind === "context" ? (
+      <Suspense fallback={null}>
+        <ContextPanel
+          environmentId={activeThreadRef.environmentId}
+          threadId={activeThreadRef.threadId}
+        />
+      </Suspense>
     ) : (activeRightPanelSurface?.kind === "files" || activeRightPanelSurface?.kind === "file") &&
       activeProject &&
       activeWorkspaceRoot ? (
@@ -5053,6 +5070,9 @@ function ChatViewContent(props: ChatViewProps) {
                       activeProjectDefaultModelSelection={activeProject?.defaultModelSelection}
                       activeThreadModelSelection={activeThread?.modelSelection}
                       activeThreadActivities={activeThread?.activities}
+                      onOpenContextPanel={
+                        contextPanelAvailable && isServerThread ? addContextSurface : undefined
+                      }
                       resolvedTheme={resolvedTheme}
                       settings={settings}
                       keybindings={keybindings}
@@ -5187,9 +5207,11 @@ function ChatViewContent(props: ChatViewProps) {
           onAddTerminal={addTerminalSurface}
           onAddDiff={addDiffSurface}
           onAddFiles={addFilesSurface}
+          onAddContext={addContextSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           diffAvailable={isServerThread && isGitRepo}
           filesAvailable={activeProject !== null}
+          contextAvailable={contextPanelAvailable}
         >
           {rightPanelContent}
         </RightPanelTabs>
@@ -5214,9 +5236,11 @@ function ChatViewContent(props: ChatViewProps) {
             onAddTerminal={addTerminalSurface}
             onAddDiff={addDiffSurface}
             onAddFiles={addFilesSurface}
+            onAddContext={addContextSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             diffAvailable={isServerThread && isGitRepo}
             filesAvailable={activeProject !== null}
+            contextAvailable={contextPanelAvailable}
           >
             {rightPanelContent}
           </RightPanelTabs>

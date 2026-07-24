@@ -763,6 +763,71 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     }),
   );
 
+  it.effect("maps a running task part to a stable subagent lifecycle event", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-opencode-subagent");
+      const runningState = {
+        status: "running" as const,
+        input: {
+          description: "Inspect the context tab",
+          prompt: "Find the existing context tab implementation",
+          subagent_type: "explore",
+        },
+        title: "Inspect the context tab",
+        metadata: {
+          sessionId: "session-child-1",
+        },
+        time: { start: 1 },
+      };
+      runtimeMock.state.subscribedEvents = [
+        {
+          type: "message.part.updated",
+          properties: {
+            sessionID: "http://127.0.0.1:9999/session",
+            part: {
+              id: "part-subagent",
+              sessionID: "http://127.0.0.1:9999/session",
+              messageID: "msg-subagent",
+              type: "tool",
+              callID: "call-subagent-1",
+              tool: "task",
+              state: runningState,
+            },
+            time: 1,
+          },
+        },
+      ];
+      const eventFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.threadId === threadId && event.type === "item.updated"),
+        Stream.take(1),
+        Stream.runHead,
+        Effect.forkChild,
+      );
+
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const event = yield* Fiber.join(eventFiber).pipe(Effect.timeout("1 second"));
+      NodeAssert.equal(Option.isSome(event), true);
+      if (Option.isNone(event) || event.value.type !== "item.updated") {
+        return;
+      }
+      NodeAssert.equal(event.value.itemId, "call-subagent-1");
+      NodeAssert.equal(event.value.payload.itemType, "collab_agent_tool_call");
+      NodeAssert.equal(event.value.payload.status, "inProgress");
+      NodeAssert.equal(event.value.payload.title, "Inspect the context tab");
+      NodeAssert.deepEqual(event.value.payload.data, {
+        toolCallId: "call-subagent-1",
+        tool: "task",
+        state: runningState,
+      });
+    }),
+  );
+
   it.effect("writes provider-native observability records using the session thread id", () =>
     Effect.gen(function* () {
       const nativeEvents: Array<{

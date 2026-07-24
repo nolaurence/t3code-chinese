@@ -1,6 +1,15 @@
 import type { ContextMenuItem, PreviewSessionSnapshot } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
-import { ClipboardList, FileDiff, Files, Globe2, Plus, TerminalSquare, X } from "lucide-react";
+import {
+  ClipboardList,
+  FileDiff,
+  Files,
+  Gauge,
+  Globe2,
+  Plus,
+  TerminalSquare,
+  X,
+} from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
@@ -45,9 +54,11 @@ interface RightPanelTabsProps {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddContext: () => void;
   browserAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
+  contextAvailable: boolean;
   children: ReactNode;
 }
 
@@ -86,15 +97,18 @@ function RightPanelEmptyState(props: {
   onAddTerminal: () => void;
   onAddDiff: () => void;
   onAddFiles: () => void;
+  onAddContext: () => void;
   browserAvailable: boolean;
   diffAvailable: boolean;
   filesAvailable: boolean;
+  contextAvailable: boolean;
 }) {
   const { t } = useI18n();
   const disabledReasons = {
     browser: t("panel.browserUnavailable"),
     files: t("panel.filesUnavailable"),
     diff: t("panel.diffUnavailable"),
+    context: t("panel.contextUnavailable"),
   } as const;
   const actions = [
     {
@@ -128,6 +142,14 @@ function RightPanelEmptyState(props: {
       available: props.diffAvailable,
       disabledReason: disabledReasons.diff,
       onClick: props.onAddDiff,
+    },
+    {
+      label: t("panel.context"),
+      description: t("panel.contextDescription"),
+      icon: Gauge,
+      available: props.contextAvailable,
+      disabledReason: disabledReasons.context,
+      onClick: props.onAddContext,
     },
   ] as const;
 
@@ -194,6 +216,8 @@ function surfaceTitle(
   switch (surface.kind) {
     case "diff":
       return t("panel.diff");
+    case "context":
+      return t("panel.context");
     case "files":
       return t("panel.files");
     case "file":
@@ -251,6 +275,8 @@ function SurfaceIcon({
     }
     case "diff":
       return <FileDiff className="size-3.5 shrink-0" />;
+    case "context":
+      return <Gauge className="size-3.5 shrink-0" />;
     case "files":
       return <Files className="size-3.5 shrink-0" />;
     case "file":
@@ -476,6 +502,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     <FileDiff />
                     {t("panel.diff")}
                   </SurfaceMenuItem>
+                  <SurfaceMenuItem
+                    available={props.contextAvailable}
+                    disabledReason={t("panel.contextUnavailable")}
+                    onClick={props.onAddContext}
+                  >
+                    <Gauge />
+                    {t("panel.context")}
+                  </SurfaceMenuItem>
                 </MenuPopup>
               </Menu>
             ) : null}
@@ -490,9 +524,11 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddTerminal={props.onAddTerminal}
             onAddDiff={props.onAddDiff}
             onAddFiles={props.onAddFiles}
+            onAddContext={props.onAddContext}
             browserAvailable={props.browserAvailable}
             diffAvailable={props.diffAvailable}
             filesAvailable={props.filesAvailable}
+            contextAvailable={props.contextAvailable}
           />
         ) : (
           props.children

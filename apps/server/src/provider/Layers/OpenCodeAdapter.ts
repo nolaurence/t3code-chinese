@@ -753,6 +753,7 @@ export function makeOpenCodeAdapter(
               ...(title ? { title } : {}),
               ...(detail ? { detail } : {}),
               data: {
+                toolCallId: part.callID,
                 tool: part.tool,
                 state: part.state,
               },
@@ -1415,6 +1416,28 @@ export function makeOpenCodeAdapter(
       },
     );
 
+    const readThreadContext: OpenCodeAdapterShape["readThreadContext"] = Effect.fn(
+      "readThreadContext",
+    )(function* (threadId) {
+      const context = ensureSessionContext(sessions, threadId);
+      const messages = yield* runOpenCodeSdk("session.messages", () =>
+        context.client.session.messages({
+          sessionID: context.openCodeSessionId,
+        }),
+      ).pipe(Effect.mapError(toRequestError));
+
+      return {
+        threadId,
+        provider: PROVIDER,
+        messages: (messages.data ?? []).map((entry) => ({
+          id: entry.info.id,
+          role: typeof entry.info.role === "string" ? entry.info.role : null,
+          createdAt: isoFromEpochMs(entry.info.time.created) ?? null,
+          content: entry,
+        })),
+      };
+    });
+
     const rollbackThread: OpenCodeAdapterShape["rollbackThread"] = Effect.fn("rollbackThread")(
       function* (threadId, numTurns) {
         const context = ensureSessionContext(sessions, threadId);
@@ -1469,6 +1492,7 @@ export function makeOpenCodeAdapter(
       listSessions,
       hasSession,
       readThread,
+      readThreadContext,
       rollbackThread,
       stopAll,
       get streamEvents() {

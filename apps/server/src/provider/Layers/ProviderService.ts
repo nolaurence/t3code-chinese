@@ -74,6 +74,10 @@ const ProviderRollbackConversationInput = Schema.Struct({
   numTurns: NonNegativeInt,
 });
 
+const ProviderReadThreadContextInput = Schema.Struct({
+  threadId: ThreadId,
+});
+
 function toValidationError(
   operation: string,
   issue: string,
@@ -1008,6 +1012,35 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     );
   });
 
+  const readThreadContext: ProviderServiceMethod<"readThreadContext"> = Effect.fn(
+    "readThreadContext",
+  )(function* (rawInput) {
+    const input = yield* decodeInputOrValidationError({
+      operation: "ProviderService.readThreadContext",
+      schema: ProviderReadThreadContextInput,
+      payload: rawInput,
+    });
+    const routed = yield* resolveRoutableSession({
+      threadId: input.threadId,
+      operation: "ProviderService.readThreadContext",
+      allowRecovery: false,
+    });
+    if (!routed.isActive) {
+      return yield* toValidationError(
+        "ProviderService.readThreadContext",
+        `Thread '${input.threadId}' has no active provider session.`,
+      );
+    }
+    const readContext = routed.adapter.readThreadContext;
+    if (readContext === undefined) {
+      return yield* toValidationError(
+        "ProviderService.readThreadContext",
+        `Provider '${routed.adapter.provider}' does not support thread context inspection.`,
+      );
+    }
+    return yield* readContext(routed.threadId);
+  });
+
   const runStopAll = Effect.fn("runStopAll")(function* () {
     const threadIds = yield* directory.listThreadIds();
     const currentAdapters = yield* getAdapterEntries;
@@ -1079,6 +1112,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     getCapabilities,
     getInstanceInfo,
     rollbackConversation,
+    readThreadContext,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each
     // independently receive all runtime events.

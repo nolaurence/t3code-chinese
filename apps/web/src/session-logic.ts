@@ -268,6 +268,11 @@ export function workEntryIndicatesToolNeutralStatus(entry: WorkLogEntry): boolea
   return true;
 }
 
+/** Nested agent work remains useful while running, even before it has produced output. */
+export function workEntryShouldBeVisible(entry: WorkLogEntry): boolean {
+  return entry.itemType === "collab_agent_tool_call" || !workEntryIndicatesToolNeutralStatus(entry);
+}
+
 export function formatDuration(durationMs: number): string {
   if (!Number.isFinite(durationMs) || durationMs < 0) return "0ms";
   if (durationMs < 1_000) return `${Math.max(1, Math.round(durationMs))}ms`;
@@ -1176,7 +1181,8 @@ function extractToolDetail(
   const normalizedHeading = normalizePreviewForComparison(heading);
   const normalizedDetail = normalizePreviewForComparison(detail);
 
-  if (detail && normalizedHeading !== normalizedDetail) {
+  const itemType = extractWorkLogItemType(payload);
+  if (detail && (normalizedHeading !== normalizedDetail || itemType === "collab_agent_tool_call")) {
     return detail;
   }
 

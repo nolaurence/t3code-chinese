@@ -1,7 +1,7 @@
 import * as Equal from "effect/Equal";
 import {
   formatDuration,
-  workEntryIndicatesToolNeutralStatus,
+  workEntryShouldBeVisible,
   workLogEntryIsToolLike,
   type TimelineEntry,
   type WorkLogEntry,
@@ -436,9 +436,7 @@ export function deriveMessagesTimelineRows(input: {
         groupedEntries.push(nextEntry.entry);
         cursor += 1;
       }
-      const visibleGroupedEntries = groupedEntries.filter(
-        (entry) => !workEntryIndicatesToolNeutralStatus(entry),
-      );
+      const visibleGroupedEntries = groupedEntries.filter(workEntryShouldBeVisible);
       if (visibleGroupedEntries.length > 0) {
         if (visibleGroupedEntries.length <= MAX_VISIBLE_WORK_LOG_ENTRIES) {
           nextRows.push({

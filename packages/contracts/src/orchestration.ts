@@ -26,6 +26,7 @@ export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
+  getThreadContext: "orchestration.getThreadContext",
   replayEvents: "orchestration.replayEvents",
   getArchivedShellSnapshot: "orchestration.getArchivedShellSnapshot",
   subscribeShell: "orchestration.subscribeShell",
@@ -1264,6 +1265,26 @@ export const OrchestrationReplayEventsInput = Schema.Struct({
 });
 export type OrchestrationReplayEventsInput = typeof OrchestrationReplayEventsInput.Type;
 
+export const OrchestrationThreadContextMessage = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  role: Schema.NullOr(TrimmedNonEmptyString),
+  createdAt: Schema.NullOr(TrimmedNonEmptyString),
+  content: Schema.Unknown,
+});
+export type OrchestrationThreadContextMessage = typeof OrchestrationThreadContextMessage.Type;
+
+export const OrchestrationGetThreadContextInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type OrchestrationGetThreadContextInput = typeof OrchestrationGetThreadContextInput.Type;
+
+export const OrchestrationGetThreadContextResult = Schema.Struct({
+  threadId: ThreadId,
+  provider: TrimmedNonEmptyString,
+  messages: Schema.Array(OrchestrationThreadContextMessage),
+});
+export type OrchestrationGetThreadContextResult = typeof OrchestrationGetThreadContextResult.Type;
+
 const OrchestrationReplayEventsResult = Schema.Array(OrchestrationEvent);
 export type OrchestrationReplayEventsResult = typeof OrchestrationReplayEventsResult.Type;
 
@@ -1279,6 +1300,10 @@ export const OrchestrationRpcSchemas = {
   getFullThreadDiff: {
     input: OrchestrationGetFullThreadDiffInput,
     output: OrchestrationGetFullThreadDiffResult,
+  },
+  getThreadContext: {
+    input: OrchestrationGetThreadContextInput,
+    output: OrchestrationGetThreadContextResult,
   },
   replayEvents: {
     input: OrchestrationReplayEventsInput,
@@ -1324,6 +1349,14 @@ export class OrchestrationGetTurnDiffError extends Schema.TaggedErrorClass<Orche
 
 export class OrchestrationGetFullThreadDiffError extends Schema.TaggedErrorClass<OrchestrationGetFullThreadDiffError>()(
   "OrchestrationGetFullThreadDiffError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
+
+export class OrchestrationGetThreadContextError extends Schema.TaggedErrorClass<OrchestrationGetThreadContextError>()(
+  "OrchestrationGetThreadContextError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect()),

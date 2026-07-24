@@ -129,6 +129,29 @@ function readMessageTurns(response: PiRpcResponse, sessionId: string) {
   });
 }
 
+function readContextMessages(response: PiRpcResponse, sessionId: string) {
+  const data = asRecord(response.success ? response.data : undefined);
+  const messages = Array.isArray(data?.messages) ? data.messages : [];
+  return messages.flatMap((value, index) => {
+    const message = asRecord(value);
+    if (!message) return [];
+    const messageId =
+      (typeof message.id === "string" && message.id.trim()) ||
+      (typeof message.entryId === "string" && message.entryId.trim()) ||
+      `${sessionId}-message-${index}`;
+    const role =
+      typeof message.role === "string" && message.role.trim().length > 0 ? message.role : null;
+    const timestamp = message.timestamp;
+    const createdAt =
+      typeof timestamp === "string" && timestamp.trim().length > 0
+        ? timestamp
+        : typeof timestamp === "number" && Number.isFinite(timestamp)
+          ? new Date(timestamp).toISOString()
+          : null;
+    return [{ id: messageId, role, createdAt, content: value }];
+  });
+}
+
 function splitPiModel(value: string): { provider: string; modelId: string } | null {
   const separator = value.indexOf("/");
   if (separator <= 0 || separator === value.length - 1) return null;
@@ -526,6 +549,20 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
     },
   );
 
+  const readThreadContext: PiAdapterShape["readThreadContext"] = Effect.fn(
+    "PiAdapter.readThreadContext",
+  )(function* (threadId) {
+    const context = yield* getContext(threadId);
+    const response = yield* context.client
+      .request({ type: "get_messages" })
+      .pipe(Effect.mapError((cause) => clientFailure("get_messages", cause)));
+    return {
+      threadId,
+      provider: PROVIDER,
+      messages: readContextMessages(response, context.sessionId),
+    };
+  });
+
   const rollbackThread: PiAdapterShape["rollbackThread"] = (threadId) =>
     Effect.fail(
       new ProviderAdapterValidationError({
@@ -562,6 +599,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
     listSessions: () => Effect.succeed([...sessions.values()].map((context) => context.session)),
     hasSession: (threadId) => Effect.succeed(sessions.has(threadId)),
     readThread,
+    readThreadContext,
     rollbackThread,
     stopAll,
     streamEvents: Stream.fromQueue(runtimeEvents),
