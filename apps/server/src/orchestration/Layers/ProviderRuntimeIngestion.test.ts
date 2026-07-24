@@ -720,6 +720,115 @@ describe("ProviderRuntimeIngestion", () => {
     expect(message?.streaming).toBe(false);
   });
 
+  it("captures reasoning_text deltas into message.reasoningText alongside assistant text", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+
+    // Reasoning arrives first (realistic for reasoning-capable providers).
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-reasoning-delta-1"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-reasoning"),
+      itemId: asItemId("item-reasoning-1"),
+      payload: {
+        streamKind: "reasoning_text",
+        delta: "Thinking... ",
+      },
+    });
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-reasoning-delta-2"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-reasoning"),
+      itemId: asItemId("item-reasoning-1"),
+      payload: {
+        streamKind: "reasoning_text",
+        delta: "more thoughts",
+      },
+    });
+    // Assistant text for the same turn.
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-message-delta-reasoning"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-reasoning"),
+      itemId: asItemId("item-reasoning-msg"),
+      payload: {
+        streamKind: "assistant_text",
+        delta: "Final answer",
+      },
+    });
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-message-completed-reasoning"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-reasoning"),
+      itemId: asItemId("item-reasoning-msg"),
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+      },
+    });
+
+    const thread = await waitForThread(harness.readModel, (entry) =>
+      entry.messages.some(
+        (message: ProviderRuntimeTestMessage) =>
+          message.turnId === "turn-reasoning" &&
+          !message.streaming &&
+          (message.reasoningText ?? "").length > 0,
+      ),
+    );
+    const message = thread.messages.find(
+      (entry: ProviderRuntimeTestMessage) => entry.turnId === "turn-reasoning" && !entry.streaming,
+    );
+    expect(message?.reasoningText).toBe("Thinking... more thoughts");
+    expect(message?.text).toBe("Final answer");
+    expect(message?.streaming).toBe(false);
+  });
+
+  it("streams reasoning_text deltas live when assistant streaming is enabled", async () => {
+    const harness = await createHarness({ serverSettings: { enableAssistantStreaming: true } });
+    const now = "2026-01-01T00:00:00.000Z";
+
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-reasoning-delta-streaming"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-reasoning-streaming"),
+      itemId: asItemId("item-reasoning-streaming"),
+      payload: {
+        streamKind: "reasoning_text",
+        delta: "live thought",
+      },
+    });
+
+    const thread = await waitForThread(harness.readModel, (entry) =>
+      entry.messages.some(
+        (message: ProviderRuntimeTestMessage) =>
+          message.id === "assistant:item-reasoning-streaming" &&
+          message.streaming &&
+          (message.reasoningText ?? "").length > 0,
+      ),
+    );
+    const message = thread.messages.find(
+      (entry: ProviderRuntimeTestMessage) => entry.id === "assistant:item-reasoning-streaming",
+    );
+    expect(message?.reasoningText).toBe("live thought");
+    expect(message?.text).toBe("");
+    expect(message?.streaming).toBe(true);
+  });
+
   it("uses assistant item completion detail when no assistant deltas were streamed", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";

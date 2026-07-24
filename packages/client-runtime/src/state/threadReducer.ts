@@ -182,6 +182,7 @@ export function applyThreadDetailEvent(
         id: event.payload.messageId,
         role: event.payload.role,
         text: event.payload.text,
+        reasoningText: event.payload.reasoning,
         ...(event.payload.attachments !== undefined
           ? { attachments: event.payload.attachments }
           : {}),
@@ -203,6 +204,11 @@ export function applyThreadDetailEvent(
                     : message.text.length > 0
                       ? message.text
                       : entry.text,
+                  reasoningText: message.streaming
+                    ? `${entry.reasoningText ?? ""}${message.reasoningText ?? ""}`
+                    : (message.reasoningText ?? "").length > 0
+                      ? (message.reasoningText ?? "")
+                      : (entry.reasoningText ?? ""),
                   streaming: message.streaming,
                   ...(message.turnId !== undefined ? { turnId: message.turnId } : {}),
                   ...(message.streaming ? {} : { updatedAt: message.updatedAt }),

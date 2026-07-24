@@ -828,6 +828,21 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
               return event.payload.text;
             },
           });
+          // Merge reasoning (chain-of-thought) with the same streaming semantics
+          // as assistant text: append while streaming, replace on completion when
+          // non-empty, otherwise preserve what was already streamed.
+          const nextReasoningText = Option.match(existingMessage, {
+            onNone: () => event.payload.reasoning,
+            onSome: (message) => {
+              if (event.payload.streaming) {
+                return `${message.reasoningText ?? ""}${event.payload.reasoning}`;
+              }
+              if (event.payload.reasoning.length === 0) {
+                return message.reasoningText ?? "";
+              }
+              return event.payload.reasoning;
+            },
+          });
           const nextAttachments =
             event.payload.attachments !== undefined
               ? yield* materializeAttachmentsForProjection({
@@ -840,6 +855,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             turnId: event.payload.turnId,
             role: event.payload.role,
             text: nextText,
+            ...(nextReasoningText.length > 0 ? { reasoningText: nextReasoningText } : {}),
             ...(nextAttachments !== undefined ? { attachments: [...nextAttachments] } : {}),
             isStreaming: event.payload.streaming,
             createdAt: previousMessage?.createdAt ?? event.payload.createdAt,

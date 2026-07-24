@@ -228,6 +228,12 @@ export const OrchestrationMessage = Schema.Struct({
   id: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
+  // Chain-of-thought / reasoning trace captured from reasoning-capable providers
+  // (Codex reasoning, Claude thinking, Pi thinking_delta, OpenCode reasoning).
+  // Streamed alongside `text` for the same assistant message and rendered as a
+  // collapsible "Thinking" block in the UI. Optional: most messages (user
+  // messages, non-reasoning assistant replies) carry no reasoning trace.
+  reasoningText: Schema.optional(Schema.String),
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
@@ -747,6 +753,22 @@ const ThreadMessageAssistantCompleteCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+// Streams a chain-of-thought / reasoning delta into an existing assistant
+// message. Targets the same messageId as the assistant-text deltas for the
+// turn so the projector appends into `OrchestrationMessage.reasoningText`.
+// Reasoning has no separate "complete" command: the assistant message's
+// `streaming` flag (driven by assistant-text completion / turn completion)
+// governs when reasoning stops streaming.
+const ThreadMessageAssistantReasoningDeltaCommand = Schema.Struct({
+  type: Schema.Literal("thread.message.assistant.reasoning.delta"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  messageId: MessageId,
+  delta: Schema.String,
+  turnId: Schema.optional(TurnId),
+  createdAt: IsoDateTime,
+});
+
 const ThreadProposedPlanUpsertCommand = Schema.Struct({
   type: Schema.Literal("thread.proposed-plan.upsert"),
   commandId: CommandId,
@@ -789,6 +811,7 @@ const InternalOrchestrationCommand = Schema.Union([
   ThreadSessionSetCommand,
   ThreadMessageAssistantDeltaCommand,
   ThreadMessageAssistantCompleteCommand,
+  ThreadMessageAssistantReasoningDeltaCommand,
   ThreadProposedPlanUpsertCommand,
   ThreadTurnDiffCompleteCommand,
   ThreadActivityAppendCommand,
@@ -917,6 +940,10 @@ export const ThreadMessageSentPayload = Schema.Struct({
   messageId: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
+  // Reasoning (chain-of-thought) delta carried by the same `thread.message-sent`
+  // event. Empty for ordinary assistant-text deltas; non-empty when the event
+  // originates from a `thread.message.assistant.reasoning.delta` command.
+  reasoning: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
