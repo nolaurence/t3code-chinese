@@ -45,6 +45,7 @@ interface PiTextClientFactoryInput {
   readonly cwd: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly args: ReadonlyArray<string>;
+  readonly negotiateProtocolV2?: boolean;
 }
 
 type PiTextClientFactory = (
@@ -60,6 +61,7 @@ export interface PiTextGenerationOptions {
   readonly providerName?: string;
   readonly defaultBinaryPath?: string;
   readonly args?: ReadonlyArray<string>;
+  readonly negotiateProtocolV2?: boolean;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -121,6 +123,7 @@ export const makePiTextGeneration = Effect.fn("makePiTextGeneration")(function* 
         cwd: input.cwd,
         env: processEnvironment,
         args: textGenerationArgs,
+        ...(options.negotiateProtocolV2 ? { negotiateProtocolV2: true } : {}),
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
         Effect.mapError(

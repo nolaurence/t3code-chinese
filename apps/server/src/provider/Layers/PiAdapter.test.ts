@@ -51,6 +51,7 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
   readonly binaryPath?: string;
   readonly skillFlag?: "--skill" | "--skills";
   readonly promptResponseData?: unknown;
+  readonly negotiateProtocolV2?: boolean;
   readonly useDefaultIds?: boolean;
 }) {
   const provider = options?.provider ?? ProviderDriverKind.make("piAgent");
@@ -98,6 +99,7 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
       }),
     send: (command) => Effect.sync(() => void commands.push(command)),
     events: Stream.fromQueue(nativeEvents),
+    ready: Effect.succeed({ type: "ready" as const }),
     terminated: Deferred.await(terminated),
     close: Effect.sync(() => {
       closeCalls += 1;
@@ -118,6 +120,7 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
       provider,
       ...(options?.providerName ? { providerName: options.providerName } : {}),
       ...(options?.skillFlag ? { skillFlag: options.skillFlag } : {}),
+      ...(options?.negotiateProtocolV2 ? { negotiateProtocolV2: true } : {}),
       instanceId,
       createClient: (input) =>
         Effect.sync(() => {
@@ -204,6 +207,7 @@ describe("PiAdapter", () => {
           providerName: "Oh My Pi",
           instanceId: ompInstance,
           binaryPath: "fake-omp",
+          negotiateProtocolV2: true,
         });
         const session = yield* harness.adapter.startSession({
           threadId: THREAD_ID,
@@ -218,7 +222,10 @@ describe("PiAdapter", () => {
           providerInstanceId: "omp",
           status: "ready",
         });
-        expect(harness.factoryInputs[0]).toMatchObject({ binaryPath: "fake-omp" });
+        expect(harness.factoryInputs[0]).toMatchObject({
+          binaryPath: "fake-omp",
+          negotiateProtocolV2: true,
+        });
       }),
     ),
   );

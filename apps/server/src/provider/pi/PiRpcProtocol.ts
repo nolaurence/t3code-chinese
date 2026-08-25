@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import * as NodeBuffer from "node:buffer";
 
 export class PiRpcProtocolError extends Error {
   readonly line: string | undefined;
@@ -25,6 +26,7 @@ export interface PiRpcImageContent {
 }
 
 export type PiRpcCommand =
+  | { readonly id?: string; readonly type: "negotiate_protocol"; readonly protocolVersion: 2 }
   | {
       readonly id?: string;
       readonly type: "prompt";
@@ -124,10 +126,27 @@ export type PiRpcEvent = {
   readonly [key: string]: unknown;
 };
 
-export type PiRpcOutput = PiRpcResponse | PiExtensionUIRequest | PiAgentEvent | PiRpcEvent;
+export interface PiRpcReadyFrame {
+  readonly type: "ready";
+  readonly protocolVersion?: number;
+  readonly supportedProtocolVersions?: ReadonlyArray<number>;
+  readonly maxFrameBytes?: number;
+  readonly maxReassembledFrameBytes?: number;
+}
+
+export type PiRpcOutput =
+  | PiRpcResponse
+  | PiExtensionUIRequest
+  | PiAgentEvent
+  | PiRpcReadyFrame
+  | PiRpcEvent;
 
 export function isPiRpcResponse(output: PiRpcOutput): output is PiRpcResponse {
   return output.type === "response";
+}
+
+export function isPiRpcReadyFrame(output: PiRpcOutput): output is PiRpcReadyFrame {
+  return output.type === "ready";
 }
 
 export function decodePiRpcJsonString(value: string): PiRpcOutput {
@@ -179,15 +198,156 @@ export interface PiRpcLineDecoder {
   readonly finish: () => ReadonlyArray<PiRpcOutput>;
 }
 
+const DEFAULT_MAX_FRAME_BYTES = 1024 * 1024;
+const MAX_REASSEMBLED_FRAME_BYTES = 64 * 1024 * 1024;
+const MAX_CHUNK_PAYLOAD_BYTES = 256 * 1024;
+const BASE64_REGEX = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+interface PendingPiRpcChunks {
+  readonly chunkId: string;
+  readonly count: number;
+  readonly byteLength: number;
+  nextIndex: number;
+  receivedBytes: number;
+  readonly chunks: Array<Buffer>;
+}
+
+function decodeBase64Chunk(data: unknown): Buffer {
+  if (typeof data !== "string" || data.length === 0 || !BASE64_REGEX.test(data)) {
+    throw new PiRpcProtocolError("Pi RPC chunk data is not valid base64.");
+  }
+  const bytes = NodeBuffer.Buffer.from(data, "base64");
+  if (bytes.toString("base64") !== data) {
+    throw new PiRpcProtocolError("Pi RPC chunk data is not canonical base64.");
+  }
+  return bytes;
+}
+
+function makePiRpcFrameDecoder() {
+  let maxFrameBytes = DEFAULT_MAX_FRAME_BYTES;
+  let maxReassembledFrameBytes = MAX_REASSEMBLED_FRAME_BYTES;
+  let pending: PendingPiRpcChunks | undefined;
+
+  const updateAdvertisedLimits = (record: Record<string, unknown>) => {
+    if (record.type !== "ready") return;
+    if (
+      typeof record.maxFrameBytes === "number" &&
+      Number.isSafeInteger(record.maxFrameBytes) &&
+      record.maxFrameBytes > 0
+    ) {
+      maxFrameBytes = Math.min(record.maxFrameBytes, MAX_REASSEMBLED_FRAME_BYTES);
+    }
+    if (
+      typeof record.maxReassembledFrameBytes === "number" &&
+      Number.isSafeInteger(record.maxReassembledFrameBytes) &&
+      record.maxReassembledFrameBytes >= maxFrameBytes
+    ) {
+      maxReassembledFrameBytes = Math.min(
+        record.maxReassembledFrameBytes,
+        MAX_REASSEMBLED_FRAME_BYTES,
+      );
+    }
+  };
+
+  const push = (value: unknown): unknown | undefined => {
+    const record = asRecord(value);
+    if (!record) throw new PiRpcProtocolError("Pi RPC frame must be an object.");
+    if (record.type !== "rpc_chunk") {
+      if (pending) throw new PiRpcProtocolError("Pi RPC chunk sequence was interrupted.");
+      updateAdvertisedLimits(record);
+      return record;
+    }
+
+    const { chunkId, index, count, byteLength } = record;
+    if (
+      typeof chunkId !== "string" ||
+      chunkId.length === 0 ||
+      chunkId.length > 128 ||
+      typeof index !== "number" ||
+      !Number.isSafeInteger(index) ||
+      typeof count !== "number" ||
+      !Number.isSafeInteger(count) ||
+      typeof byteLength !== "number" ||
+      !Number.isSafeInteger(byteLength) ||
+      index < 0 ||
+      count < 2 ||
+      count > Math.ceil(maxReassembledFrameBytes / MAX_CHUNK_PAYLOAD_BYTES) ||
+      index >= count ||
+      byteLength < maxFrameBytes ||
+      byteLength > maxReassembledFrameBytes
+    ) {
+      throw new PiRpcProtocolError("Pi RPC chunk metadata is invalid.");
+    }
+
+    const bytes = decodeBase64Chunk(record.data);
+    if (bytes.byteLength > MAX_CHUNK_PAYLOAD_BYTES) {
+      throw new PiRpcProtocolError("Pi RPC chunk payload exceeds the transport limit.");
+    }
+    if (!pending) {
+      if (index !== 0) {
+        throw new PiRpcProtocolError("Pi RPC chunk sequence must start at index zero.");
+      }
+      pending = {
+        chunkId,
+        count,
+        byteLength,
+        nextIndex: 0,
+        receivedBytes: 0,
+        chunks: [],
+      };
+    }
+    if (
+      pending.chunkId !== chunkId ||
+      pending.count !== count ||
+      pending.byteLength !== byteLength ||
+      pending.nextIndex !== index
+    ) {
+      throw new PiRpcProtocolError("Pi RPC chunk sequence does not match its preceding frames.");
+    }
+
+    pending.chunks.push(bytes);
+    pending.receivedBytes += bytes.byteLength;
+    pending.nextIndex += 1;
+    if (pending.receivedBytes > pending.byteLength) {
+      throw new PiRpcProtocolError("Pi RPC chunk sequence exceeds its declared length.");
+    }
+    if (pending.nextIndex < pending.count) return undefined;
+    if (pending.receivedBytes !== pending.byteLength) {
+      throw new PiRpcProtocolError("Pi RPC chunk sequence does not match its declared length.");
+    }
+
+    const completed = pending;
+    pending = undefined;
+    try {
+      const decoded = new TextDecoder("utf-8", { fatal: true }).decode(
+        NodeBuffer.Buffer.concat(completed.chunks, completed.receivedBytes),
+      );
+      return decodeUnknownJsonString(decoded);
+    } catch (cause) {
+      throw new PiRpcProtocolError("Pi RPC chunk sequence did not contain valid UTF-8 JSON.", {
+        cause,
+      });
+    }
+  };
+
+  const finish = () => {
+    if (pending) throw new PiRpcProtocolError("Pi RPC stream ended during a chunk sequence.");
+  };
+
+  return { push, finish };
+}
+
 export function makePiRpcLineDecoder(): PiRpcLineDecoder {
   const textDecoder = new TextDecoder();
+  const frameDecoder = makePiRpcFrameDecoder();
   let buffer = "";
 
   const decodeLine = (rawLine: string): PiRpcOutput | null => {
     const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
     if (line.trim().length === 0) return null;
     try {
-      return decodePiRpcJsonString(line);
+      const frame = frameDecoder.push(decodeUnknownJsonString(line));
+      return frame === undefined ? null : decodePiRpcOutput(frame);
     } catch (cause) {
       if (cause instanceof PiRpcProtocolError) throw cause;
       throw new PiRpcProtocolError("Pi RPC emitted malformed JSON.", {
@@ -222,6 +382,7 @@ export function makePiRpcLineDecoder(): PiRpcLineDecoder {
           line: buffer.slice(0, 500),
         });
       }
+      frameDecoder.finish();
       return records;
     },
   };

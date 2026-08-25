@@ -7,6 +7,7 @@ import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { ChildProcessSpawner } from "effect/unstable/process";
+import * as NodeBuffer from "node:buffer";
 
 import {
   makePiRpcClient,
@@ -118,6 +119,116 @@ describe("PiRpcClient", () => {
     ),
   );
 
+  it.effect("negotiates protocol v2 before reassembling a chunked response", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const stdout = yield* Queue.unbounded<Uint8Array>();
+        const commands: string[] = [];
+        yield* Queue.offer(
+          stdout,
+          encoder.encode(
+            `${encodePiRpcJsonString({
+              type: "ready",
+              protocolVersion: 1,
+              supportedProtocolVersions: [1, 2],
+              maxFrameBytes: 1024 * 1024,
+              maxReassembledFrameBytes: 64 * 1024 * 1024,
+            })}\n`,
+          ),
+        );
+        const spawner = ChildProcessSpawner.make(() =>
+          Effect.succeed(
+            ChildProcessSpawner.makeHandle({
+              pid: ChildProcessSpawner.ProcessId(44),
+              exitCode: Effect.never,
+              isRunning: Effect.succeed(true),
+              kill: () => Effect.void,
+              unref: Effect.succeed(Effect.void),
+              stdin: Sink.forEach((bytes: Uint8Array) => {
+                const request = decodeUnknownJsonString(new TextDecoder().decode(bytes)) as Record<
+                  string,
+                  unknown
+                >;
+                commands.push(String(request.type));
+                if (request.type === "negotiate_protocol") {
+                  return Queue.offer(
+                    stdout,
+                    encoder.encode(
+                      `${encodePiRpcJsonString({
+                        type: "response",
+                        id: request.id,
+                        command: request.type,
+                        success: true,
+                        data: { protocolVersion: 2 },
+                      })}\n`,
+                    ),
+                  ).pipe(Effect.asVoid);
+                }
+
+                const response = {
+                  type: "response",
+                  id: request.id,
+                  command: request.type,
+                  success: true,
+                  data: {
+                    models: [
+                      {
+                        provider: "openrouter",
+                        id: "large-model",
+                        name: "M".repeat(1024 * 1024),
+                      },
+                    ],
+                  },
+                };
+                const responseBytes = NodeBuffer.Buffer.from(
+                  encodePiRpcJsonString(response),
+                  "utf8",
+                );
+                const chunkSize = 256 * 1024;
+                const count = Math.ceil(responseBytes.byteLength / chunkSize);
+                return Queue.offerAll(
+                  stdout,
+                  Array.from({ length: count }, (_, index) =>
+                    encoder.encode(
+                      `${encodePiRpcJsonString({
+                        type: "rpc_chunk",
+                        chunkId: "rpc-models-1",
+                        index,
+                        count,
+                        byteLength: responseBytes.byteLength,
+                        data: responseBytes
+                          .subarray(index * chunkSize, (index + 1) * chunkSize)
+                          .toString("base64"),
+                      })}\n`,
+                    ),
+                  ),
+                ).pipe(Effect.asVoid);
+              }),
+              stdout: Stream.fromQueue(stdout),
+              stderr: Stream.empty,
+              all: Stream.empty,
+              getInputFd: () => Sink.drain,
+              getOutputFd: () => Stream.empty,
+            }),
+          ),
+        );
+
+        const client = yield* spawnPiRpcClient({
+          binaryPath: "/opt/homebrew/bin/omp",
+          cwd: "/tmp/omp-project",
+          negotiateProtocolV2: true,
+        }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+        const response = yield* client.request({ type: "get_available_models" });
+
+        expect(commands).toEqual(["negotiate_protocol", "get_available_models"]);
+        expect(response).toMatchObject({
+          success: true,
+          data: { models: [expect.objectContaining({ id: "large-model" })] },
+        });
+      }),
+    ),
+  );
+
   it.effect("correlates concurrent requests by generated id", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -216,6 +327,7 @@ describe("PiRpcClient", () => {
         const error = yield* harness.client.request({ type: "get_state" }).pipe(Effect.flip);
         expect(error).toBeInstanceOf(PiRpcClientError);
         expect(error.detail).toContain("model unavailable");
+        expect(error.message).toContain("model unavailable");
       }),
     ),
   );
@@ -231,6 +343,46 @@ describe("PiRpcClient", () => {
 
         const error = yield* Fiber.join(pending).pipe(Effect.flip);
         expect(error.detail).toContain("17");
+      }),
+    ),
+  );
+
+  it.effect("includes bounded sanitized stderr when the Pi process exits", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const spawner = ChildProcessSpawner.make(() =>
+          Effect.succeed(
+            ChildProcessSpawner.makeHandle({
+              pid: ChildProcessSpawner.ProcessId(43),
+              exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(1)),
+              isRunning: Effect.succeed(false),
+              kill: () => Effect.void,
+              unref: Effect.succeed(Effect.void),
+              stdin: Sink.drain,
+              stdout: Stream.empty,
+              stderr: Stream.encodeText(
+                Stream.make(
+                  `${String.fromCharCode(27)}[31mNo models available.${String.fromCharCode(27)}[0m\nAuthorization: Bearer secret-token\n`,
+                ),
+              ),
+              all: Stream.empty,
+              getInputFd: () => Sink.drain,
+              getOutputFd: () => Stream.empty,
+            }),
+          ),
+        );
+        const client = yield* spawnPiRpcClient({
+          binaryPath: "/opt/homebrew/bin/pi",
+          cwd: "/tmp/pi-project",
+          captureStderrOnExit: true,
+        }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+
+        const error = yield* client.request({ type: "get_available_models" }).pipe(Effect.flip);
+
+        expect(error.exitCode).toBe(1);
+        expect(error.stderr).toContain("No models available.");
+        expect(error.stderr).toContain("Authorization: <redacted>");
+        expect(error.stderr).not.toContain("secret-token");
       }),
     ),
   );

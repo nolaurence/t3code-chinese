@@ -49,6 +49,7 @@ export interface PiClientFactoryInput {
   readonly cwd: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly args?: ReadonlyArray<string>;
+  readonly negotiateProtocolV2?: boolean;
 }
 
 export type PiClientFactory = (
@@ -67,6 +68,7 @@ export interface PiAdapterOptions {
   readonly environment?: NodeJS.ProcessEnv;
   readonly createClient?: PiClientFactory;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  readonly negotiateProtocolV2?: boolean;
   readonly now?: () => string;
   readonly nextTurnId?: () => string;
 }
@@ -200,6 +202,7 @@ const defaultCreateClient: PiClientFactory = (input) =>
     cwd: input.cwd,
     ...(input.env ? { env: input.env } : {}),
     ...(input.args ? { args: input.args } : {}),
+    ...(input.negotiateProtocolV2 ? { negotiateProtocolV2: true } : {}),
   });
 
 export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
@@ -404,6 +407,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
         cwd,
         ...(Object.keys(environment).length > 0 ? { env: environment } : {}),
         ...(piArgs.length > 0 ? { args: piArgs } : {}),
+        ...(options.negotiateProtocolV2 ? { negotiateProtocolV2: true } : {}),
       }).pipe(
         Effect.provideService(Scope.Scope, sessionScope),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),

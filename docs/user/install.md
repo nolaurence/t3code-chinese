@@ -74,6 +74,8 @@ from.
 
 Oh My Pi is configured as its own provider in T3 Code. It does not reuse the Pi provider's binary
 path, configuration directory, sessions, or provider instances.
+Run `omp` once on the server machine and configure a model provider before enabling it in T3 Code.
+Until then, T3 Code reports that Oh My Pi has no models with configured credentials.
 
 ### Binary Discovery
 

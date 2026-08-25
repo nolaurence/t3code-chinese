@@ -28,6 +28,8 @@ transport, config, and event shapes are mapped.
 Pi and Oh My Pi are separate drivers with separate settings, runtime identities, continuation
 groups, and package update metadata. They share the Pi-compatible RPC transport and event mapper;
 the driver supplies the provider identity, presentation name, binary, and supported launch flags.
+Oh My Pi also negotiates RPC protocol v2 and reassembles chunked frames so large model catalogs and
+terminal events remain lossless; Pi stays on its legacy-compatible v1 transport.
 
 ## Registry and routing
 

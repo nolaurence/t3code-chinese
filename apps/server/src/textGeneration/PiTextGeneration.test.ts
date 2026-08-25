@@ -37,6 +37,7 @@ it.layer(NodeServices.layer)("PiTextGeneration", (it) =>
           },
           send: () => Effect.void,
           events: Stream.make({ type: "agent_end" as const }),
+          ready: Effect.succeed({ type: "ready" as const }),
           terminated: Effect.never,
           close: Effect.void,
         };
@@ -92,9 +93,11 @@ it.layer(NodeServices.layer)("PiTextGeneration", (it) =>
             providerName: "Oh My Pi",
             defaultBinaryPath: "omp",
             args: ["--no-tools", "--no-session", "--no-extensions", "--no-skills"],
+            negotiateProtocolV2: true,
             createClient: (input) => {
               ompSpawnArgs = input.args;
               expect(input.env?.PI_CODING_AGENT_DIR).toBe("/tmp/omp-home");
+              expect(input.negotiateProtocolV2).toBe(true);
               return Effect.succeed(client);
             },
           },

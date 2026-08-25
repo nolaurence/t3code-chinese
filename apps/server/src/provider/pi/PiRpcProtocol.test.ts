@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import * as NodeBuffer from "node:buffer";
 
 import { decodePiRpcOutput, makePiRpcLineDecoder, PiRpcProtocolError } from "./PiRpcProtocol.ts";
 
@@ -71,6 +72,71 @@ describe("PiRpcProtocol", () => {
   it("accepts CRLF input while retaining strict LF record boundaries", () => {
     const decoder = makePiRpcLineDecoder();
     expect(decoder.push('{"type":"agent_start"}\r\n')).toEqual([{ type: "agent_start" }]);
+  });
+
+  it("reassembles protocol v2 chunk frames into one logical response", () => {
+    const decoder = makePiRpcLineDecoder();
+    expect(
+      decoder.push(
+        `${JSON.stringify({
+          type: "ready",
+          protocolVersion: 1,
+          supportedProtocolVersions: [1, 2],
+          maxFrameBytes: 64,
+          maxReassembledFrameBytes: 64 * 1024 * 1024,
+        })}\n`,
+      ),
+    ).toHaveLength(1);
+
+    const response = {
+      type: "response",
+      id: "models-1",
+      command: "get_available_models",
+      success: true,
+      data: { models: [{ provider: "openrouter", id: "large-model", name: "M".repeat(180) }] },
+    };
+    const bytes = NodeBuffer.Buffer.from(JSON.stringify(response), "utf8");
+    const chunkSize = 60;
+    const count = Math.ceil(bytes.byteLength / chunkSize);
+    const frames = Array.from({ length: count }, (_, index) => ({
+      type: "rpc_chunk",
+      chunkId: "rpc-models-1",
+      index,
+      count,
+      byteLength: bytes.byteLength,
+      data: bytes.subarray(index * chunkSize, (index + 1) * chunkSize).toString("base64"),
+    }));
+
+    const records = decoder.push(`${frames.map((frame) => JSON.stringify(frame)).join("\n")}\n`);
+
+    expect(records).toEqual([response]);
+    expect(decoder.finish()).toEqual([]);
+  });
+
+  it("rejects interrupted protocol v2 chunk sequences", () => {
+    const decoder = makePiRpcLineDecoder();
+    decoder.push(
+      `${JSON.stringify({
+        type: "ready",
+        maxFrameBytes: 64,
+        maxReassembledFrameBytes: 64 * 1024 * 1024,
+      })}\n`,
+    );
+    const data = NodeBuffer.Buffer.from(
+      '{"type":"agent_start","padding":"' + "x".repeat(80) + '"}',
+    );
+    decoder.push(
+      `${JSON.stringify({
+        type: "rpc_chunk",
+        chunkId: "rpc-interrupted",
+        index: 0,
+        count: 2,
+        byteLength: data.byteLength,
+        data: data.subarray(0, 60).toString("base64"),
+      })}\n`,
+    );
+
+    expect(() => decoder.push('{"type":"agent_start"}\n')).toThrow(/interrupted/i);
   });
 
   it("rejects malformed JSON while accepting forward-compatible event types", () => {
