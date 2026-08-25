@@ -2,14 +2,16 @@ import {
   type EnvironmentId,
   isProviderDriverKind,
   ProjectId,
+  type MessageId,
   type ModelSelection,
   type ProviderDriverKind,
   type ServerProvider,
+  type ScopedProjectRef,
   type ScopedThreadRef,
   type ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
-import { type ChatMessage, type SessionPhase, type Thread } from "../types";
+import { type ChatMessage, type SessionPhase, type Thread, type ThreadShell } from "../types";
 import { type ComposerImageAttachment, type DraftThreadState } from "../composerDraftStore";
 import * as Schema from "effect/Schema";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -20,27 +22,143 @@ import {
   type TerminalContextDraft,
 } from "../lib/terminalContext";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
-import { createTranslator, type Translate } from "../i18n/messages";
+import type { ComposerSubmissionIntent } from "../composer-logic";
+import type { TimelineEntry } from "../session-logic";
+import type { Translate } from "../i18n";
 
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "t3code:last-invoked-script-by-project";
 export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
 export const MAX_HIDDEN_MOUNTED_PREVIEW_THREADS = 3;
-
-const DEFAULT_TRANSLATE = createTranslator("en");
+export const ENVIRONMENT_RECONNECT_WARNING_GRACE_MS = 2_000;
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
+
+export function shouldDockDraftHeroForSubmission(input: {
+  isDraftHeroState: boolean;
+  activeThreadKey: string | null;
+  submissionIntent: ComposerSubmissionIntent;
+}): boolean {
+  return (
+    input.submissionIntent === "foreground" &&
+    input.isDraftHeroState &&
+    input.activeThreadKey !== null
+  );
+}
+
+export function shouldReleaseTimelineAnchorForToolActivity(input: {
+  anchorMessageId: MessageId | null;
+  liveFollowEnabled: boolean;
+  runningTurnId: TurnId | null;
+  timelineEntries: ReadonlyArray<TimelineEntry>;
+}): boolean {
+  if (input.anchorMessageId === null || !input.liveFollowEnabled || input.runningTurnId === null) {
+    return false;
+  }
+
+  return input.timelineEntries.some((timelineEntry) => {
+    if (timelineEntry.kind !== "work" || timelineEntry.entry.turnId !== input.runningTurnId) {
+      return false;
+    }
+
+    const entry = timelineEntry.entry;
+    return (
+      entry.tone === "tool" ||
+      entry.itemType !== undefined ||
+      entry.requestKind !== undefined ||
+      (entry.command?.trim().length ?? 0) > 0
+    );
+  });
+}
+
+export function resolveDraftHeroState(input: {
+  isLocalDraftThread: boolean;
+  hasTimelineEntries: boolean;
+  isWorking: boolean;
+  draftHeroDockRequested: boolean;
+  backgroundSubmissionPending: boolean;
+}): boolean {
+  if (input.backgroundSubmissionPending) {
+    return true;
+  }
+  return (
+    input.isLocalDraftThread &&
+    !input.hasTimelineEntries &&
+    !input.isWorking &&
+    !input.draftHeroDockRequested
+  );
+}
+
+export function resolveDraftPromotionNavigationTarget(input: {
+  serverThreadRef: ScopedThreadRef | null;
+  serverThreadStarted: boolean;
+  backgroundSubmissionPending: boolean;
+}): ScopedThreadRef | null {
+  if (input.backgroundSubmissionPending) {
+    return null;
+  }
+  return input.serverThreadStarted ? input.serverThreadRef : null;
+}
+
+export function scheduleEnvironmentReconnectWarning(showWarning: () => void): () => void {
+  const timeoutId = globalThis.setTimeout(showWarning, ENVIRONMENT_RECONNECT_WARNING_GRACE_MS);
+  return () => globalThis.clearTimeout(timeoutId);
+}
+
+export function hasEnvironmentReconnectWarningGraceElapsed(
+  activeEnvironmentId: EnvironmentId | null,
+  elapsedEnvironmentId: EnvironmentId | null,
+): boolean {
+  return activeEnvironmentId !== null && activeEnvironmentId === elapsedEnvironmentId;
+}
+
+export function startNewThreadForProject(
+  projectRef: ScopedProjectRef | null,
+  handleNewThread: (projectRef: ScopedProjectRef) => Promise<unknown>,
+): boolean {
+  if (projectRef === null) return false;
+  void handleNewThread(projectRef);
+
+  return true;
+}
+
+export function resolveThreadMetadataUpdateForNextTurn(input: {
+  currentModelSelection: ModelSelection;
+  nextModelSelection?: ModelSelection;
+  currentBranch: string | null;
+  nextBranch?: string;
+}): {
+  modelSelection?: ModelSelection;
+  branch?: string;
+  worktreePath?: null;
+} | null {
+  const nextModelSelection = input.nextModelSelection;
+  const modelSelectionChanged =
+    nextModelSelection !== undefined &&
+    (nextModelSelection.model !== input.currentModelSelection.model ||
+      nextModelSelection.instanceId !== input.currentModelSelection.instanceId ||
+      JSON.stringify(nextModelSelection.options ?? null) !==
+        JSON.stringify(input.currentModelSelection.options ?? null));
+  const branchChanged = input.nextBranch !== undefined && input.nextBranch !== input.currentBranch;
+  if (!modelSelectionChanged && !branchChanged) {
+    return null;
+  }
+  return {
+    ...(modelSelectionChanged ? { modelSelection: nextModelSelection } : {}),
+    ...(branchChanged ? { branch: input.nextBranch, worktreePath: null } : {}),
+  };
+}
 
 export function buildLocalDraftThread(
   threadId: ThreadId,
   draftThread: DraftThreadState,
   fallbackModelSelection: ModelSelection,
-  t: Translate = DEFAULT_TRANSLATE,
+  t?: Translate,
 ): Thread {
   return {
     id: threadId,
     environmentId: draftThread.environmentId,
     projectId: draftThread.projectId,
-    title: t("sidebar.newThread"),
+    title: t?.("sidebar.newThread") ?? "New thread",
     modelSelection: fallbackModelSelection,
     runtimeMode: draftThread.runtimeMode,
     interactionMode: draftThread.interactionMode,
@@ -49,6 +167,8 @@ export function buildLocalDraftThread(
     createdAt: draftThread.createdAt,
     updatedAt: draftThread.createdAt,
     archivedAt: null,
+    settledOverride: null,
+    settledAt: null,
     deletedAt: null,
     latestTurn: null,
     branch: draftThread.branch,
@@ -59,8 +179,19 @@ export function buildLocalDraftThread(
   };
 }
 
+export function buildLoadingThreadFromShell(shell: ThreadShell): Thread {
+  return {
+    ...shell,
+    messages: [],
+    proposedPlans: [],
+    activities: [],
+    checkpoints: [],
+    deletedAt: null,
+  };
+}
+
 export function shouldWriteThreadErrorToCurrentServerThread(input: {
-  serverThread:
+  activeServerThread:
     | {
         environmentId: EnvironmentId;
         id: ThreadId;
@@ -71,10 +202,10 @@ export function shouldWriteThreadErrorToCurrentServerThread(input: {
   targetThreadId: ThreadId;
 }): boolean {
   return Boolean(
-    input.serverThread &&
+    input.activeServerThread &&
     input.targetThreadId === input.routeThreadRef.threadId &&
-    input.serverThread.environmentId === input.routeThreadRef.environmentId &&
-    input.serverThread.id === input.targetThreadId,
+    input.activeServerThread.environmentId === input.routeThreadRef.environmentId &&
+    input.activeServerThread.id === input.targetThreadId,
   );
 }
 
@@ -197,6 +328,24 @@ export function resolveSendEnvMode(input: {
   return input.isGitRepo ? input.requestedEnvMode : "local";
 }
 
+export function resolveBackgroundDraftWorkspaceOptions(input: {
+  envMode: DraftThreadEnvMode;
+  branch: string | null;
+  startFromOrigin: boolean;
+}): {
+  envMode: DraftThreadEnvMode;
+  branch: string | null;
+  worktreePath: null;
+  startFromOrigin: boolean;
+} {
+  return {
+    envMode: input.envMode,
+    branch: input.branch,
+    worktreePath: null,
+    startFromOrigin: input.envMode === "worktree" && input.startFromOrigin,
+  };
+}
+
 export function cloneComposerImageForRetry(
   image: ComposerImageAttachment,
 ): ComposerImageAttachment {
@@ -249,19 +398,68 @@ export function deriveComposerSendState(options: {
 export function buildExpiredTerminalContextToastCopy(
   expiredTerminalContextCount: number,
   variant: "omitted" | "empty",
-  t: Translate = DEFAULT_TRANSLATE,
+  t?: Translate,
 ): { title: string; description: string } {
   const count = Math.max(1, Math.floor(expiredTerminalContextCount));
+  const noun = count === 1 ? "Expired terminal context" : "Expired terminal contexts";
   if (variant === "empty") {
     return {
-      title: t(count === 1 ? "chat.terminalContext.emptyOne" : "chat.terminalContext.emptyMany"),
-      description: t("chat.terminalContext.emptyDescription"),
+      title:
+        t?.(count === 1 ? "chat.terminalContext.emptyOne" : "chat.terminalContext.emptyMany") ??
+        `${noun} won't be sent`,
+      description:
+        t?.("chat.terminalContext.emptyDescription") ??
+        "Remove it or re-add it to include terminal output.",
     };
   }
   return {
-    title: t(count === 1 ? "chat.terminalContext.omittedOne" : "chat.terminalContext.omittedMany"),
-    description: t("chat.terminalContext.omittedDescription"),
+    title:
+      t?.(count === 1 ? "chat.terminalContext.omittedOne" : "chat.terminalContext.omittedMany") ??
+      `${noun} omitted from message`,
+    description:
+      t?.("chat.terminalContext.omittedDescription") ??
+      "Re-add it if you want that terminal output included.",
   };
+}
+
+export function branchMismatchKey(
+  threadId: string | null,
+  mismatch: { threadBranch: string; currentBranch: string } | null,
+): string | null {
+  if (!threadId || !mismatch) {
+    return null;
+  }
+  return `${threadId}:${mismatch.threadBranch}:${mismatch.currentBranch}`;
+}
+
+// The mismatch banner only matters when the user is about to send: passive
+// reading of an old thread carries no risk (the branch picker tint already
+// covers ambient awareness). Draft content is the intent signal — composer
+// focus is useless here because ChatView autofocuses the composer on every
+// thread open. `wasShownForCurrentMismatch` keeps the banner mounted once
+// revealed so it doesn't flicker away when the draft is cleared.
+export function shouldShowBranchMismatchBanner(input: {
+  hasMismatch: boolean;
+  isDismissed: boolean;
+  composerHasContent: boolean;
+  wasShownForCurrentMismatch: boolean;
+}): boolean {
+  if (!input.hasMismatch || input.isDismissed) {
+    return false;
+  }
+  return input.composerHasContent || input.wasShownForCurrentMismatch;
+}
+
+// Session-scoped (module-level so it survives ChatView remounts, e.g. route
+// changes). Durable cross-device dismissal is planned as a server-side ack.
+const sessionDismissedBranchMismatchKeys = new Set<string>();
+
+export function dismissBranchMismatchForSession(key: string): void {
+  sessionDismissedBranchMismatchKeys.add(key);
+}
+
+export function isBranchMismatchDismissedForSession(key: string | null): boolean {
+  return key !== null && sessionDismissedBranchMismatchKeys.has(key);
 }
 
 export function threadHasStarted(thread: Thread | null | undefined): boolean {
@@ -305,18 +503,13 @@ export function deriveLockedProvider(input: {
   return narrowedThreadProvider ?? narrowedSelectedProvider ?? null;
 }
 
-export function getStartedThreadModelChangeBlockReason(
-  input: {
-    providers: ReadonlyArray<
-      Pick<ServerProvider, "instanceId" | "requiresNewThreadForModelChange">
-    >;
-    hasStartedSession: boolean;
-    currentModelSelection: ModelSelection;
-    currentProviderInstanceId?: ModelSelection["instanceId"] | null | undefined;
-    nextModelSelection: ModelSelection;
-  },
-  t: Translate = DEFAULT_TRANSLATE,
-): { title: string; description: string } | null {
+export function getStartedThreadModelChangeBlockReason(input: {
+  providers: ReadonlyArray<Pick<ServerProvider, "instanceId" | "requiresNewThreadForModelChange">>;
+  hasStartedSession: boolean;
+  currentModelSelection: ModelSelection;
+  currentProviderInstanceId?: ModelSelection["instanceId"] | null | undefined;
+  nextModelSelection: ModelSelection;
+}): { title: string; description: string } | null {
   if (!input.hasStartedSession) {
     return null;
   }
@@ -343,8 +536,8 @@ export function getStartedThreadModelChangeBlockReason(
     return null;
   }
   return {
-    title: t("chat.modelChange.newThread"),
-    description: t("chat.modelChange.newThreadDescription"),
+    title: "Start a new chat to change models",
+    description: "This provider does not allow switching models after a conversation has started.",
   };
 }
 
@@ -396,6 +589,8 @@ export async function waitForStartedServerThread(
 export interface LocalDispatchSnapshot {
   startedAt: string;
   preparingWorktree: boolean;
+  submissionIntent: ComposerSubmissionIntent;
+  latestUserMessageId: ChatMessage["id"] | null;
   latestTurnTurnId: TurnId | null;
   latestTurnRequestedAt: string | null;
   latestTurnStartedAt: string | null;
@@ -406,13 +601,19 @@ export interface LocalDispatchSnapshot {
 
 export function createLocalDispatchSnapshot(
   activeThread: Thread | undefined,
-  options?: { preparingWorktree?: boolean },
+  options?: {
+    preparingWorktree?: boolean;
+    submissionIntent?: ComposerSubmissionIntent;
+  },
 ): LocalDispatchSnapshot {
   const latestTurn = activeThread?.latestTurn ?? null;
   const session = activeThread?.session ?? null;
+  const latestUserMessage = activeThread?.messages.findLast((message) => message.role === "user");
   return {
     startedAt: new Date().toISOString(),
     preparingWorktree: Boolean(options?.preparingWorktree),
+    submissionIntent: options?.submissionIntent ?? "foreground",
+    latestUserMessageId: latestUserMessage?.id ?? null,
     latestTurnTurnId: latestTurn?.turnId ?? null,
     latestTurnRequestedAt: latestTurn?.requestedAt ?? null,
     latestTurnStartedAt: latestTurn?.startedAt ?? null,
@@ -426,6 +627,7 @@ export function hasServerAcknowledgedLocalDispatch(input: {
   localDispatch: LocalDispatchSnapshot | null;
   phase: SessionPhase;
   latestTurn: Thread["latestTurn"] | null;
+  latestUserMessageId: ChatMessage["id"] | null;
   session: Thread["session"] | null;
   hasPendingApproval: boolean;
   hasPendingUserInput: boolean;
@@ -437,9 +639,14 @@ export function hasServerAcknowledgedLocalDispatch(input: {
   if (input.hasPendingApproval || input.hasPendingUserInput || Boolean(input.threadError)) {
     return true;
   }
+  if (input.phase === "connecting") {
+    return false;
+  }
 
   const latestTurn = input.latestTurn ?? null;
   const session = input.session ?? null;
+  const latestUserMessageChanged =
+    input.localDispatch.latestUserMessageId !== input.latestUserMessageId;
   const latestTurnChanged =
     input.localDispatch.latestTurnTurnId !== (latestTurn?.turnId ?? null) ||
     input.localDispatch.latestTurnRequestedAt !== (latestTurn?.requestedAt ?? null) ||
@@ -447,6 +654,13 @@ export function hasServerAcknowledgedLocalDispatch(input: {
     input.localDispatch.latestTurnCompletedAt !== (latestTurn?.completedAt ?? null);
 
   if (input.phase === "running") {
+    // Steering adds a user message to the current running turn without
+    // necessarily changing any of the turn timestamps. Treat that projected
+    // message as the server acknowledgment so the composer does not remain
+    // stuck in its local "Sending" state until the turn settles.
+    if (latestUserMessageChanged) {
+      return true;
+    }
     if (!latestTurnChanged) {
       return false;
     }

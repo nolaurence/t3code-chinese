@@ -1,30 +1,46 @@
-import { ArchiveIcon, ArchiveX, LoaderIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveX, ChevronRightIcon, LoaderIcon, SettingsIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
-  defaultInstanceIdForDriver,
+  type BackgroundActivityProfile,
   type DesktopUpdateChannel,
-  PROVIDER_DISPLAY_NAMES,
   ProviderDriverKind,
-  type ProviderInstanceConfig,
-  type ProviderInstanceId,
   type ScopedThreadRef,
+  type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   settlePromise,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import {
+  DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
+  DEFAULT_UNIFIED_SETTINGS,
+  type EnvironmentIdentificationMode,
+  MAX_APPEARANCE_CONTRAST,
+  MAX_CODE_FONT_SIZE,
+  MAX_GLASS_OPACITY,
+  MAX_INTERFACE_FONT_SIZE,
+  MAX_PROMPT_FONT_SIZE,
+  MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_CODE_FONT_SIZE,
+  MIN_APPEARANCE_CONTRAST,
+  MIN_GLASS_OPACITY,
+  MIN_INTERFACE_FONT_SIZE,
+  MIN_PROMPT_FONT_SIZE,
+  MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+  MIN_TERMINAL_FONT_SIZE,
+} from "@t3tools/contracts/settings";
+import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import { createModelSelection } from "@t3tools/shared/model";
-import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
-import * as Result from "effect/Result";
-import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
+import * as Schema from "effect/Schema";
+import { APP_VERSION, HOSTED_APP_CHANNEL } from "../../branding";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
@@ -34,15 +50,27 @@ import {
 } from "../../components/desktopUpdate.logic";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { TraitsPicker } from "../chat/TraitsPicker";
+import {
+  resolveEnvironmentIdentificationPillLabel,
+  useEnvironmentStageLabel,
+} from "../SidebarStageBackdrop";
 import { isElectron } from "../../env";
 import { buildHostedChannelSelectionUrl, type HostedAppChannel } from "../../hostedPairing";
-import { useTheme } from "../../hooks/useTheme";
+import { useCustomThemes } from "../../hooks/useCustomThemes";
+import {
+  readAppearanceModePreference,
+  readThemeHalves,
+  readThemePreference,
+  useTheme,
+} from "../../hooks/useTheme";
+import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
   getCustomModelOptionsByInstance,
   resolveAppModelSelectionState,
+  withoutPlanAgentSelection,
 } from "../../modelSelection";
 import {
   applyProviderInstanceSettings,
@@ -50,97 +78,141 @@ import {
   sortProviderInstanceEntries,
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
-import { useI18n } from "../../i18n/I18nProvider";
-import {
-  primaryServerObservabilityAtom,
-  primaryServerProvidersAtom,
-  serverEnvironment,
-} from "../../state/server";
-import { usePrimaryEnvironment } from "../../state/environments";
+import { isMacPlatform } from "../../lib/utils";
+import { useI18n, type MessageKey } from "../../i18n";
+import { primaryServerObservabilityAtom, primaryServerProvidersAtom } from "../../state/server";
 import { useProjects } from "../../state/entities";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
-import { formatRelativeTime, formatRelativeTimeLabel } from "../../timestampFormat";
+import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { Button } from "../ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "../ui/dialog";
 import { DraftInput } from "../ui/draft-input";
+import { Input } from "../ui/input";
+import {
+  DEFAULT_CODE_FONT_STACK,
+  DEFAULT_SANS_FONT_STACK,
+  isFontFamilyAvailable,
+  isMonospaceFamily,
+  resolveDefaultFamilyLabel,
+  resolveTerminalFontPreference,
+  resolveTerminalFontSizePreference,
+  TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+} from "../../appearanceFonts";
+import { CodeFontPreview, PromptFontPreview, TerminalFontPreview } from "./SettingsFontPreviews";
+import { discoverInstalledFonts, FontFamilyPicker, useFontEnumeration } from "./FontFamilyPicker";
+import {
+  NumberField,
+  NumberFieldDecrement,
+  NumberFieldGroup,
+  NumberFieldIncrement,
+  NumberFieldInput,
+} from "../ui/number-field";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
-import { isDefaultLocalePreference, LanguageSettings } from "./LanguageSettings";
+import { ThemeLibrary } from "./ThemeSettings";
 import {
-  canOneClickUpdateProviderCandidate,
-  collectProviderUpdateCandidates,
-  hasOneClickUpdateProviderCandidate,
-  isProviderUpdateActive,
-  type ProviderUpdateCandidate,
-} from "../ProviderUpdateLaunchNotification.logic";
-import { ProviderInstanceCard } from "./ProviderInstanceCard";
-import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
-import {
-  buildProviderInstanceUpdatePatch,
+  backgroundActivityOverrideSettings,
+  backgroundActivitySharedPolicySettings,
+  durationToSeconds,
   formatDiagnosticsDescription,
-  getThemeOptions,
-  getTimestampFormatLabels,
+  getChangedBrowserSettingLabels,
+  getChangedTypographySettingLabels,
+  normalizeIntervalSeconds,
+  PROVIDER_HEALTH_INTERVAL_STEP_SECONDS,
+  hasChangedBackgroundActivitySettings,
+  isProjectGroupingEnabled,
+  projectGroupingModeFromToggle,
+  readLastEnabledProjectGroupingMode,
+  rememberEnabledProjectGroupingMode,
+  resolveBackgroundActivityProfileOption,
 } from "./SettingsPanels.logic";
 import {
+  PolicyTooltip,
   SettingResetButton,
   SettingsPageContainer,
   SettingsRow,
   SettingsSection,
-  useRelativeTimeTick,
+  useSettingsSearchTargetId,
 } from "./settingsLayout";
+import { searchableSetting } from "./settingsSearch";
+import { isDefaultLocalePreference, LanguageSettings } from "./LanguageSettings";
 import { ProjectFavicon } from "../ProjectFavicon";
-import { useAtomCommand } from "../../state/use-atom-command";
+
+const ENVIRONMENT_IDENTIFICATION_LABEL_KEYS: Record<EnvironmentIdentificationMode, MessageKey> = {
+  artwork: "settings.environmentId.artwork",
+  pill: "settings.environmentId.pill",
+  none: "settings.environmentId.none",
+};
+
+const BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS: Record<BackgroundActivityProfile, MessageKey> = {
+  balanced: "settings.background.balanced",
+  performance: "settings.background.performance",
+  "battery-saver": "settings.background.batterySaver",
+};
+
+type BackgroundActivityProfileOption = BackgroundActivityProfile | "advanced";
+
+const BACKGROUND_ACTIVITY_PROFILE_OPTION_LABEL_KEYS: Record<
+  BackgroundActivityProfileOption,
+  MessageKey
+> = {
+  ...BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS,
+  advanced: "settings.background.advanced",
+};
+
+const BACKGROUND_ACTIVITY_PROFILE_DESCRIPTION_KEYS: Record<BackgroundActivityProfile, MessageKey> =
+  {
+    balanced: "settings.background.balancedDescription",
+    performance: "settings.background.performanceDescription",
+    "battery-saver": "settings.background.batterySaverDescription",
+  };
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
+const BACKGROUND_ACTIVITY_BOOLEAN_OVERRIDES: ReadonlyArray<{
+  readonly key:
+    | "pauseWhenHostLocked"
+    | "pauseWhenHostLowPower"
+    | "pauseWhenClientLowPower"
+    | "pauseWhenOnBattery";
+  readonly labelKey: MessageKey;
+}> = [
+  { key: "pauseWhenHostLocked", labelKey: "settings.background.pauseHostLocked" },
+  { key: "pauseWhenHostLowPower", labelKey: "settings.background.pauseHostLowPower" },
+  { key: "pauseWhenClientLowPower", labelKey: "settings.background.pauseClientLowPower" },
+  { key: "pauseWhenOnBattery", labelKey: "settings.background.pauseBattery" },
+];
 
-function withoutProviderInstanceKey<V>(
-  record: Readonly<Record<ProviderInstanceId, V>> | undefined,
-  key: ProviderInstanceId,
-): Record<ProviderInstanceId, V> {
-  const next = { ...record } as Record<ProviderInstanceId, V>;
-  delete next[key];
-  return next;
+function resetBackgroundActivitySettings() {
+  return {
+    backgroundActivity: DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
+  };
 }
 
-function withoutProviderInstanceFavorites(
-  favorites: ReadonlyArray<{ readonly provider: ProviderInstanceId; readonly model: string }>,
-  instanceId: ProviderInstanceId,
-) {
-  return favorites.filter((favorite) => favorite.provider !== instanceId);
-}
-
-const PROVIDER_SETTINGS = DRIVER_OPTIONS.map((definition) => ({
-  provider: definition.value,
-}));
-
-function ProviderLastChecked({ lastCheckedAt }: { lastCheckedAt: string | null }) {
-  useRelativeTimeTick();
-  const lastCheckedRelative = lastCheckedAt ? formatRelativeTime(lastCheckedAt) : null;
-
-  if (!lastCheckedRelative) {
-    return null;
-  }
-
-  return (
-    <span className="text-[11px] text-muted-foreground/60">
-      {lastCheckedRelative.suffix ? (
-        <>
-          Checked <span className="font-mono tabular-nums">{lastCheckedRelative.value}</span>{" "}
-          {lastCheckedRelative.suffix}
-        </>
-      ) : (
-        <>Checked {lastCheckedRelative.value}</>
-      )}
-    </span>
-  );
+function backgroundActivityProfileSettings(profile: BackgroundActivityProfile) {
+  return {
+    backgroundActivity: {
+      schemaVersion: 1 as const,
+      profile,
+      overrides: {},
+    },
+  };
 }
 
 function AboutVersionTitle() {
   const { t } = useI18n();
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex items-baseline gap-2">
       <span>{t("settings.about.version")}</span>
       <code className="text-[11px] font-medium text-muted-foreground">{APP_VERSION}</code>
     </span>
@@ -151,6 +223,7 @@ function AboutVersionSection() {
   const { t } = useI18n();
   const updateState = useDesktopUpdateState();
   const [isChangingUpdateChannel, setIsChangingUpdateChannel] = useState(false);
+  const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
 
   const hasDesktopBridge = typeof window !== "undefined" && Boolean(window.desktopBridge);
   const selectedUpdateChannel = updateState?.channel ?? "latest";
@@ -187,7 +260,7 @@ function AboutVersionSection() {
     [selectedUpdateChannel, t],
   );
 
-  const handleButtonClick = useCallback(() => {
+  const handleButtonClick = useCallback(async () => {
     const bridge = window.desktopBridge;
     if (!bridge) return;
 
@@ -208,22 +281,42 @@ function AboutVersionSection() {
     }
 
     if (action === "install") {
-      const confirmed = window.confirm(
-        getDesktopUpdateInstallConfirmationMessage(
-          updateState ?? { availableVersion: null, downloadedVersion: null },
-        ),
-      );
-      if (!confirmed) return;
-      void bridge.installUpdate().catch((error: unknown) => {
+      if (!updateState || isUpdateActionPending) return;
+      setIsUpdateActionPending(true);
+      let confirmed = false;
+      try {
+        confirmed = await ensureLocalApi().dialogs.confirm(
+          getDesktopUpdateInstallConfirmationMessage(updateState, t),
+        );
+      } catch (error) {
+        setIsUpdateActionPending(false);
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: t("settings.update.couldNotInstall"),
+            title: t("settings.update.couldNotConfirm"),
             description:
-              error instanceof Error ? error.message : t("settings.update.installFailed"),
+              error instanceof Error ? error.message : t("settings.update.confirmFailed"),
           }),
         );
-      });
+        return;
+      }
+      if (!confirmed) {
+        setIsUpdateActionPending(false);
+        return;
+      }
+      void bridge
+        .installUpdate()
+        .catch((error: unknown) => {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: t("settings.update.couldNotInstall"),
+              description:
+                error instanceof Error ? error.message : t("settings.update.installFailed"),
+            }),
+          );
+        })
+        .finally(() => setIsUpdateActionPending(false));
       return;
     }
 
@@ -250,10 +343,10 @@ function AboutVersionSection() {
           }),
         );
       });
-  }, [t, updateState]);
+  }, [isUpdateActionPending, t, updateState]);
 
   const action = updateState ? resolveDesktopUpdateButtonAction(updateState) : "none";
-  const buttonTooltip = updateState ? getDesktopUpdateButtonTooltip(updateState) : null;
+  const buttonTooltip = updateState ? getDesktopUpdateButtonTooltip(updateState, t) : null;
   const buttonDisabled =
     action === "none"
       ? !canCheckForUpdate(updateState)
@@ -287,7 +380,7 @@ function AboutVersionSection() {
                 <Button
                   size="xs"
                   variant={action === "install" ? "default" : "outline"}
-                  disabled={buttonDisabled}
+                  disabled={buttonDisabled || isUpdateActionPending}
                   onClick={handleButtonClick}
                 >
                   {buttonLabel}
@@ -346,7 +439,11 @@ function AboutVersionSection() {
               }}
             >
               <SelectTrigger className="w-full sm:w-40" aria-label={t("settings.update.track")}>
-                <SelectValue>{HOSTED_APP_CHANNEL_LABEL}</SelectValue>
+                <SelectValue>
+                  {selectedHostedAppChannel === "nightly"
+                    ? t("settings.update.nightly")
+                    : t("settings.update.latest")}
+                </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value="latest">
@@ -365,51 +462,86 @@ function AboutVersionSection() {
 }
 
 export function useSettingsRestore(onRestored?: () => void) {
-  const { theme, setTheme } = useTheme();
+  const {
+    theme,
+    setTheme,
+    followSystem,
+    setFollowSystem,
+    setThemeHalf,
+    clearThemeHalves,
+    themeHalves,
+  } = useTheme();
   const { locale, setLocale, t } = useI18n();
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
 
-  const isGitWritingModelDirty = !Equal.equals(
+  const isTextGenerationModelDirty = !Equal.equals(
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
+  const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
 
   const changedSettingLabels = useMemo(
     () => [
       ...(!isDefaultLocalePreference(locale) ? [t("settings.language.title")] : []),
       ...(theme !== "system" ? [t("settings.theme.title")] : []),
+      ...(!followSystem ? [t("settings.restore.followSystem")] : []),
+      ...(themeHalves !== null ? [t("settings.restore.themeMix")] : []),
+      ...(settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast
+        ? [t("settings.contrast.title")]
+        : []),
+      ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity
+        ? [t("settings.glass.title")]
+        : []),
+      ...(settings.environmentIdentificationMode !==
+      DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode
+        ? [t("settings.environmentId.title")]
+        : []),
       ...(settings.timestampFormat !== DEFAULT_UNIFIED_SETTINGS.timestampFormat
         ? [t("settings.time.title")]
         : []),
       ...(settings.sidebarThreadPreviewCount !== DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount
         ? [t("sidebar.visibleThreads")]
         : []),
+      ...(settings.sidebarProjectGroupingMode !==
+      DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode
+        ? [t("settings.projectGrouping.title")]
+        : []),
+      ...(settings.sidebarAutoSettleAfterDays !==
+      DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
+        ? [t("settings.autoSettle.inactiveTitle")]
+        : []),
+      ...(settings.sidebarAutoSettleOnMerge !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge
+        ? [t("settings.autoSettle.mergedTitle")]
+        : []),
       ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap
         ? [t("settings.wordWrap.title")]
         : []),
+      ...getChangedTypographySettingLabels(settings, t),
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
-        ? [t("settings.whitespace.resetLabel")]
+        ? [t("settings.whitespace.title")]
         : []),
-      ...(settings.autoOpenPlanSidebar !== DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar
-        ? [t("settings.autoOpen.title")]
+      ...(settings.showSkillsInSlashMenu !== DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu
+        ? [t("settings.skillsMenu.title")]
         : []),
-      ...(settings.enableAssistantStreaming !== DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming
-        ? [t("settings.assistantOutput.title")]
+      ...(settings.enableLegacyTokenStreaming !==
+      DEFAULT_UNIFIED_SETTINGS.enableLegacyTokenStreaming
+        ? [t("settings.legacy.tokenStreaming")]
         : []),
-      ...(Duration.toMillis(settings.automaticGitFetchInterval) !==
-      Duration.toMillis(DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval)
-        ? [t("sourceControl.fetchInterval")]
+      ...(settings.enableProviderUpdateChecks !==
+      DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks
+        ? [t("settings.providerUpdates.title")]
         : []),
+      ...(isBackgroundActivityDirty ? [t("settings.background.title")] : []),
       ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
         ? [t("settings.newThreads.title")]
         : []),
       ...(settings.newWorktreesStartFromOrigin !==
       DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin
-        ? [t("settings.startOrigin.resetLabel")]
+        ? [t("settings.startOrigin.title")]
         : []),
       ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
-        ? [t("settings.addProject.resetLabel")]
+        ? [t("settings.addProject.title")]
         : []),
       ...(settings.confirmThreadArchive !== DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive
         ? [t("settings.archive.title")]
@@ -417,24 +549,54 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.confirmThreadDelete !== DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete
         ? [t("settings.delete.title")]
         : []),
-      ...(isGitWritingModelDirty ? [t("settings.textGeneration.title")] : []),
+      ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit
+        ? [t("settings.quit.title")]
+        : []),
+      ...(isTextGenerationModelDirty ? [t("settings.textGeneration.title")] : []),
+      ...getChangedBrowserSettingLabels(settings, t),
+      ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
+        ? [t("settings.restore.agentBrowserAccess")]
+        : []),
     ],
     [
-      isGitWritingModelDirty,
+      isTextGenerationModelDirty,
+      isBackgroundActivityDirty,
       locale,
-      settings.autoOpenPlanSidebar,
+      settings.browserDefaultViewport,
+      settings.browserDefaultZoomFactor,
+      settings.browserDefaultAppearance,
+      settings.browserAutoShowFloatingPreview,
+      settings.appearanceContrast,
+      settings.enableAgentBrowserAccess,
+      settings.confirmQuit,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.addProjectBaseDirectory,
       settings.defaultThreadEnvMode,
       settings.newWorktreesStartFromOrigin,
       settings.diffIgnoreWhitespace,
-      settings.automaticGitFetchInterval,
-      settings.enableAssistantStreaming,
+      settings.environmentIdentificationMode,
+      settings.fontFamilyCode,
+      settings.fontFamilyComposer,
+      settings.fontFamilySans,
+      settings.fontFamilyTerminal,
+      settings.fontSizeCode,
+      settings.fontSizeInterface,
+      settings.fontSizePrompt,
+      settings.fontSizeTerminal,
+      settings.glassOpacity,
+      settings.enableLegacyTokenStreaming,
+      settings.enableProviderUpdateChecks,
+      settings.sidebarAutoSettleAfterDays,
+      settings.sidebarAutoSettleOnMerge,
+      settings.sidebarProjectGroupingMode,
       settings.sidebarThreadPreviewCount,
+      settings.showSkillsInSlashMenu,
       settings.timestampFormat,
       settings.wordWrap,
+      followSystem,
       theme,
+      themeHalves,
       t,
     ],
   );
@@ -447,28 +609,118 @@ export function useSettingsRestore(onRestored?: () => void) {
         t("settings.restore.title"),
         t("settings.restore.description", { settings: changedSettingLabels.join(", ") }),
       ].join("\n"),
+      { variant: "destructive" },
     );
     if (!confirmed) return;
 
-    setTheme("system");
+    // Only touch the theme keys that are actually dirty, so a theme-storage
+    // failure cannot block restoring unrelated settings. Preferences are
+    // re-read after the confirmation dialog: they may have changed (another
+    // tab, an OS flip) while it was open, and rollback must restore the live
+    // values rather than the ones captured at render time.
+    let previousTheme = theme;
+    try {
+      previousTheme = readThemePreference();
+    } catch {
+      // Storage is unreadable; the render-time value is the best rollback.
+    }
+    // The mix may have changed while the confirmation dialog was open; both
+    // the dirty check and the rollback must see the live value.
+    const liveHalves = readThemeHalves();
+    const needsThemeReset = previousTheme !== "system";
+    const needsMixReset = liveHalves !== null;
+    // Same for the appearance mode: trusting the render-time value would skip
+    // the reset and report success while a non-system mode stayed in storage.
+    const needsFollowSystemReset = readAppearanceModePreference(previousTheme) !== "system";
+    const notifyThemeRestoreFailure = () => {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: t("settings.restore.themeFailed"),
+          description: t("settings.restore.tryAgain"),
+        }),
+      );
+    };
+    // Rollback restores the base preference first (which clears any mix) and
+    // then re-applies the captured mix on top, so no failure path can leave
+    // the pair of keys half-restored.
+    const previousHalves = liveHalves;
+    const rollbackThemeState = () => {
+      if (needsThemeReset) setTheme(previousTheme);
+      if (previousHalves?.light) setThemeHalf("light", previousHalves.light);
+      if (previousHalves?.dark) setThemeHalf("dark", previousHalves.dark);
+    };
+    if (needsThemeReset && !setTheme("system")) {
+      notifyThemeRestoreFailure();
+      return;
+    }
+    if (needsMixReset && !clearThemeHalves()) {
+      rollbackThemeState();
+      notifyThemeRestoreFailure();
+      return;
+    }
+    if (needsFollowSystemReset && !setFollowSystem(true)) {
+      rollbackThemeState();
+      notifyThemeRestoreFailure();
+      return;
+    }
     setLocale("en");
     updateSettings({
+      appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
+      showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
+      environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
+      glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
-      autoOpenPlanSidebar: DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar,
-      enableAssistantStreaming: DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming,
+      sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
+      sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
+      sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
+      enableLegacyTokenStreaming: DEFAULT_UNIFIED_SETTINGS.enableLegacyTokenStreaming,
+      enableProviderUpdateChecks: DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks,
+      backgroundActivity: DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
+      backgroundActivityProfile: DEFAULT_UNIFIED_SETTINGS.backgroundActivityProfile,
       automaticGitFetchInterval: DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
+      providerHealthRefreshInterval: DEFAULT_UNIFIED_SETTINGS.providerHealthRefreshInterval,
       defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
       newWorktreesStartFromOrigin: DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
+      confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
+      fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
+      fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
+      fontFamilyCode: DEFAULT_UNIFIED_SETTINGS.fontFamilyCode,
+      fontFamilyTerminal: DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal,
+      fontSizeInterface: DEFAULT_UNIFIED_SETTINGS.fontSizeInterface,
+      fontSizePrompt: DEFAULT_UNIFIED_SETTINGS.fontSizePrompt,
+      fontSizeCode: DEFAULT_UNIFIED_SETTINGS.fontSizeCode,
+      fontSizeTerminal: DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal,
+      browserDefaultViewport: DEFAULT_UNIFIED_SETTINGS.browserDefaultViewport,
+      browserDefaultZoomFactor: DEFAULT_UNIFIED_SETTINGS.browserDefaultZoomFactor,
+      browserDefaultAppearance: DEFAULT_UNIFIED_SETTINGS.browserDefaultAppearance,
+      browserAutoShowFloatingPreview: DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
+      // Re-granted like any other default. The confirmation dialog lists it by
+      // name, so a user restoring defaults is told the agent regains access
+      // rather than discovering it later.
+      enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
     });
     onRestored?.();
-  }, [changedSettingLabels, onRestored, setLocale, setTheme, t, updateSettings]);
+  }, [
+    changedSettingLabels,
+    clearThemeHalves,
+    onRestored,
+    setLocale,
+    setFollowSystem,
+    setTheme,
+    setThemeHalf,
+    theme,
+    themeHalves,
+    t,
+    updateSettings,
+  ]);
 
   return {
     changedSettingLabels,
@@ -476,11 +728,1210 @@ export function useSettingsRestore(onRestored?: () => void) {
   };
 }
 
-export function GeneralSettingsPanel() {
+function BackgroundActivityAdvancedDialog({
+  open,
+  onOpenChange,
+}: {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useI18n();
-  const { theme, setTheme } = useTheme();
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
+  const resolvedBackgroundActivity = resolveServerBackgroundActivitySettings(settings);
+  const activeProfile = resolvedBackgroundActivity.profile;
+  const automaticGitFetchIntervalSeconds = durationToSeconds(
+    resolvedBackgroundActivity.automaticGitFetchInterval,
+  );
+  const providerHealthRefreshIntervalSeconds = durationToSeconds(
+    resolvedBackgroundActivity.providerHealthRefreshInterval,
+  );
+  const hostPowerMonitorActiveIntervalSeconds = durationToSeconds(
+    resolvedBackgroundActivity.hostPowerMonitorActiveInterval,
+  );
+  const hostPowerMonitorIdleIntervalSeconds = durationToSeconds(
+    resolvedBackgroundActivity.hostPowerMonitorIdleInterval,
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogPopup className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{t("settings.background.title")}</DialogTitle>
+          <DialogDescription>{t("settings.background.dialogDescription")}</DialogDescription>
+        </DialogHeader>
+        <DialogPanel className="space-y-0 px-6 pb-5">
+          <div className="overflow-hidden rounded-xl border bg-card text-card-foreground">
+            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-1">
+                <div className="text-sm font-medium">{t("settings.background.sharedPolicy")}</div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("settings.background.sharedPolicyDescription")}
+                </p>
+              </div>
+              <Select
+                value={activeProfile}
+                onValueChange={(value) => {
+                  if (
+                    value === "balanced" ||
+                    value === "performance" ||
+                    value === "battery-saver"
+                  ) {
+                    updateSettings({
+                      backgroundActivity: backgroundActivitySharedPolicySettings(settings, value),
+                    });
+                  }
+                }}
+              >
+                <SelectTrigger
+                  className="w-full sm:w-40"
+                  aria-label={t("settings.background.sharedPolicy")}
+                >
+                  <SelectValue>
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS[activeProfile])}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem hideIndicator value="balanced">
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS.balanced)}
+                  </SelectItem>
+                  <SelectItem hideIndicator value="performance">
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS.performance)}
+                  </SelectItem>
+                  <SelectItem hideIndicator value="battery-saver">
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS["battery-saver"])}
+                  </SelectItem>
+                </SelectPopup>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-1">
+                <div className="text-sm font-medium">
+                  {t("settings.background.gitFetchInterval")}
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("settings.background.gitFetchDescription")}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <NumberField
+                  value={automaticGitFetchIntervalSeconds}
+                  min={0}
+                  step={5}
+                  size="sm"
+                  className="w-32"
+                  onValueChange={(value) =>
+                    updateSettings(
+                      backgroundActivityOverrideSettings(
+                        settings.backgroundActivity,
+                        resolvedBackgroundActivity,
+                        {
+                          automaticGitFetchInterval: Duration.seconds(
+                            normalizeIntervalSeconds(value),
+                          ),
+                        },
+                      ),
+                    )
+                  }
+                >
+                  <NumberFieldGroup>
+                    <NumberFieldDecrement aria-label={t("settings.background.gitFetchDecrease")} />
+                    <NumberFieldInput aria-label={t("settings.background.gitFetchInput")} />
+                    <NumberFieldIncrement aria-label={t("settings.background.gitFetchIncrease")} />
+                  </NumberFieldGroup>
+                </NumberField>
+                <span className="text-xs text-muted-foreground">{t("sourceControl.seconds")}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-1">
+                <div className="text-sm font-medium">
+                  {t("settings.background.providerHealthInterval")}
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("settings.background.providerHealthDescription")}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <NumberField
+                  value={providerHealthRefreshIntervalSeconds}
+                  min={0}
+                  step={PROVIDER_HEALTH_INTERVAL_STEP_SECONDS}
+                  size="sm"
+                  className="w-32"
+                  onValueChange={(value) =>
+                    updateSettings(
+                      backgroundActivityOverrideSettings(
+                        settings.backgroundActivity,
+                        resolvedBackgroundActivity,
+                        {
+                          providerHealthRefreshInterval: Duration.seconds(
+                            normalizeIntervalSeconds(value),
+                          ),
+                        },
+                      ),
+                    )
+                  }
+                >
+                  <NumberFieldGroup>
+                    <NumberFieldDecrement
+                      aria-label={t("settings.background.providerHealthDecrease")}
+                    />
+                    <NumberFieldInput aria-label={t("settings.background.providerHealthInput")} />
+                    <NumberFieldIncrement
+                      aria-label={t("settings.background.providerHealthIncrease")}
+                    />
+                  </NumberFieldGroup>
+                </NumberField>
+                <span className="text-xs text-muted-foreground">{t("sourceControl.seconds")}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-1">
+                <div className="text-sm font-medium">
+                  {t("settings.background.hostPowerMonitor")}
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("settings.background.hostPowerDescription")}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <NumberField
+                  value={hostPowerMonitorActiveIntervalSeconds}
+                  min={5}
+                  step={5}
+                  size="sm"
+                  className="w-32"
+                  onValueChange={(value) =>
+                    updateSettings(
+                      backgroundActivityOverrideSettings(
+                        settings.backgroundActivity,
+                        resolvedBackgroundActivity,
+                        {
+                          hostPowerMonitorActiveInterval: Duration.seconds(
+                            normalizeIntervalSeconds(value, 5),
+                          ),
+                        },
+                      ),
+                    )
+                  }
+                >
+                  <NumberFieldGroup>
+                    <NumberFieldDecrement aria-label={t("settings.background.hostPowerDecrease")} />
+                    <NumberFieldInput aria-label={t("settings.background.hostPowerInput")} />
+                    <NumberFieldIncrement aria-label={t("settings.background.hostPowerIncrease")} />
+                  </NumberFieldGroup>
+                </NumberField>
+                <span className="text-xs text-muted-foreground">{t("sourceControl.seconds")}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-1">
+                <div className="text-sm font-medium">
+                  {t("settings.background.idleHostMonitor")}
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("settings.background.idleHostDescription")}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <NumberField
+                  value={hostPowerMonitorIdleIntervalSeconds}
+                  min={5}
+                  step={30}
+                  size="sm"
+                  className="w-32"
+                  onValueChange={(value) =>
+                    updateSettings(
+                      backgroundActivityOverrideSettings(
+                        settings.backgroundActivity,
+                        resolvedBackgroundActivity,
+                        {
+                          hostPowerMonitorIdleInterval: Duration.seconds(
+                            normalizeIntervalSeconds(value, 5),
+                          ),
+                        },
+                      ),
+                    )
+                  }
+                >
+                  <NumberFieldGroup>
+                    <NumberFieldDecrement aria-label={t("settings.background.idleHostDecrease")} />
+                    <NumberFieldInput aria-label={t("settings.background.idleHostInput")} />
+                    <NumberFieldIncrement aria-label={t("settings.background.idleHostIncrease")} />
+                  </NumberFieldGroup>
+                </NumberField>
+                <span className="text-xs text-muted-foreground">{t("sourceControl.seconds")}</span>
+              </div>
+            </div>
+
+            <div className="grid gap-0 border-t sm:grid-cols-2">
+              {BACKGROUND_ACTIVITY_BOOLEAN_OVERRIDES.map(({ key, labelKey }) => (
+                <label
+                  key={key}
+                  className="flex items-center justify-between gap-3 border-b px-4 py-3 last:border-b-0 sm:border-r sm:even:border-r-0"
+                >
+                  <span className="text-sm font-medium">{t(labelKey)}</span>
+                  <Switch
+                    checked={resolvedBackgroundActivity[key]}
+                    onCheckedChange={(checked) =>
+                      updateSettings(
+                        backgroundActivityOverrideSettings(
+                          settings.backgroundActivity,
+                          resolvedBackgroundActivity,
+                          {
+                            [key]: Boolean(checked),
+                          },
+                        ),
+                      )
+                    }
+                    aria-label={t(labelKey)}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        </DialogPanel>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => updateSettings(resetBackgroundActivitySettings())}
+          >
+            {t("settings.background.resetAll")}
+          </Button>
+          <Button onClick={() => onOpenChange(false)}>{t("connections.done")}</Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+export function AppearanceSettingsPanel() {
+  const { t } = useI18n();
+  const {
+    appearanceMode,
+    refreshTheme,
+    resolvedTheme,
+    setAppearanceMode,
+    setTheme,
+    setThemeHalf,
+    theme,
+    themeHalves,
+  } = useTheme();
+  const customThemes = useCustomThemes();
+  const [isImportThemeOpen, setIsImportThemeOpen] = useState(false);
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const environmentStageLabel = useEnvironmentStageLabel();
+  const showEnvironmentIdentification =
+    resolveEnvironmentIdentificationPillLabel(environmentStageLabel) !== null;
+  const glassOpacityRatio =
+    (settings.glassOpacity - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
+  const glassOpacitySliderStyle = {
+    "--settings-slider-progress": `${glassOpacityRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - glassOpacityRatio}rem`,
+  } as CSSProperties;
+  const appearanceContrastRatio =
+    (settings.appearanceContrast - MIN_APPEARANCE_CONTRAST) /
+    (MAX_APPEARANCE_CONTRAST - MIN_APPEARANCE_CONTRAST);
+  const appearanceContrastSliderStyle = {
+    "--settings-slider-progress": `${appearanceContrastRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - appearanceContrastRatio}rem`,
+  } as CSSProperties;
+
+  return (
+    <SettingsPageContainer>
+      <SettingsSection id="appearance" title={t("settings.nav.appearance")}>
+        <div id={searchableSetting("theme").id}>
+          <ThemeLibrary
+            appearanceMode={appearanceMode}
+            customThemes={customThemes}
+            initialAppearance={resolvedTheme}
+            refreshTheme={refreshTheme}
+            isImportOpen={isImportThemeOpen}
+            setAppearanceMode={setAppearanceMode}
+            setTheme={setTheme}
+            setThemeHalf={setThemeHalf}
+            theme={theme}
+            themeHalves={themeHalves}
+            onImportOpenChange={setIsImportThemeOpen}
+          />
+        </div>
+
+        <SettingsRow
+          {...searchableSetting("setting-appearance-contrast", t)}
+          title={t("settings.contrast.title")}
+          description={t("settings.contrast.description")}
+          resetAction={
+            settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast ? (
+              <SettingResetButton
+                label={t("settings.contrast.resetLabel")}
+                onClick={() =>
+                  updateSettings({
+                    appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="appearance-contrast"
+              >
+                {settings.appearanceContrast}%
+              </output>
+              <input
+                aria-label={t("settings.contrast.title")}
+                className="settings-slider min-w-0 flex-1"
+                id="appearance-contrast"
+                max={MAX_APPEARANCE_CONTRAST}
+                min={MIN_APPEARANCE_CONTRAST}
+                onChange={(event) => {
+                  const appearanceContrast = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(appearanceContrast) &&
+                    appearanceContrast >= MIN_APPEARANCE_CONTRAST &&
+                    appearanceContrast <= MAX_APPEARANCE_CONTRAST
+                  ) {
+                    updateSettings({ appearanceContrast });
+                  }
+                }}
+                step={5}
+                style={appearanceContrastSliderStyle}
+                type="range"
+                value={settings.appearanceContrast}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("setting-glass-opacity", t)}
+          title={t("settings.glass.title")}
+          description={t("settings.glass.description")}
+          resetAction={
+            settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (
+              <SettingResetButton
+                label={t("settings.glass.resetLabel")}
+                onClick={() =>
+                  updateSettings({ glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="glass-opacity"
+              >
+                {settings.glassOpacity}%
+              </output>
+              <input
+                aria-label={t("settings.glass.title")}
+                className="settings-slider min-w-0 flex-1"
+                id="glass-opacity"
+                max={MAX_GLASS_OPACITY}
+                min={MIN_GLASS_OPACITY}
+                onChange={(event) => {
+                  const glassOpacity = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(glassOpacity) &&
+                    glassOpacity >= MIN_GLASS_OPACITY &&
+                    glassOpacity <= MAX_GLASS_OPACITY
+                  ) {
+                    updateSettings({ glassOpacity });
+                  }
+                }}
+                step={5}
+                style={glassOpacitySliderStyle}
+                type="range"
+                value={settings.glassOpacity}
+              />
+            </div>
+          }
+        />
+
+        {showEnvironmentIdentification ? (
+          <SettingsRow
+            {...searchableSetting("environment-identification", t)}
+            title={t("settings.environmentId.title")}
+            description={t("settings.environmentId.description")}
+            resetAction={
+              settings.environmentIdentificationMode !== DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE ? (
+                <SettingResetButton
+                  label={t("settings.environmentId.resetLabel")}
+                  onClick={() =>
+                    updateSettings({
+                      environmentIdentificationMode: DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <Select
+                value={settings.environmentIdentificationMode}
+                onValueChange={(value) => {
+                  if (value === "artwork" || value === "pill" || value === "none") {
+                    updateSettings({ environmentIdentificationMode: value });
+                  }
+                }}
+              >
+                <SelectTrigger
+                  className="w-full sm:w-40"
+                  aria-label={t("settings.environmentId.title")}
+                >
+                  <SelectValue>
+                    {t(
+                      ENVIRONMENT_IDENTIFICATION_LABEL_KEYS[settings.environmentIdentificationMode],
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  {Object.entries(ENVIRONMENT_IDENTIFICATION_LABEL_KEYS).map(
+                    ([value, labelKey]) => (
+                      <SelectItem hideIndicator key={value} value={value}>
+                        {t(labelKey)}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectPopup>
+              </Select>
+            }
+          />
+        ) : null}
+      </SettingsSection>
+
+      <TypographySection />
+    </SettingsPageContainer>
+  );
+}
+
+function useFontDefaultFamilies() {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  // An unset preference shows the font it resolves to on this machine; the
+  // default stacks are the platform's own faces, so the name is probed, not
+  // hardcoded.
+  const defaults = useMemo(
+    () => ({
+      sans:
+        resolveDefaultFamilyLabel(DEFAULT_SANS_FONT_STACK) ??
+        t("settings.typography.systemDefault"),
+      code:
+        resolveDefaultFamilyLabel(DEFAULT_CODE_FONT_STACK) ??
+        t("settings.typography.systemMonospace"),
+    }),
+    [t],
+  );
+  return {
+    sans: defaults.sans,
+    code: defaults.code,
+    // The composer inherits whatever the interface preference resolves to.
+    interfaceFamily: settings.fontFamilySans.trim() || defaults.sans,
+  };
+}
+
+function InterfaceFontRow({ preview }: { preview?: ReactNode }) {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const defaults = useFontDefaultFamilies();
+  return (
+    <FontFamilySettingsRow
+      {...searchableSetting("interface-font", t)}
+      title={t("settings.typography.interfaceFont")}
+      description={t("settings.typography.interfaceDescription")}
+      defaultFamily={defaults.sans}
+      defaultValue={DEFAULT_UNIFIED_SETTINGS.fontFamilySans}
+      value={settings.fontFamilySans}
+      onValueChange={(fontFamilySans) => updateSettings({ fontFamilySans })}
+      onReset={() =>
+        updateSettings({
+          fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
+          fontSizeInterface: DEFAULT_UNIFIED_SETTINGS.fontSizeInterface,
+        })
+      }
+      size={{
+        label: t("settings.typography.interfaceSize"),
+        min: MIN_INTERFACE_FONT_SIZE,
+        max: MAX_INTERFACE_FONT_SIZE,
+        value: settings.fontSizeInterface,
+        defaultValue: DEFAULT_UNIFIED_SETTINGS.fontSizeInterface,
+        onChange: (fontSizeInterface) => updateSettings({ fontSizeInterface }),
+      }}
+      {...(preview !== undefined ? { preview } : {})}
+    />
+  );
+}
+
+function PromptFontRow() {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const defaults = useFontDefaultFamilies();
+  return (
+    <FontFamilySettingsRow
+      {...searchableSetting("prompt-font", t)}
+      title={t("settings.typography.promptFont")}
+      description={t("settings.typography.promptDescription")}
+      defaultFamily={defaults.interfaceFamily}
+      defaultValue={DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer}
+      value={settings.fontFamilyComposer}
+      onValueChange={(fontFamilyComposer) => updateSettings({ fontFamilyComposer })}
+      onReset={() =>
+        updateSettings({
+          fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
+          fontSizePrompt: DEFAULT_UNIFIED_SETTINGS.fontSizePrompt,
+        })
+      }
+      size={{
+        label: t("settings.typography.promptSize"),
+        min: MIN_PROMPT_FONT_SIZE,
+        max: MAX_PROMPT_FONT_SIZE,
+        value: settings.fontSizePrompt,
+        defaultValue: DEFAULT_UNIFIED_SETTINGS.fontSizePrompt,
+        onChange: (fontSizePrompt) => updateSettings({ fontSizePrompt }),
+      }}
+      preview={<PromptFontPreview />}
+    />
+  );
+}
+
+function CodeFontRow({
+  title,
+  description,
+  preview,
+}: {
+  title?: string;
+  description?: string;
+  preview?: ReactNode;
+}) {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const defaults = useFontDefaultFamilies();
+  return (
+    <FontFamilySettingsRow
+      {...searchableSetting("code-font", t)}
+      title={title ?? t("settings.typography.codeFont")}
+      description={description ?? t("settings.typography.codeDescription")}
+      defaultFamily={defaults.code}
+      defaultValue={DEFAULT_UNIFIED_SETTINGS.fontFamilyCode}
+      value={settings.fontFamilyCode}
+      onValueChange={(fontFamilyCode) => updateSettings({ fontFamilyCode })}
+      onReset={() =>
+        updateSettings({
+          fontFamilyCode: DEFAULT_UNIFIED_SETTINGS.fontFamilyCode,
+          fontSizeCode: DEFAULT_UNIFIED_SETTINGS.fontSizeCode,
+        })
+      }
+      requireMonospace
+      size={{
+        label: t("settings.typography.codeSize"),
+        min: MIN_CODE_FONT_SIZE,
+        max: MAX_CODE_FONT_SIZE,
+        value: settings.fontSizeCode,
+        defaultValue: DEFAULT_UNIFIED_SETTINGS.fontSizeCode,
+        onChange: (fontSizeCode) => updateSettings({ fontSizeCode }),
+      }}
+      preview={preview ?? <CodeFontPreview />}
+    />
+  );
+}
+
+function TerminalFontRow() {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const defaults = useFontDefaultFamilies();
+  return (
+    <FontFamilySettingsRow
+      {...searchableSetting("terminal-font", t)}
+      title={t("settings.typography.terminalFont")}
+      description={t("settings.typography.terminalDescription")}
+      defaultFamily={defaults.code}
+      defaultValue={DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal}
+      value={settings.fontFamilyTerminal}
+      onValueChange={(fontFamilyTerminal) => updateSettings({ fontFamilyTerminal })}
+      onReset={() =>
+        updateSettings({
+          fontFamilyTerminal: DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal,
+          fontSizeTerminal: DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal,
+        })
+      }
+      requireMonospace
+      size={{
+        label: t("settings.typography.terminalSize"),
+        min: MIN_TERMINAL_FONT_SIZE,
+        max: MAX_TERMINAL_FONT_SIZE,
+        value: settings.fontSizeTerminal,
+        defaultValue: DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal,
+        onChange: (fontSizeTerminal) => updateSettings({ fontSizeTerminal }),
+      }}
+      preview={
+        <TerminalFontPreview
+          family={resolveTerminalFontPreference({
+            advanced: true,
+            code: settings.fontFamilyCode,
+            terminal: settings.fontFamilyTerminal,
+          })}
+          size={settings.fontSizeTerminal}
+        />
+      }
+    />
+  );
+}
+
+function FontSmoothingRow() {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  if (!isMacPlatform(navigator.platform)) return null;
+  return (
+    <SettingsRow
+      {...searchableSetting("font-smoothing", t)}
+      title={t("settings.typography.fontSmoothing")}
+      description={t("settings.typography.fontSmoothingDescription")}
+      resetAction={
+        settings.fontSmoothing !== DEFAULT_UNIFIED_SETTINGS.fontSmoothing ? (
+          <SettingResetButton
+            label={t("settings.typography.fontSmoothingReset")}
+            onClick={() =>
+              updateSettings({ fontSmoothing: DEFAULT_UNIFIED_SETTINGS.fontSmoothing })
+            }
+          />
+        ) : null
+      }
+      control={
+        <Switch
+          checked={settings.fontSmoothing}
+          onCheckedChange={(checked) => updateSettings({ fontSmoothing: Boolean(checked) })}
+          aria-label={t("settings.typography.fontSmoothing")}
+        />
+      }
+    />
+  );
+}
+
+function WordWrapRow() {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  return (
+    <SettingsRow
+      {...searchableSetting("word-wrap", t)}
+      title={t("settings.wordWrap.title")}
+      description={t("settings.wordWrap.description")}
+      resetAction={
+        settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? (
+          <SettingResetButton
+            label={t("settings.wordWrap.resetLabel")}
+            onClick={() => updateSettings({ wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap })}
+          />
+        ) : null
+      }
+      control={
+        <Switch
+          checked={settings.wordWrap}
+          onCheckedChange={(checked) => updateSettings({ wordWrap: Boolean(checked) })}
+          aria-label={t("settings.wordWrap.aria")}
+        />
+      }
+    />
+  );
+}
+
+function FontSettingsGroup() {
+  return (
+    <>
+      <InterfaceFontRow />
+      <PromptFontRow />
+      <CodeFontRow />
+      <TerminalFontRow />
+      <FontSmoothingRow />
+    </>
+  );
+}
+
+/**
+ * The two-font view: one sans, one monospace. The prompt follows the
+ * interface font and the terminal follows the monospace font, so the demos
+ * under each row show every surface the choice reaches.
+ */
+function SimpleFontRows() {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  return (
+    <>
+      <InterfaceFontRow preview={<PromptFontPreview />} />
+      <CodeFontRow
+        title={t("settings.typography.monospaceFont")}
+        description={t("settings.typography.monospaceDescription")}
+        preview={
+          <>
+            <CodeFontPreview />
+            <TerminalFontPreview
+              family={resolveTerminalFontPreference({
+                advanced: false,
+                code: settings.fontFamilyCode,
+                terminal: settings.fontFamilyTerminal,
+              })}
+              size={resolveTerminalFontSizePreference({
+                advanced: false,
+                code: settings.fontSizeCode,
+                terminal: settings.fontSizeTerminal,
+              })}
+            />
+          </>
+        }
+      />
+    </>
+  );
+}
+
+// Font smoothing only renders on macOS, so a search jump to it elsewhere
+// must not flip the section - the target would never mount to be scrolled to.
+const ADVANCED_TYPOGRAPHY_TARGET_IDS: ReadonlySet<string> = new Set([
+  "prompt-font",
+  "terminal-font",
+  ...(typeof navigator !== "undefined" && isMacPlatform(navigator.platform)
+    ? ["font-smoothing"]
+    : []),
+]);
+
+/**
+ * The two-font view by default - one sans, one monospace, each cascading to
+ * every surface it reaches - with an Advanced switch in the section header
+ * that reveals the per-surface override rows. The choice persists locally,
+ * and a settings-search jump to an override row flips Advanced on so the
+ * target exists to scroll to.
+ */
+function TypographySection() {
+  const { t } = useI18n();
+  const [advanced, setAdvanced] = useLocalStorage(
+    TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+    false,
+    Schema.Boolean,
+  );
+  const searchTargetId = useSettingsSearchTargetId();
+  // Flip Advanced on once per search jump so the hidden target can mount and
+  // scroll; tracking the handled id lets the user turn it back off without
+  // the still-set target immediately re-expanding the section.
+  const lastExpandedTargetRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (searchTargetId === null || !ADVANCED_TYPOGRAPHY_TARGET_IDS.has(searchTargetId)) return;
+    if (lastExpandedTargetRef.current === searchTargetId) return;
+    lastExpandedTargetRef.current = searchTargetId;
+    setAdvanced(true);
+  }, [searchTargetId, setAdvanced]);
+  return (
+    <SettingsSection
+      title={t("settings.typography.title")}
+      headerAction={
+        <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground">
+          {t("settings.typography.advanced")}
+          <Switch
+            checked={advanced}
+            onCheckedChange={(checked) => setAdvanced(Boolean(checked))}
+            aria-label={t("settings.typography.showAdvanced")}
+          />
+        </label>
+      }
+    >
+      {advanced ? <FontSettingsGroup /> : <SimpleFontRows />}
+      <WordWrapRow />
+    </SettingsSection>
+  );
+}
+
+function FontFamilySettingsRow({
+  id,
+  title,
+  description,
+  defaultFamily,
+  defaultValue,
+  preview,
+  value,
+  onValueChange,
+  onReset,
+  requireMonospace = false,
+  size,
+}: {
+  id?: string;
+  title: string;
+  description: string;
+  /** What an unset preference renders as, e.g. "Menlo". */
+  defaultFamily: string;
+  /** The persisted family value supplied by the unified settings defaults. */
+  defaultValue: string;
+  preview?: ReactNode;
+  value: string;
+  onValueChange: (value: string) => void;
+  onReset: () => void;
+  requireMonospace?: boolean;
+  size: {
+    label: string;
+    min: number;
+    max: number;
+    value: number;
+    defaultValue: number;
+    onChange: (v: number) => void;
+  };
+}) {
+  const { t } = useI18n();
+  const trimmed = value.trim();
+  // The fallback input edits a draft; the preference only commits once typing
+  // pauses and the text probes as an available font (or is an explicit
+  // clear), so the current font holds and nothing reflows mid-word.
+  const [draft, setDraft] = useState(value);
+  const [draftSettled, setDraftSettled] = useState(true);
+  const commitTimerRef = useRef<number | null>(null);
+  const lastValueRef = useRef(value);
+  if (lastValueRef.current !== value) {
+    // The committed value changed externally (hydration, reset, picker
+    // selection); adopt it and drop any pending commit of a stale draft.
+    lastValueRef.current = value;
+    if (commitTimerRef.current !== null) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+    setDraft(value);
+    setDraftSettled(true);
+  }
+  useEffect(
+    () => () => {
+      if (commitTimerRef.current !== null) window.clearTimeout(commitTimerRef.current);
+    },
+    [],
+  );
+  const acceptsFamily = (candidate: string) =>
+    isFontFamilyAvailable(candidate) && (!requireMonospace || isMonospaceFamily(candidate));
+  const commitDraft = (next: string) => {
+    setDraftSettled(true);
+    // A rejected name stays in the field, flagged: the terminal would silently
+    // fall back to its default, so the row must not claim it took the value.
+    if (next.trim().length === 0 || acceptsFamily(next)) {
+      onValueChange(next);
+    }
+  };
+  const flushDraft = () => {
+    if (commitTimerRef.current === null) return;
+    window.clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = null;
+    commitDraft(draft);
+  };
+  const draftTrimmed = draft.trim();
+  // Flag an unknown name only once typing pauses, and never for an empty
+  // field - that is the starting state, not a rejected entry.
+  const draftPending = draftSettled && draftTrimmed.length > 0 && draftTrimmed !== trimmed;
+  const resetToDefault = () => {
+    if (commitTimerRef.current !== null) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
+    }
+    setDraft(defaultValue);
+    setDraftSettled(true);
+    onReset();
+  };
+  const resetAction =
+    value !== defaultValue || size.value !== size.defaultValue ? (
+      <SettingResetButton label={title} onClick={resetToDefault} />
+    ) : null;
+  const fontEnumeration = useFontEnumeration();
+  // Everyone starts on the plain input; focusing it is the user gesture that
+  // runs font discovery. Where the engine can enumerate, the control then
+  // upgrades to the picker - popped open when the swap happens under focus,
+  // so the interaction continues without a second click.
+  const inputFocusedRef = useRef(false);
+  const familyControl =
+    fontEnumeration.status === "granted" ? (
+      <FontFamilyPicker
+        ariaLabel={t("settings.typography.family", { font: title })}
+        defaultFamily={defaultFamily}
+        selectedFamily={trimmed}
+        requireMonospace={requireMonospace}
+        initialOpen={inputFocusedRef.current}
+        onSelect={onValueChange}
+      />
+    ) : (
+      <Input
+        aria-label={t("settings.typography.family", { font: title })}
+        aria-invalid={draftPending || undefined}
+        autoCapitalize="off"
+        autoComplete="off"
+        className="min-w-0 flex-1"
+        maxLength={200}
+        onFocus={() => {
+          inputFocusedRef.current = true;
+          discoverInstalledFonts();
+        }}
+        onBlur={() => {
+          inputFocusedRef.current = false;
+          flushDraft();
+        }}
+        onChange={(event) => {
+          const next = event.currentTarget.value;
+          setDraft(next);
+          setDraftSettled(false);
+          if (commitTimerRef.current !== null) {
+            window.clearTimeout(commitTimerRef.current);
+          }
+          commitTimerRef.current = window.setTimeout(() => {
+            commitTimerRef.current = null;
+            commitDraft(next);
+          }, 400);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") flushDraft();
+          if (event.key === "Escape") {
+            // Discard uncommitted typing without closing the settings page,
+            // which is what an unhandled Escape does.
+            event.preventDefault();
+            event.stopPropagation();
+            if (commitTimerRef.current !== null) {
+              window.clearTimeout(commitTimerRef.current);
+              commitTimerRef.current = null;
+            }
+            setDraft(value);
+            setDraftSettled(true);
+          }
+        }}
+        placeholder={defaultFamily}
+        spellCheck={false}
+        value={draft}
+      />
+    );
+  const control = (
+    <div className="flex w-full items-center gap-2 sm:w-auto">
+      <div className="min-w-0 flex-1 sm:w-44 sm:flex-none">{familyControl}</div>
+      <Select
+        value={String(size.value)}
+        onValueChange={(next) => {
+          if (typeof next !== "string") return;
+          const parsed = Number(next);
+          if (Number.isInteger(parsed) && parsed >= size.min && parsed <= size.max) {
+            size.onChange(parsed);
+          }
+        }}
+      >
+        <SelectTrigger className="w-22 shrink-0" aria-label={size.label}>
+          <SelectValue>{size.value} px</SelectValue>
+        </SelectTrigger>
+        <SelectPopup align="end" alignItemWithTrigger={false}>
+          {Array.from({ length: size.max - size.min + 1 }, (_, index) => size.min + index).map(
+            (px) => (
+              <SelectItem hideIndicator key={px} value={String(px)}>
+                {px} px
+              </SelectItem>
+            ),
+          )}
+        </SelectPopup>
+      </Select>
+    </div>
+  );
+  return (
+    <SettingsRow
+      {...(id !== undefined ? { id } : {})}
+      title={title}
+      description={description}
+      resetAction={resetAction}
+      control={control}
+    >
+      {preview}
+    </SettingsRow>
+  );
+}
+
+const AUTO_SETTLE_DEFAULT_DAYS = DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays ?? 3;
+
+function AutoSettleDaysInput({
+  value,
+  onCommit,
+}: {
+  value: number;
+  onCommit: (days: number) => void;
+}) {
+  const { t } = useI18n();
+  // Local draft so the field can be emptied mid-edit; the setting only moves
+  // on valid input and snaps back to the persisted value on blur.
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  return (
+    <Input
+      type="number"
+      min={MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS}
+      max={MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS}
+      className="w-full sm:w-24"
+      value={draft}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        // Number(), not parseInt: "3.5" must be rejected (not truncated to a
+        // committed 3 while the field shows 3.5) — commit only when the
+        // persisted value matches the displayed one.
+        const parsed = Number(event.target.value);
+        if (
+          Number.isInteger(parsed) &&
+          parsed >= MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS &&
+          parsed <= MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS
+        ) {
+          onCommit(parsed);
+        }
+      }}
+      onBlur={() => setDraft(String(value))}
+      aria-label={t("settings.autoSettle.daysTitle")}
+    />
+  );
+}
+
+// The legacy rows sit behind the fold, so a settings-search jump has to
+// expand the section before its target can mount and scroll.
+const LEGACY_FEATURE_TARGET_IDS: ReadonlySet<string> = new Set([
+  "legacy-plan-mode",
+  "legacy-token-streaming",
+  "legacy-sidebar",
+]);
+
+/**
+ * Retired features kept only for users who still depend on them. Collapsed by
+ * default so they stay out of the everyday settings path; a settings-search
+ * jump to one of the rows unfolds the section.
+ */
+function LegacyFeaturesSection() {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const [open, setOpen] = useState(false);
+  const searchTargetId = useSettingsSearchTargetId();
+  // Unfold once per search jump; tracking the handled id lets the user fold
+  // the section back up without the still-set target immediately reopening it.
+  const lastExpandedTargetRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (searchTargetId === null) {
+      // A handled jump clears the target; forgetting it here lets a later
+      // jump to the same row expand the section again.
+      lastExpandedTargetRef.current = null;
+      return;
+    }
+    if (!LEGACY_FEATURE_TARGET_IDS.has(searchTargetId)) return;
+    if (lastExpandedTargetRef.current === searchTargetId) return;
+    lastExpandedTargetRef.current = searchTargetId;
+    setOpen(true);
+  }, [searchTargetId]);
+
+  return (
+    <section className="space-y-3">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="group flex min-h-8 w-full items-center gap-2 px-3 sm:px-4">
+          <h2 className="text-lg font-semibold tracking-[-0.025em] text-muted-foreground transition-colors group-hover:text-foreground">
+            {t("settings.legacy.title")}
+          </h2>
+          <ChevronRightIcon className="size-4 text-muted-foreground transition-transform duration-200 group-data-panel-open:rotate-90" />
+        </CollapsibleTrigger>
+        <CollapsiblePanel>
+          <div className="relative space-y-1 overflow-visible pt-3 text-foreground">
+            <SettingsRow
+              {...searchableSetting("legacy-plan-mode", t)}
+              title={t("settings.legacy.planMode")}
+              description={t("settings.legacy.planModeDescription")}
+              control={
+                <Switch
+                  checked={settings.planModeEnabled}
+                  onCheckedChange={(checked) => {
+                    const planModeEnabled = Boolean(checked);
+                    const textGenerationModelSelection = withoutPlanAgentSelection(
+                      settings.textGenerationModelSelection,
+                    );
+                    const sourceControlWriterModelSelection = withoutPlanAgentSelection(
+                      settings.sourceControlWriterModelSelection,
+                    );
+                    updateSettings({
+                      planModeEnabled,
+                      ...(planModeEnabled
+                        ? {}
+                        : {
+                            ...(textGenerationModelSelection &&
+                            textGenerationModelSelection !== settings.textGenerationModelSelection
+                              ? { textGenerationModelSelection }
+                              : {}),
+                            ...(sourceControlWriterModelSelection &&
+                            sourceControlWriterModelSelection !==
+                              settings.sourceControlWriterModelSelection
+                              ? { sourceControlWriterModelSelection }
+                              : {}),
+                          }),
+                    });
+                  }}
+                  aria-label={t("settings.legacy.planModeAria")}
+                />
+              }
+            />
+            <SettingsRow
+              {...searchableSetting("legacy-token-streaming", t)}
+              title={t("settings.legacy.tokenStreaming")}
+              description={t("settings.legacy.tokenStreamingDescription")}
+              control={
+                <Switch
+                  checked={settings.enableLegacyTokenStreaming}
+                  onCheckedChange={(checked) => {
+                    if (!checked) {
+                      updateSettings({ enableLegacyTokenStreaming: false });
+                      return;
+                    }
+                    void (async () => {
+                      const api = readLocalApi();
+                      const confirmed = await (api ?? ensureLocalApi()).dialogs.confirm(
+                        [
+                          t("settings.legacy.tokenStreamingConfirm"),
+                          t("settings.legacy.tokenStreamingConfirmDescription"),
+                        ].join("\n"),
+                      );
+                      if (confirmed) updateSettings({ enableLegacyTokenStreaming: true });
+                    })();
+                  }}
+                  aria-label={t("settings.legacy.tokenStreamingAria")}
+                />
+              }
+            />
+            <SettingsRow
+              {...searchableSetting("legacy-sidebar", t)}
+              title={t("settings.legacy.sidebar")}
+              description={t("settings.legacy.sidebarDescription")}
+              control={
+                <Switch
+                  checked={settings.legacySidebarEnabled}
+                  onCheckedChange={(checked) =>
+                    updateSettings({ legacySidebarEnabled: Boolean(checked) })
+                  }
+                  aria-label={t("settings.legacy.sidebarAria")}
+                />
+              }
+            />
+          </div>
+        </CollapsiblePanel>
+      </Collapsible>
+    </section>
+  );
+}
+
+export function GeneralSettingsPanel() {
+  const { t } = useI18n();
+  const settings = usePrimarySettings();
+  const updateSettings = useUpdatePrimarySettings();
+  const [backgroundActivityDialogOpen, setBackgroundActivityDialogOpen] = useState(false);
+  const lastEnabledProjectGroupingMode = useRef<SidebarProjectGroupingMode>(
+    readLastEnabledProjectGroupingMode(),
+  );
   const observability = useAtomValue(primaryServerObservabilityAtom);
   const serverProviders = useAtomValue(primaryServerProvidersAtom);
   const diagnosticsDescription = formatDiagnosticsDescription(
@@ -498,69 +1949,151 @@ export function GeneralSettingsPanel() {
   const textGenInstanceId = textGenerationModelSelection.instanceId;
   const textGenModel = textGenerationModelSelection.model;
   const textGenModelOptions = textGenerationModelSelection.options;
-  const gitModelInstanceEntries = sortProviderInstanceEntries(
+  const textGenerationModelInstanceEntries = sortProviderInstanceEntries(
     applyProviderInstanceSettings(deriveProviderInstanceEntries(serverProviders), settings),
   );
-  const textGenInstanceEntry = gitModelInstanceEntries.find(
+  const textGenInstanceEntry = textGenerationModelInstanceEntries.find(
     (entry) => entry.instanceId === textGenInstanceId,
   );
   const textGenProvider: ProviderDriverKind =
     textGenInstanceEntry?.driverKind ?? DEFAULT_DRIVER_KIND;
-  const gitModelOptionsByInstance = getCustomModelOptionsByInstance(
+  const textGenerationModelOptionsByInstance = getCustomModelOptionsByInstance(
     settings,
     serverProviders,
     textGenInstanceId,
     textGenModel,
   );
-  const isGitWritingModelDirty = !Equal.equals(
+  const isTextGenerationModelDirty = !Equal.equals(
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
-  const themeOptions = getThemeOptions(t);
-  const timestampFormatLabels = getTimestampFormatLabels(t);
+  const resolvedBackgroundActivity = resolveServerBackgroundActivitySettings(settings);
+  const activeBackgroundActivityProfile = resolvedBackgroundActivity.profile;
+  const backgroundActivityProfileOption = resolveBackgroundActivityProfileOption(settings);
+  const backgroundActivityDescription =
+    backgroundActivityProfileOption === "advanced"
+      ? t("settings.background.advancedDescription", {
+          policy: t(BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS[activeBackgroundActivityProfile]),
+        })
+      : t(BACKGROUND_ACTIVITY_PROFILE_DESCRIPTION_KEYS[resolvedBackgroundActivity.profile]);
+  const canResetBackgroundActivity = !Equal.equals(
+    settings.backgroundActivity,
+    DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
+  );
 
   return (
     <SettingsPageContainer>
       <SettingsSection title={t("settings.general.title")}>
         <LanguageSettings />
         <SettingsRow
-          title={t("settings.theme.title")}
-          description={t("settings.theme.description")}
+          {...searchableSetting("project-grouping", t)}
+          title={t("settings.projectGrouping.title")}
+          description={t("settings.projectGrouping.description")}
           resetAction={
-            theme !== "system" ? (
+            settings.sidebarProjectGroupingMode !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode ? (
               <SettingResetButton
-                label={t("settings.theme.resetLabel")}
-                onClick={() => setTheme("system")}
+                label={t("settings.projectGrouping.resetLabel")}
+                onClick={() =>
+                  updateSettings({
+                    sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
+                  })
+                }
               />
             ) : null
           }
           control={
-            <Select
-              value={theme}
-              onValueChange={(value) => {
-                if (value === "system" || value === "light" || value === "dark") {
-                  setTheme(value);
+            <Switch
+              checked={isProjectGroupingEnabled(settings.sidebarProjectGroupingMode)}
+              onCheckedChange={(checked) => {
+                if (!checked && settings.sidebarProjectGroupingMode !== "separate") {
+                  lastEnabledProjectGroupingMode.current = settings.sidebarProjectGroupingMode;
+                  rememberEnabledProjectGroupingMode(settings.sidebarProjectGroupingMode);
                 }
+                updateSettings({
+                  sidebarProjectGroupingMode: projectGroupingModeFromToggle(
+                    checked,
+                    lastEnabledProjectGroupingMode.current,
+                  ),
+                });
               }}
-            >
-              <SelectTrigger className="w-full sm:w-40" aria-label={t("settings.theme.preference")}>
-                <SelectValue>
-                  {themeOptions.find((option) => option.value === theme)?.label ??
-                    t("settings.theme.system")}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                {themeOptions.map((option) => (
-                  <SelectItem hideIndicator key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectPopup>
-            </Select>
+              aria-label={t("settings.projectGrouping.title")}
+            />
           }
         />
 
         <SettingsRow
+          {...searchableSetting("auto-settle-merged-threads", t)}
+          title={t("settings.autoSettle.mergedTitle")}
+          description={t("settings.autoSettle.mergedDescription")}
+          resetAction={
+            settings.sidebarAutoSettleOnMerge !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge ? (
+              <SettingResetButton
+                label={t("settings.autoSettle.mergedResetLabel")}
+                onClick={() =>
+                  updateSettings({
+                    sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarAutoSettleOnMerge}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarAutoSettleOnMerge: Boolean(checked) })
+              }
+              aria-label={t("settings.autoSettle.mergedTitle")}
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("auto-settle-inactive-threads", t)}
+          title={t("settings.autoSettle.inactiveTitle")}
+          description={t("settings.autoSettle.inactiveDescription")}
+          resetAction={
+            settings.sidebarAutoSettleAfterDays !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays ? (
+              <SettingResetButton
+                label={t("settings.autoSettle.inactiveResetLabel")}
+                onClick={() =>
+                  updateSettings({
+                    sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarAutoSettleAfterDays !== null}
+              onCheckedChange={(checked) =>
+                updateSettings({
+                  sidebarAutoSettleAfterDays: checked ? AUTO_SETTLE_DEFAULT_DAYS : null,
+                })
+              }
+              aria-label={t("settings.autoSettle.inactiveTitle")}
+            />
+          }
+        />
+        {settings.sidebarAutoSettleAfterDays !== null ? (
+          <SettingsRow
+            title={t("settings.autoSettle.daysTitle")}
+            description={t("settings.autoSettle.daysDescription")}
+            control={
+              <AutoSettleDaysInput
+                value={settings.sidebarAutoSettleAfterDays}
+                onCommit={(days) => updateSettings({ sidebarAutoSettleAfterDays: days })}
+              />
+            }
+          />
+        ) : null}
+
+        <SettingsRow
+          {...searchableSetting("time-format", t)}
           title={t("settings.time.title")}
           description={t("settings.time.description")}
           resetAction={
@@ -585,17 +2118,25 @@ export function GeneralSettingsPanel() {
               }}
             >
               <SelectTrigger className="w-full sm:w-40" aria-label={t("settings.time.preference")}>
-                <SelectValue>{timestampFormatLabels[settings.timestampFormat]}</SelectValue>
+                <SelectValue>
+                  {t(
+                    settings.timestampFormat === "locale"
+                      ? "settings.time.system"
+                      : settings.timestampFormat === "12-hour"
+                        ? "settings.time.12Hour"
+                        : "settings.time.24Hour",
+                  )}
+                </SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value="locale">
-                  {timestampFormatLabels.locale}
+                  {t("settings.time.system")}
                 </SelectItem>
                 <SelectItem hideIndicator value="12-hour">
-                  {timestampFormatLabels["12-hour"]}
+                  {t("settings.time.12Hour")}
                 </SelectItem>
                 <SelectItem hideIndicator value="24-hour">
-                  {timestampFormatLabels["24-hour"]}
+                  {t("settings.time.24Hour")}
                 </SelectItem>
               </SelectPopup>
             </Select>
@@ -603,30 +2144,7 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
-          title={t("settings.wordWrap.title")}
-          description={t("settings.wordWrap.description")}
-          resetAction={
-            settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? (
-              <SettingResetButton
-                label={t("settings.wordWrap.resetLabel")}
-                onClick={() =>
-                  updateSettings({
-                    wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <Switch
-              checked={settings.wordWrap}
-              onCheckedChange={(checked) => updateSettings({ wordWrap: Boolean(checked) })}
-              aria-label={t("settings.wordWrap.aria")}
-            />
-          }
-        />
-
-        <SettingsRow
+          {...searchableSetting("hide-whitespace-changes", t)}
           title={t("settings.whitespace.title")}
           description={t("settings.whitespace.description")}
           resetAction={
@@ -653,16 +2171,16 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
-          title={t("settings.assistantOutput.title")}
-          description={t("settings.assistantOutput.description")}
+          id={searchableSetting("skills-in-slash-menu").id}
+          title={t("settings.skillsMenu.title")}
+          description={t("settings.skillsMenu.description")}
           resetAction={
-            settings.enableAssistantStreaming !==
-            DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming ? (
+            settings.showSkillsInSlashMenu !== DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu ? (
               <SettingResetButton
-                label={t("settings.assistantOutput.resetLabel")}
+                label={t("settings.skillsMenu.resetLabel")}
                 onClick={() =>
                   updateSettings({
-                    enableAssistantStreaming: DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming,
+                    showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
                   })
                 }
               />
@@ -670,16 +2188,17 @@ export function GeneralSettingsPanel() {
           }
           control={
             <Switch
-              checked={settings.enableAssistantStreaming}
+              checked={settings.showSkillsInSlashMenu}
               onCheckedChange={(checked) =>
-                updateSettings({ enableAssistantStreaming: Boolean(checked) })
+                updateSettings({ showSkillsInSlashMenu: Boolean(checked) })
               }
-              aria-label={t("settings.assistantOutput.aria")}
+              aria-label={t("settings.skillsMenu.aria")}
             />
           }
         />
 
         <SettingsRow
+          {...searchableSetting("provider-update-checks", t)}
           title={t("settings.providerUpdates.title")}
           description={t("settings.providerUpdates.description")}
           resetAction={
@@ -707,32 +2226,93 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
-          title={t("settings.autoOpen.title")}
-          description={t("settings.autoOpen.description")}
+          title={
+            <span className="inline-flex items-center gap-1.5">
+              {t("settings.background.title")}
+              <PolicyTooltip>{t("settings.background.policyTooltip")}</PolicyTooltip>
+            </span>
+          }
+          description={backgroundActivityDescription}
           resetAction={
-            settings.autoOpenPlanSidebar !== DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar ? (
+            canResetBackgroundActivity ? (
               <SettingResetButton
-                label={t("settings.autoOpen.resetLabel")}
-                onClick={() =>
-                  updateSettings({
-                    autoOpenPlanSidebar: DEFAULT_UNIFIED_SETTINGS.autoOpenPlanSidebar,
-                  })
-                }
+                label={t("settings.background.resetLabel")}
+                onClick={() => updateSettings(resetBackgroundActivitySettings())}
               />
             ) : null
           }
           control={
-            <Switch
-              checked={settings.autoOpenPlanSidebar}
-              onCheckedChange={(checked) =>
-                updateSettings({ autoOpenPlanSidebar: Boolean(checked) })
-              }
-              aria-label={t("settings.autoOpen.aria")}
-            />
+            <>
+              <Select
+                value={backgroundActivityProfileOption}
+                onValueChange={(value) => {
+                  if (value === "advanced") {
+                    setBackgroundActivityDialogOpen(true);
+                    return;
+                  }
+                  if (
+                    value === "balanced" ||
+                    value === "performance" ||
+                    value === "battery-saver"
+                  ) {
+                    updateSettings(backgroundActivityProfileSettings(value));
+                  }
+                }}
+              >
+                <SelectTrigger
+                  className="w-full sm:w-40"
+                  aria-label={t("settings.background.profile")}
+                >
+                  <SelectValue>
+                    {t(
+                      BACKGROUND_ACTIVITY_PROFILE_OPTION_LABEL_KEYS[
+                        backgroundActivityProfileOption
+                      ],
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem hideIndicator value="balanced">
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS.balanced)}
+                  </SelectItem>
+                  <SelectItem hideIndicator value="performance">
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS.performance)}
+                  </SelectItem>
+                  <SelectItem hideIndicator value="battery-saver">
+                    {t(BACKGROUND_ACTIVITY_PROFILE_LABEL_KEYS["battery-saver"])}
+                  </SelectItem>
+                  <SelectItem hideIndicator value="advanced">
+                    {t(BACKGROUND_ACTIVITY_PROFILE_OPTION_LABEL_KEYS.advanced)}
+                  </SelectItem>
+                </SelectPopup>
+              </Select>
+              {backgroundActivityProfileOption === "advanced" ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        size="icon-sm"
+                        variant="outline"
+                        aria-label={t("settings.background.configureAdvanced")}
+                        onClick={() => setBackgroundActivityDialogOpen(true)}
+                      >
+                        <SettingsIcon className="size-4" />
+                      </Button>
+                    }
+                  />
+                  <TooltipPopup side="top">{t("settings.background.configure")}</TooltipPopup>
+                </Tooltip>
+              ) : null}
+              <BackgroundActivityAdvancedDialog
+                open={backgroundActivityDialogOpen}
+                onOpenChange={setBackgroundActivityDialogOpen}
+              />
+            </>
           }
         />
 
         <SettingsRow
+          {...searchableSetting("new-threads", t)}
           title={t("settings.newThreads.title")}
           description={t("settings.newThreads.description")}
           resetAction={
@@ -811,6 +2391,7 @@ export function GeneralSettingsPanel() {
         ) : null}
 
         <SettingsRow
+          {...searchableSetting("add-project-starts-in", t)}
           title={t("settings.addProject.title")}
           description={t("settings.addProject.description")}
           resetAction={
@@ -839,6 +2420,7 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
+          {...searchableSetting("archive-confirmation", t)}
           title={t("settings.archive.title")}
           description={t("settings.archive.description")}
           resetAction={
@@ -865,6 +2447,7 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
+          {...searchableSetting("delete-confirmation", t)}
           title={t("settings.delete.title")}
           description={t("settings.delete.description")}
           resetAction={
@@ -890,11 +2473,37 @@ export function GeneralSettingsPanel() {
           }
         />
 
+        {isElectron ? (
+          <SettingsRow
+            {...searchableSetting("quit-confirmation", t)}
+            title={t("settings.quit.title")}
+            description={t("settings.quit.description")}
+            resetAction={
+              settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? (
+                <SettingResetButton
+                  label={t("settings.quit.resetLabel")}
+                  onClick={() =>
+                    updateSettings({ confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <Switch
+                checked={settings.confirmQuit}
+                onCheckedChange={(checked) => updateSettings({ confirmQuit: Boolean(checked) })}
+                aria-label={t("settings.quit.aria")}
+              />
+            }
+          />
+        ) : null}
+
         <SettingsRow
+          {...searchableSetting("text-generation-model", t)}
           title={t("settings.textGeneration.title")}
           description={t("settings.textGeneration.description")}
           resetAction={
-            isGitWritingModelDirty ? (
+            isTextGenerationModelDirty ? (
               <SettingResetButton
                 label={t("settings.textGeneration.resetLabel")}
                 onClick={() =>
@@ -912,8 +2521,8 @@ export function GeneralSettingsPanel() {
                 activeInstanceId={textGenInstanceId}
                 model={textGenModel}
                 lockedProvider={null}
-                instanceEntries={gitModelInstanceEntries}
-                modelOptionsByInstance={gitModelOptionsByInstance}
+                instanceEntries={textGenerationModelInstanceEntries}
+                modelOptionsByInstance={textGenerationModelOptionsByInstance}
                 triggerVariant="outline"
                 triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
                 onInstanceModelChange={(instanceId, model) => {
@@ -942,6 +2551,7 @@ export function GeneralSettingsPanel() {
                 onPromptChange={() => {}}
                 modelOptions={textGenModelOptions}
                 allowPromptInjectedEffort={false}
+                planModeEnabled={settings.planModeEnabled}
                 triggerVariant="outline"
                 triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
                 onModelOptionsChange={(nextOptions) => {
@@ -975,6 +2585,7 @@ export function GeneralSettingsPanel() {
           />
         )}
         <SettingsRow
+          {...searchableSetting("diagnostics", t)}
           title={t("settings.about.diagnostics")}
           description={diagnosticsDescription}
           control={
@@ -984,451 +2595,8 @@ export function GeneralSettingsPanel() {
           }
         />
       </SettingsSection>
-    </SettingsPageContainer>
-  );
-}
 
-export function ProviderSettingsPanel() {
-  const { t } = useI18n();
-  const settings = usePrimarySettings();
-  const updateSettings = useUpdatePrimarySettings();
-  const serverProviders = useAtomValue(primaryServerProvidersAtom);
-  const primaryEnvironment = usePrimaryEnvironment();
-  const refreshServerProviders = useAtomCommand(serverEnvironment.refreshProviders, {
-    reportFailure: false,
-  });
-  const updateProvider = useAtomCommand(serverEnvironment.updateProvider, {
-    reportFailure: false,
-  });
-  const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
-  const [isAddInstanceDialogOpen, setIsAddInstanceDialogOpen] = useState(false);
-  const [updatingProviderDrivers, setUpdatingProviderDrivers] = useState<
-    ReadonlySet<ProviderDriverKind>
-  >(() => new Set());
-  const [openInstanceDetails, setOpenInstanceDetails] = useState<Record<string, boolean>>({});
-  const refreshingRef = useRef(false);
-
-  const providerUpdateCandidates = useMemo(
-    () => collectProviderUpdateCandidates(serverProviders),
-    [serverProviders],
-  );
-  const providerUpdateCandidateByInstanceId = useMemo(
-    () => new Map(providerUpdateCandidates.map((candidate) => [candidate.instanceId, candidate])),
-    [providerUpdateCandidates],
-  );
-  const visibleProviderSettings = PROVIDER_SETTINGS.filter(
-    (providerSettings) =>
-      providerSettings.provider !== "cursor" ||
-      serverProviders.some(
-        (provider) =>
-          provider.instanceId === defaultInstanceIdForDriver(ProviderDriverKind.make("cursor")),
-      ),
-  );
-  const textGenerationModelSelection = resolveAppModelSelectionState(settings, serverProviders);
-  const textGenInstanceId = textGenerationModelSelection.instanceId;
-  const lastCheckedAt =
-    serverProviders.length > 0
-      ? serverProviders.reduce(
-          (latest, provider) => (provider.checkedAt > latest ? provider.checkedAt : latest),
-          serverProviders[0]!.checkedAt,
-        )
-      : null;
-
-  const refreshProviders = useCallback(() => {
-    if (refreshingRef.current) return;
-    refreshingRef.current = true;
-    setIsRefreshingProviders(true);
-    if (!primaryEnvironment) {
-      refreshingRef.current = false;
-      setIsRefreshingProviders(false);
-      return;
-    }
-    void (async () => {
-      const result = await refreshServerProviders({
-        environmentId: primaryEnvironment.environmentId,
-        input: {},
-      });
-      refreshingRef.current = false;
-      setIsRefreshingProviders(false);
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        console.warn("Failed to refresh providers", {
-          operation: "refresh-providers",
-          environmentId: primaryEnvironment.environmentId,
-          ...safeErrorLogAttributes(squashAtomCommandFailure(result)),
-        });
-      }
-    })();
-  }, [primaryEnvironment, refreshServerProviders]);
-
-  const runProviderUpdate = useCallback(
-    async (candidate: ProviderUpdateCandidate) => {
-      if (!primaryEnvironment) return;
-      let started = false;
-      setUpdatingProviderDrivers((previous) => {
-        if (previous.has(candidate.driver)) {
-          return previous;
-        }
-        started = true;
-        const next = new Set(previous);
-        next.add(candidate.driver);
-        return next;
-      });
-      if (!started) {
-        return;
-      }
-
-      const result = await updateProvider({
-        environmentId: primaryEnvironment.environmentId,
-        input: {
-          provider: candidate.driver,
-          instanceId: candidate.instanceId,
-        },
-      });
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        const error = squashAtomCommandFailure(result);
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: t("providers.updateProviderFailed", {
-              provider: PROVIDER_DISPLAY_NAMES[candidate.driver] ?? candidate.driver,
-            }),
-            description: error instanceof Error ? error.message : t("providers.updateStartFailed"),
-          }),
-        );
-      }
-      setUpdatingProviderDrivers((previous) => {
-        if (!previous.has(candidate.driver)) {
-          return previous;
-        }
-        const next = new Set(previous);
-        next.delete(candidate.driver);
-        return next;
-      });
-    },
-    [primaryEnvironment, t, updateProvider],
-  );
-
-  interface InstanceRow {
-    readonly instanceId: ProviderInstanceId;
-    readonly instance: ProviderInstanceConfig;
-    readonly driver: ProviderDriverKind;
-    readonly isDefault: boolean;
-    readonly isDirty?: boolean;
-  }
-
-  const instancesByDriver = new Map<
-    ProviderDriverKind,
-    Array<[ProviderInstanceId, ProviderInstanceConfig]>
-  >();
-  for (const [rawId, instance] of Object.entries(settings.providerInstances ?? {})) {
-    const driver = instance.driver;
-    const list = instancesByDriver.get(driver) ?? [];
-    list.push([rawId as ProviderInstanceId, instance]);
-    instancesByDriver.set(driver, list);
-  }
-
-  const defaultSlotIdsBySource = new Set<string>(
-    visibleProviderSettings.map((providerSettings) =>
-      String(defaultInstanceIdForDriver(providerSettings.provider)),
-    ),
-  );
-
-  const rows: InstanceRow[] = [];
-  const visibleDriverKinds = new Set<ProviderDriverKind>(
-    visibleProviderSettings.map((providerSettings) => providerSettings.provider),
-  );
-
-  for (const providerSettings of visibleProviderSettings) {
-    type LegacyProviderSettings = (typeof settings.providers)[keyof typeof settings.providers];
-    const legacyProviders = settings.providers as Record<string, LegacyProviderSettings>;
-    const defaultLegacyProviders = DEFAULT_UNIFIED_SETTINGS.providers as Record<
-      string,
-      LegacyProviderSettings
-    >;
-    const driver = providerSettings.provider;
-    const defaultInstanceId = defaultInstanceIdForDriver(driver);
-    const explicitInstance = settings.providerInstances?.[defaultInstanceId];
-    const legacyConfig = legacyProviders[providerSettings.provider]!;
-    const defaultLegacyConfig = defaultLegacyProviders[providerSettings.provider]!;
-    const effectiveInstance: ProviderInstanceConfig =
-      explicitInstance ??
-      ({
-        driver,
-        enabled: legacyConfig.enabled,
-        config: legacyConfig,
-      } satisfies ProviderInstanceConfig);
-    const isDirty =
-      explicitInstance !== undefined || !Equal.equals(legacyConfig, defaultLegacyConfig);
-    rows.push({
-      instanceId: defaultInstanceId,
-      instance: effectiveInstance,
-      driver,
-      isDefault: true,
-      isDirty,
-    });
-    for (const [id, instance] of instancesByDriver.get(providerSettings.provider) ?? []) {
-      if (id === defaultInstanceId) continue;
-      rows.push({ instanceId: id, instance, driver: instance.driver, isDefault: false });
-    }
-  }
-  for (const [driver, list] of instancesByDriver) {
-    if (visibleDriverKinds.has(driver)) continue;
-    for (const [id, instance] of list) {
-      rows.push({
-        instanceId: id,
-        instance,
-        driver: instance.driver,
-        isDefault: defaultSlotIdsBySource.has(String(id)),
-      });
-    }
-  }
-
-  const updateProviderInstance = (
-    row: InstanceRow,
-    next: ProviderInstanceConfig,
-    options?: {
-      readonly textGenerationModelSelection?: Parameters<
-        typeof buildProviderInstanceUpdatePatch
-      >[0]["textGenerationModelSelection"];
-    },
-  ) => {
-    updateSettings(
-      buildProviderInstanceUpdatePatch({
-        settings,
-        instanceId: row.instanceId,
-        instance: next,
-        driver: row.driver,
-        isDefault: row.isDefault,
-        textGenerationModelSelection: options?.textGenerationModelSelection,
-      }),
-    );
-  };
-
-  const deleteProviderInstance = (id: ProviderInstanceId) => {
-    updateSettings({
-      providerInstances: withoutProviderInstanceKey(settings.providerInstances, id),
-      providerModelPreferences: withoutProviderInstanceKey(settings.providerModelPreferences, id),
-      favorites: withoutProviderInstanceFavorites(settings.favorites ?? [], id),
-    });
-  };
-
-  const updateProviderModelPreferences = (
-    instanceId: ProviderInstanceId,
-    next: {
-      readonly hiddenModels: ReadonlyArray<string>;
-      readonly modelOrder: ReadonlyArray<string>;
-    },
-  ) => {
-    const hiddenModels = [...new Set(next.hiddenModels.filter((slug) => slug.trim().length > 0))];
-    const modelOrder = [...new Set(next.modelOrder.filter((slug) => slug.trim().length > 0))];
-    const rest = withoutProviderInstanceKey(settings.providerModelPreferences, instanceId);
-    updateSettings({
-      providerModelPreferences:
-        hiddenModels.length === 0 && modelOrder.length === 0
-          ? rest
-          : {
-              ...rest,
-              [instanceId]: {
-                hiddenModels,
-                modelOrder,
-              },
-            },
-    });
-  };
-
-  const updateProviderFavoriteModels = (
-    instanceId: ProviderInstanceId,
-    nextFavoriteModels: ReadonlyArray<string>,
-  ) => {
-    const favoriteModels = [
-      ...new Set(
-        Arr.filterMap(nextFavoriteModels, (slug) => {
-          const trimmedSlug = slug.trim();
-          return trimmedSlug.length > 0 ? Result.succeed(trimmedSlug) : Result.failVoid;
-        }),
-      ),
-    ];
-    updateSettings({
-      favorites: [
-        ...withoutProviderInstanceFavorites(settings.favorites ?? [], instanceId),
-        ...favoriteModels.map((model) => ({ provider: instanceId, model })),
-      ],
-    });
-  };
-
-  const resetDefaultInstance = (driverKind: ProviderDriverKind) => {
-    type LegacyProviderSettings = (typeof settings.providers)[keyof typeof settings.providers];
-    const defaultLegacyProviders = DEFAULT_UNIFIED_SETTINGS.providers as Record<
-      string,
-      LegacyProviderSettings | undefined
-    >;
-    const defaultInstanceId = defaultInstanceIdForDriver(driverKind);
-    const defaultLegacyProvider = defaultLegacyProviders[driverKind];
-    if (defaultLegacyProvider === undefined) return;
-    updateSettings({
-      providers: {
-        ...settings.providers,
-        [driverKind]: defaultLegacyProvider,
-      } as typeof settings.providers,
-      providerInstances: withoutProviderInstanceKey(settings.providerInstances, defaultInstanceId),
-      providerModelPreferences: withoutProviderInstanceKey(
-        settings.providerModelPreferences,
-        defaultInstanceId,
-      ),
-      favorites: withoutProviderInstanceFavorites(settings.favorites ?? [], defaultInstanceId),
-    });
-  };
-
-  return (
-    <SettingsPageContainer>
-      <SettingsSection
-        title={t("providers.title")}
-        headerAction={
-          <div className="flex items-center gap-1.5">
-            <ProviderLastChecked lastCheckedAt={lastCheckedAt} />
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    size="icon-xs"
-                    variant="ghost"
-                    className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
-                    onClick={() => setIsAddInstanceDialogOpen(true)}
-                    aria-label={t("providers.addInstance")}
-                  >
-                    <PlusIcon className="size-3" />
-                  </Button>
-                }
-              />
-              <TooltipPopup side="top">{t("providers.addInstance")}</TooltipPopup>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    size="icon-xs"
-                    variant="ghost"
-                    className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
-                    disabled={isRefreshingProviders}
-                    onClick={() => void refreshProviders()}
-                    aria-label={t("providers.refreshStatus")}
-                  >
-                    {isRefreshingProviders ? (
-                      <LoaderIcon className="size-3 animate-spin" />
-                    ) : (
-                      <RefreshCwIcon className="size-3" />
-                    )}
-                  </Button>
-                }
-              />
-              <TooltipPopup side="top">{t("providers.refreshStatus")}</TooltipPopup>
-            </Tooltip>
-          </div>
-        }
-      >
-        {rows.map((row) => {
-          const driverOption = getDriverOption(row.driver);
-          const liveProvider = serverProviders.find(
-            (candidate) => candidate.instanceId === row.instanceId,
-          );
-          const updateCandidate = liveProvider
-            ? providerUpdateCandidateByInstanceId.get(liveProvider.instanceId)
-            : undefined;
-          const isDriverUpdateRunning =
-            updateCandidate !== undefined &&
-            (updatingProviderDrivers.has(updateCandidate.driver) ||
-              serverProviders.some(
-                (provider) =>
-                  provider.driver === updateCandidate.driver && isProviderUpdateActive(provider),
-              ));
-          const showInlineUpdateButton =
-            updateCandidate !== undefined &&
-            hasOneClickUpdateProviderCandidate(updateCandidate, serverProviders);
-          const canRunInlineUpdate =
-            updateCandidate !== undefined &&
-            canOneClickUpdateProviderCandidate(updateCandidate, serverProviders) &&
-            !updatingProviderDrivers.has(updateCandidate.driver);
-          const modelPreferences = settings.providerModelPreferences?.[row.instanceId] ?? {
-            hiddenModels: [],
-            modelOrder: [],
-          };
-          const favoriteModels = Arr.filterMap(settings.favorites ?? [], (favorite) =>
-            favorite.provider === row.instanceId ? Result.succeed(favorite.model) : Result.failVoid,
-          );
-          const resetLabel = driverOption?.label ?? String(row.driver);
-          const headerAction =
-            row.isDefault && row.isDirty ? (
-              <SettingResetButton
-                label={`${resetLabel} provider settings`}
-                onClick={() => resetDefaultInstance(row.driver)}
-              />
-            ) : null;
-          return (
-            <ProviderInstanceCard
-              key={row.instanceId}
-              instanceId={row.instanceId}
-              instance={row.instance}
-              driverOption={driverOption}
-              liveProvider={liveProvider}
-              isExpanded={openInstanceDetails[row.instanceId] ?? false}
-              onExpandedChange={(open) =>
-                setOpenInstanceDetails((existing) => ({
-                  ...existing,
-                  [row.instanceId]: open,
-                }))
-              }
-              onUpdate={(next) => {
-                const wasEnabled = row.instance.enabled ?? true;
-                const isDisabling = next.enabled === false && wasEnabled;
-                const shouldClearTextGen = isDisabling && textGenInstanceId === row.instanceId;
-                if (shouldClearTextGen) {
-                  updateProviderInstance(row, next, {
-                    textGenerationModelSelection:
-                      DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
-                  });
-                } else {
-                  updateProviderInstance(row, next);
-                }
-              }}
-              onDelete={row.isDefault ? undefined : () => deleteProviderInstance(row.instanceId)}
-              headerAction={headerAction}
-              hiddenModels={modelPreferences.hiddenModels}
-              favoriteModels={favoriteModels}
-              modelOrder={modelPreferences.modelOrder}
-              onHiddenModelsChange={(hiddenModels) =>
-                updateProviderModelPreferences(row.instanceId, {
-                  ...modelPreferences,
-                  hiddenModels,
-                })
-              }
-              onFavoriteModelsChange={(favoriteModels) =>
-                updateProviderFavoriteModels(row.instanceId, favoriteModels)
-              }
-              onModelOrderChange={(modelOrder) =>
-                updateProviderModelPreferences(row.instanceId, {
-                  ...modelPreferences,
-                  modelOrder,
-                })
-              }
-              onRunUpdate={
-                showInlineUpdateButton && updateCandidate
-                  ? () => {
-                      if (!canRunInlineUpdate) {
-                        return;
-                      }
-                      void runProviderUpdate(updateCandidate);
-                    }
-                  : undefined
-              }
-              isUpdating={showInlineUpdateButton ? isDriverUpdateRunning : undefined}
-            />
-          );
-        })}
-      </SettingsSection>
-
-      {isAddInstanceDialogOpen ? (
-        <AddProviderInstanceDialog open onOpenChange={setIsAddInstanceDialogOpen} />
-      ) : null}
+      <LegacyFeaturesSection />
     </SettingsPageContainer>
   );
 }
@@ -1460,6 +2628,7 @@ export function ArchivedThreadsPanel() {
                 environmentId,
                 name: project.title,
                 cwd: project.workspaceRoot,
+                faviconPath: project.faviconPath,
               },
             ] as const,
         ),
@@ -1549,7 +2718,10 @@ export function ArchivedThreadsPanel() {
   return (
     <SettingsPageContainer>
       {archivedGroups.length === 0 ? (
-        <SettingsSection title={t("settings.archived.title")}>
+        <SettingsSection
+          id={isLoadingArchive ? undefined : searchableSetting("archive").id}
+          title={t("settings.archived.title")}
+        >
           <SettingsRow
             title={
               <span className="inline-flex items-center gap-2">
@@ -1573,11 +2745,18 @@ export function ArchivedThreadsPanel() {
           />
         </SettingsSection>
       ) : (
-        archivedGroups.map(({ project, threads: projectThreads }) => (
+        archivedGroups.map(({ project, threads: projectThreads }, index) => (
           <SettingsSection
             key={project.id}
+            id={index === 0 ? searchableSetting("archive").id : undefined}
             title={project.name}
-            icon={<ProjectFavicon environmentId={project.environmentId} cwd={project.cwd} />}
+            icon={
+              <ProjectFavicon
+                environmentId={project.environmentId}
+                cwd={project.cwd}
+                faviconPath={project.faviconPath}
+              />
+            }
           >
             {projectThreads.map((thread) => (
               <SettingsRow
@@ -1608,14 +2787,10 @@ export function ArchivedThreadsPanel() {
                   })();
                 }}
                 title={thread.title}
-                description={
-                  <>
-                    {t("settings.archived.metadata", {
-                      archived: formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt),
-                      created: formatRelativeTimeLabel(thread.createdAt),
-                    })}
-                  </>
-                }
+                description={t("settings.archived.metadata", {
+                  archived: formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt, t),
+                  created: formatRelativeTimeLabel(thread.createdAt, t),
+                })}
                 control={
                   <Button
                     type="button"

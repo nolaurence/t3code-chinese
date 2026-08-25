@@ -1,15 +1,17 @@
 "use client";
 
-import { CheckIcon } from "lucide-react";
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
-import { useCallback, useMemo, useState } from "react";
+import { CheckIcon } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
   ProviderInstanceId,
   ProviderDriverKind,
+  type EnvironmentId,
   type ProviderInstanceConfig,
 } from "@t3tools/contracts";
 
-import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import { useEnvironmentSettings, useUpdateEnvironmentSettings } from "../../hooks/useSettings";
+import { useI18n, type Translate } from "../../i18n";
 import { cn } from "../../lib/utils";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Button } from "../ui/button";
@@ -29,7 +31,12 @@ import { toastManager } from "../ui/toast";
 import { DRIVER_OPTION_BY_VALUE, DRIVER_OPTIONS } from "./providerDriverMeta";
 import { ProviderSettingsForm, deriveProviderSettingsFields } from "./ProviderSettingsForm";
 import { AnimatedHeight } from "../AnimatedHeight";
-import { useI18n, type Translate } from "../../i18n";
+import {
+  ADD_PROVIDER_WIZARD_STEPS,
+  resolveWizardNavigation,
+  type WizardNavigation,
+} from "./AddProviderInstanceDialog.logic";
+import { AddProviderInstanceWizardSteps } from "./AddProviderInstanceWizardSteps";
 
 const PROVIDER_ACCENT_SWATCHES = [
   "#2563eb",
@@ -114,14 +121,21 @@ function validateInstanceId(
 }
 
 interface AddProviderInstanceDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  readonly open: boolean;
+  readonly environmentId: EnvironmentId;
+  readonly environmentLabel: string;
+  readonly onOpenChange: (open: boolean) => void;
 }
 
-export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderInstanceDialogProps) {
+export function AddProviderInstanceDialog({
+  open,
+  environmentId,
+  environmentLabel,
+  onOpenChange,
+}: AddProviderInstanceDialogProps) {
   const { t } = useI18n();
-  const settings = usePrimarySettings();
-  const updateSettings = useUpdatePrimarySettings();
+  const settings = useEnvironmentSettings(environmentId);
+  const updateSettings = useUpdateEnvironmentSettings(environmentId);
 
   const [wizardStep, setWizardStep] = useState(0);
   const [driver, setDriver] = useState<ProviderDriverKind>(DEFAULT_DRIVER_KIND);
@@ -148,31 +162,38 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
   );
   const instanceIdError = validateInstanceId(instanceId, existingIds, t);
   const showInstanceIdError = hasAttemptedSubmit && instanceIdError !== null;
-  const previewLabel = label.trim() || `${driverOption.label} ${t("providers.workspace")}`;
-  const wizardSteps = [
-    t("providers.driver"),
-    t("providers.identity"),
-    t("providers.config"),
-  ] as const;
+  const previewLabel = label.trim() || `${driverOption.label} Workspace`;
   const wizardStepSummaries = [driverOption.label, previewLabel, null] as const;
 
   const configDraft = configByDriver[driver] ?? EMPTY_CONFIG_DRAFT;
-  const setConfigDraft = useCallback(
-    (config: Record<string, unknown> | undefined) => {
-      setConfigByDriver((existing) => {
-        const next = { ...existing };
-        if (config === undefined || Object.keys(config).length === 0) {
-          delete next[driver];
-        } else {
-          next[driver] = config;
-        }
-        return next;
-      });
-    },
-    [driver],
-  );
+  const setConfigDraft = (config: Record<string, unknown> | undefined) => {
+    setConfigByDriver((existing) => {
+      const next = { ...existing };
+      if (config === undefined || Object.keys(config).length === 0) {
+        delete next[driver];
+      } else {
+        next[driver] = config;
+      }
+      return next;
+    });
+  };
 
-  const handleSave = useCallback(() => {
+  const applyWizardNavigation = (navigation: WizardNavigation) => {
+    if (navigation.kind === "blocked") {
+      setHasAttemptedSubmit(true);
+    }
+    setWizardStep(navigation.step);
+  };
+
+  const navigateToStep = (requestedStep: number) => {
+    applyWizardNavigation(
+      resolveWizardNavigation(wizardStep, requestedStep, ADD_PROVIDER_WIZARD_STEPS.length, {
+        instanceIdError,
+      }),
+    );
+  };
+
+  const handleSave = () => {
     setHasAttemptedSubmit(true);
     if (instanceIdError !== null) return;
 
@@ -214,106 +235,58 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
         description: error instanceof Error ? error.message : t("providers.updateFailed"),
       });
     }
-  }, [
-    driver,
-    driverOption,
-    configByDriver,
-    instanceId,
-    instanceIdError,
-    label,
-    accentColor,
-    onOpenChange,
-    settings.providerInstances,
-    updateSettings,
-    t,
-  ]);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup className="max-w-xl overflow-hidden">
-        <div className="flex min-h-0 flex-col overflow-hidden border-foreground/10 bg-background shadow-2xl">
-          <DialogHeader className="border-b border-border/70 bg-background">
+        <div className="flex min-h-0 flex-col overflow-hidden">
+          <DialogHeader>
             <DialogTitle>{t("providers.addInstance")}</DialogTitle>
-            <DialogDescription>{t("providers.addDescription")}</DialogDescription>
-            <div className="grid grid-cols-3 gap-2">
-              {wizardSteps.map((step, index) => (
-                <button
-                  key={step}
-                  type="button"
-                  className={cn(
-                    "grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-lg border px-3 py-2 text-left",
-                    index === wizardStep
-                      ? "border-primary bg-primary/10 ring-1 ring-primary/25"
-                      : index < wizardStep
-                        ? "border-border bg-background"
-                        : "border-border bg-muted/40",
-                  )}
-                  onClick={() => setWizardStep(index)}
-                >
-                  <span
-                    className={cn(
-                      "row-span-2 mt-0.5 grid size-4 place-items-center rounded-full border",
-                      index < wizardStep
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : index === wizardStep
-                          ? "border-primary bg-background"
-                          : "border-muted-foreground/35 bg-background",
-                    )}
-                    aria-hidden
-                  >
-                    {index < wizardStep ? <CheckIcon className="size-3" /> : null}
-                  </span>
-                  <span className="text-[10px] font-medium uppercase text-muted-foreground">
-                    {t("providers.step", { number: index + 1 })}
-                  </span>
-                  <span className="truncate text-xs font-semibold text-foreground">
-                    {step}
-                    {index < wizardStep && wizardStepSummaries[index]
-                      ? `: ${wizardStepSummaries[index]}`
-                      : ""}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <DialogDescription>
+              {t("providers.addDescriptionForEnvironment", { environment: environmentLabel })}
+            </DialogDescription>
+            <AddProviderInstanceWizardSteps
+              currentStep={wizardStep}
+              summaries={wizardStepSummaries}
+              instanceIdError={instanceIdError}
+              onNavigation={applyWizardNavigation}
+            />
           </DialogHeader>
 
           <div
             data-slot="dialog-panel"
-            className="space-y-4 border-b border-border/70 bg-muted/20 px-6 py-5"
+            className="space-y-4 bg-zinc-25/80 px-6 py-5 ring-1 ring-black/5 dark:bg-white/2 dark:ring-white/5"
           >
             <AnimatedHeight>
               <div className={cn("grid gap-2", wizardStep !== 0 && "hidden")}>
-                <span
-                  id="add-instance-driver-label"
-                  className="text-xs font-medium text-foreground"
-                >
+                <div id="add-instance-driver-label" className="text-sm font-medium text-foreground">
                   {t("providers.driver")}
-                </span>
+                </div>
                 <RadioGroup
                   value={driver}
                   onValueChange={(value) => setDriver(ProviderDriverKind.make(value))}
                   aria-labelledby="add-instance-driver-label"
-                  className="grid grid-cols-2 gap-2.5"
+                  className="grid grid-cols-1 gap-2 sm:grid-cols-2"
                 >
                   {DRIVER_OPTIONS.map((option) => {
                     const IconComponent = option.icon;
-                    const isSelected = option.value === driver;
                     return (
                       <RadioPrimitive.Root
                         key={option.value}
                         value={option.value}
-                        className={cn(
-                          "relative flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 text-left outline-none transition-[background-color,border-color,box-shadow]",
-                          "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-                          isSelected
-                            ? "border-primary bg-background shadow-sm ring-2 ring-primary/35"
-                            : "border-border bg-background hover:border-foreground/20 hover:bg-muted/50",
-                        )}
+                        className="relative flex cursor-pointer items-center gap-3 rounded-lg bg-card px-3 py-3 text-left text-muted-foreground outline-none ring-1 ring-black/5 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-ring data-checked:bg-primary/8 data-checked:text-foreground data-checked:ring-2 data-checked:ring-primary data-checked:hover:bg-primary/8 dark:bg-white/3 dark:ring-white/5 dark:hover:bg-white/5 dark:data-checked:bg-primary/15 dark:data-checked:ring-primary dark:data-checked:hover:bg-primary/15"
                       >
-                        <IconComponent className="size-5 shrink-0" aria-hidden />
+                        <IconComponent className="size-4 shrink-0" aria-hidden />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                           {option.label}
                         </span>
+                        <RadioPrimitive.Indicator
+                          className="grid size-5 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground"
+                          aria-hidden
+                        >
+                          <CheckIcon className="size-3.5 shrink-0" />
+                        </RadioPrimitive.Indicator>
                         {option.badgeLabel ? (
                           <Badge variant="warning" size="sm">
                             {option.badgeLabel}
@@ -330,11 +303,11 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
                         value={option.value}
                         disabled
                         className={cn(
-                          "relative flex cursor-not-allowed items-center gap-3 rounded-lg border border-border bg-background px-3 py-3 text-left opacity-55 outline-none",
+                          "relative flex cursor-not-allowed items-center gap-3 rounded-lg bg-card/60 px-3 py-3 text-left opacity-55 outline-none ring-1 ring-black/5 dark:bg-white/2 dark:ring-white/5",
                         )}
                       >
                         <IconComponent
-                          className="size-5 shrink-0 text-muted-foreground"
+                          className="size-4 shrink-0 text-muted-foreground"
                           aria-hidden
                         />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
@@ -451,7 +424,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
             </AnimatedHeight>
           </div>
 
-          <DialogFooter className="border-t bg-background">
+          <DialogFooter variant="bare">
             <Button
               variant="outline"
               size="sm"
@@ -465,8 +438,8 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
             >
               {wizardStep === 0 ? t("common.cancel") : t("common.back")}
             </Button>
-            {wizardStep < wizardSteps.length - 1 ? (
-              <Button size="sm" onClick={() => setWizardStep((step) => Math.min(2, step + 1))}>
+            {wizardStep < ADD_PROVIDER_WIZARD_STEPS.length - 1 ? (
+              <Button size="sm" onClick={() => navigateToStep(wizardStep + 1)}>
                 {t("common.next")}
               </Button>
             ) : (

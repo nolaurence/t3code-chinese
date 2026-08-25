@@ -7,6 +7,7 @@
  * @module ProjectionThreadMessageRepository
  */
 import {
+  AssistantMessagePhase,
   ChatAttachment,
   MessageId,
   OrchestrationMessageRole,
@@ -27,6 +28,10 @@ export const ProjectionThreadMessage = Schema.Struct({
   turnId: Schema.NullOr(TurnId),
   role: OrchestrationMessageRole,
   text: Schema.String,
+  // Chain-of-thought / reasoning trace streamed alongside `text` for the same
+  // assistant message. Optional: most messages carry no reasoning trace.
+  reasoningText: Schema.optional(Schema.String),
+  phase: Schema.optional(AssistantMessagePhase),
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   isStreaming: Schema.Boolean,
   createdAt: IsoDateTime,

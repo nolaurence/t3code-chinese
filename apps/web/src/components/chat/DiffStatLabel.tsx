@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { cn } from "~/lib/utils";
+import { useI18n } from "~/i18n";
 
 export function hasNonZeroStat(stat: { additions: number; deletions: number }): boolean {
   return stat.additions > 0 || stat.deletions > 0;
@@ -26,11 +27,23 @@ export const DiffStatLabel = memo(function DiffStatLabel(props: {
   showParentheses?: boolean;
   layout?: "aligned" | "inline";
 }) {
+  const { t } = useI18n();
   const { additions, deletions, className, showParentheses = false, layout = "aligned" } = props;
+  const additionsLabel = t(additions === 1 ? "chat.diff.addition" : "chat.diff.additions", {
+    count: additions,
+  });
+  const deletionsLabel = t(deletions === 1 ? "chat.diff.deletion" : "chat.diff.deletions", {
+    count: deletions,
+  });
   return (
     <>
       {showParentheses && <span className="text-muted-foreground/70">(</span>}
       <span
+        role="group"
+        aria-label={t("chat.diff.summary", {
+          additions: additionsLabel,
+          deletions: deletionsLabel,
+        })}
         className={cn(
           layout === "inline"
             ? "inline-flex items-center gap-1 tabular-nums align-middle"
@@ -38,8 +51,12 @@ export const DiffStatLabel = memo(function DiffStatLabel(props: {
           className,
         )}
       >
-        <span className="font-mono text-success">+{formatCompactDiffCount(additions)}</span>
-        <span className="font-mono text-destructive">-{formatCompactDiffCount(deletions)}</span>
+        <span aria-hidden="true" className="font-mono text-success">
+          +{formatCompactDiffCount(additions)}
+        </span>
+        <span aria-hidden="true" className="font-mono text-destructive">
+          -{formatCompactDiffCount(deletions)}
+        </span>
       </span>
       {showParentheses && <span className="text-muted-foreground/70">)</span>}
     </>

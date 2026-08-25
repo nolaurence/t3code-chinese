@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { ElectronBrowserHost } from "./browser/ElectronBrowserHost";
 import { PreviewAutomationHosts } from "./components/preview/PreviewAutomationHosts";
+import { QuitHoldOverlay } from "./components/QuitHoldOverlay";
 import { I18nProvider } from "./i18n/I18nProvider";
 import { AppAtomRegistryProvider } from "./rpc/atomRegistry";
 import type { AppRouter } from "./router";
@@ -19,9 +20,10 @@ describe("AppRoot", () => {
     }>;
     expect(registryProvider.type).toBe(AppAtomRegistryProvider);
     const children = Children.toArray(registryProvider.props.children);
-    expect(children).toHaveLength(3);
+    expect(children).toHaveLength(4);
     expect(isValidElement(children[0]) && children[0].type).toBe(RouterProvider);
     expect(isValidElement(children[1]) && children[1].type).toBe(PreviewAutomationHosts);
     expect(isValidElement(children[2]) && children[2].type).toBe(ElectronBrowserHost);
+    expect(isValidElement(children[3]) && children[3].type).toBe(QuitHoldOverlay);
   });
 });

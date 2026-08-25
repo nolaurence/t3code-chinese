@@ -1,15 +1,34 @@
 import { type ServerProvider } from "@t3tools/contracts";
 import { memo } from "react";
-import { InfoIcon } from "lucide-react";
+import { InfoIcon, XIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
+import { Button } from "../ui/button";
 import { formatProviderDriverKindLabel } from "../../providerModels";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { useI18n } from "~/i18n";
+
+export function getProviderStatusBannerKey(status: ServerProvider | null): string | null {
+  return !status || status.status === "ready" || status.status === "disabled"
+    ? null
+    : [status.instanceId, status.status, status.auth.status, status.message ?? ""].join("\u0000");
+}
+
+export function shouldShowProviderStatusBanner(
+  status: ServerProvider | null,
+  dismissedBannerKey: string | null,
+): boolean {
+  const bannerKey = getProviderStatusBannerKey(status);
+  return bannerKey !== null && bannerKey !== dismissedBannerKey;
+}
 
 export const ProviderStatusBanner = memo(function ProviderStatusBanner({
+  onDismiss,
   status,
 }: {
+  onDismiss: () => void;
   status: ServerProvider | null;
 }) {
+  const { t } = useI18n();
   if (!status || status.status === "ready" || status.status === "disabled") {
     return null;
   }
@@ -17,24 +36,25 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
   const providerName = status.displayName?.trim() || formatProviderDriverKindLabel(status.driver);
   const isUnauthenticated = status.status === "error" && status.auth.status === "unauthenticated";
   const title = isUnauthenticated
-    ? `${providerName} is unauthenticated`
-    : `${providerName} provider status`;
+    ? t("chat.provider.unauthenticated", { provider: providerName })
+    : t("chat.provider.status", { provider: providerName });
   const message = isUnauthenticated
-    ? "Sign in via the CLI to authenticate again."
+    ? t("chat.provider.signInCli")
     : (status.message ??
       (status.status === "error"
-        ? `${providerName} provider is unavailable.`
-        : `${providerName} provider has limited availability.`));
+        ? t("chat.provider.unavailable", { provider: providerName })
+        : t("chat.provider.limited", { provider: providerName })));
 
   return (
-    <div className="mx-auto w-fit max-w-[calc(100%-2rem)] pt-3">
+    <div className="pointer-events-auto mx-auto w-fit max-w-[calc(100%-2rem)] pt-3">
       <div
         className={cn(
-          "inline-flex items-center gap-3 rounded-xl border px-3.5 py-3 text-card-foreground text-sm",
+          "alert-glass relative inline-flex items-center gap-3 rounded-xl border py-3 ps-3.5 pe-10 text-card-foreground text-sm",
           status.status === "warning"
-            ? "border-warning/32 bg-warning/4 [&_svg]:text-warning"
-            : "border-destructive/32 bg-destructive/4 text-destructive-foreground [&_svg]:text-destructive",
+            ? "border-warning/32 [&_svg]:text-warning"
+            : "border-destructive/32 text-destructive-foreground [&_svg]:text-destructive",
         )}
+        data-variant={status.status === "warning" ? "warning" : "error"}
         role="alert"
       >
         <InfoIcon className="size-4 shrink-0" aria-hidden />
@@ -49,6 +69,19 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
             </TooltipPopup>
           </Tooltip>
         </div>
+        <Button
+          aria-label={t("chat.provider.dismissStatus", {
+            provider: providerName,
+            status:
+              status.status === "error" ? t("chat.provider.error") : t("chat.provider.warning"),
+          })}
+          className="absolute top-2 right-2 size-6 text-muted-foreground hover:text-foreground"
+          onClick={onDismiss}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <XIcon aria-hidden className="size-3.5" />
+        </Button>
       </div>
     </div>
   );

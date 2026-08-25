@@ -51,4 +51,23 @@ describe("preview IPC methods", () => {
       },
     ),
   );
+
+  effectIt.effect("reuses the shared persistent browser profile across environments", () =>
+    Effect.gen(function* () {
+      const getBrowserSession = vi.fn(() => Effect.succeed({} as never));
+      const getBrowserPartition = vi.fn(() => Effect.succeed("persist:t3code-preview-shared"));
+      const result = (yield* PreviewIpc.getPreviewConfig
+        .handler({ environmentId: "environment-a" })
+        .pipe(
+          Effect.provideService(PreviewManager.PreviewManager, {
+            getBrowserSession,
+            getBrowserPartition,
+          } as never),
+        )) as { readonly partition: string };
+
+      expect(result.partition).toBe("persist:t3code-preview-shared");
+      expect(getBrowserSession).toHaveBeenCalledWith();
+      expect(getBrowserPartition).toHaveBeenCalledWith();
+    }),
+  );
 });

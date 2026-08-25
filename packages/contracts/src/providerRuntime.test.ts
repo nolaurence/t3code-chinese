@@ -1,11 +1,30 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
-import { ProviderRuntimeEvent } from "./providerRuntime.ts";
+import { classifyTaskAgentKind, ProviderRuntimeEvent } from "./providerRuntime.ts";
 
 const decodeRuntimeEvent = Schema.decodeUnknownSync(ProviderRuntimeEvent);
 
 describe("ProviderRuntimeEvent", () => {
+  it("accepts Pi RPC events as raw diagnostic context", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "session.started",
+      eventId: "event-pi-session",
+      provider: "piAgent",
+      providerInstanceId: "piAgent",
+      createdAt: "2026-07-12T00:00:00.000Z",
+      threadId: "thread-pi-1",
+      payload: { message: "started" },
+      raw: {
+        source: "pi.rpc.event",
+        messageType: "agent_start",
+        payload: { type: "agent_start" },
+      },
+    });
+
+    expect(parsed.raw?.source).toBe("pi.rpc.event");
+  });
+
   it("accepts fork-provided driver kinds as branded slugs", () => {
     const parsed = decodeRuntimeEvent({
       type: "session.started",
@@ -180,5 +199,110 @@ describe("ProviderRuntimeEvent", () => {
     }
     expect(parsed.payload.usage.maxTokens).toBe(200000);
     expect(parsed.payload.usage.usedTokens).toBe(31251);
+  });
+
+  it("decodes structured task transcript progress", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "task.progress",
+      eventId: "event-task-transcript-1",
+      provider: "codex",
+      createdAt: "2026-02-28T00:00:05.000Z",
+      threadId: "thread-1",
+      payload: {
+        taskId: "child-1",
+        description: "Inspect the toolbar",
+        transcriptEntry: {
+          id: "message-1",
+          kind: "assistant",
+          text: "Located the implementation.",
+          phase: "final_answer",
+          itemType: "assistant_message",
+          status: "completed",
+        },
+      },
+    });
+
+    expect(parsed.type).toBe("task.progress");
+    if (parsed.type !== "task.progress") {
+      throw new Error("expected task.progress");
+    }
+    expect(parsed.payload.transcriptEntry).toEqual({
+      id: "message-1",
+      kind: "assistant",
+      text: "Located the implementation.",
+      phase: "final_answer",
+      itemType: "assistant_message",
+      status: "completed",
+    });
+  });
+
+  it("rejects malformed task transcript enum values", () => {
+    const base = {
+      type: "task.progress",
+      eventId: "event-task-transcript-invalid",
+      provider: "codex",
+      createdAt: "2026-02-28T00:00:05.000Z",
+      threadId: "thread-1",
+      payload: {
+        taskId: "child-1",
+        description: "Inspect the toolbar",
+      },
+    };
+
+    expect(() =>
+      decodeRuntimeEvent({
+        ...base,
+        payload: {
+          ...base.payload,
+          transcriptEntry: { id: "message-1", kind: "message" },
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeRuntimeEvent({
+        ...base,
+        payload: {
+          ...base.payload,
+          transcriptEntry: {
+            id: "message-1",
+            kind: "assistant",
+            phase: "final",
+          },
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeRuntimeEvent({
+        ...base,
+        payload: {
+          ...base.payload,
+          transcriptEntry: {
+            id: "tool-1",
+            kind: "tool",
+            itemType: "shell",
+            status: "running",
+          },
+        },
+      }),
+    ).toThrow();
+  });
+});
+
+describe("classifyTaskAgentKind", () => {
+  it("classifies agent-flavored, watch-loop, and inert types", () => {
+    expect(classifyTaskAgentKind({ taskType: "local_agent" })).toBe("agent");
+    expect(classifyTaskAgentKind({ taskType: "local_workflow" })).toBe("agent");
+    expect(classifyTaskAgentKind({ taskType: undefined })).toBe("agent");
+    expect(classifyTaskAgentKind({ taskType: "brand_new_agent_type" })).toBe("agent");
+    expect(classifyTaskAgentKind({ taskType: "local_bash" })).toBe("background");
+    expect(classifyTaskAgentKind({ taskType: "monitor" })).toBe("background");
+    expect(classifyTaskAgentKind({ taskType: "plan" })).toBe("background");
+  });
+
+  it("agent-owned tasks are background unless themselves agent-flavored", () => {
+    expect(classifyTaskAgentKind({ taskType: "local_bash", agentId: "owner" })).toBe("background");
+    expect(classifyTaskAgentKind({ taskType: undefined, agentId: "owner" })).toBe("background");
+    // Nested agent: outlives its parent, stays in the roster.
+    expect(classifyTaskAgentKind({ taskType: "local_agent", agentId: "owner" })).toBe("agent");
   });
 });

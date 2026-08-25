@@ -22,10 +22,18 @@ import {
   ThreadMetaUpdatedPayload,
   ThreadProposedPlanUpsertedPayload,
   ThreadRuntimeModeSetPayload,
+  ThreadSettledPayload,
+  ThreadPinnedPayload,
+  ThreadPinReorderedPayload,
+  ThreadSnoozedPayload,
+  ThreadUnpinnedPayload,
   ThreadUnarchivedPayload,
+  ThreadUnsettledPayload,
+  ThreadUnsnoozedPayload,
   ThreadRevertedPayload,
   ThreadSessionSetPayload,
   ThreadTurnDiffCompletedPayload,
+  ThreadTurnInterruptRequestedPayload,
 } from "./Schemas.ts";
 
 type ThreadPatch = Partial<Omit<OrchestrationThread, "id" | "projectId">>;
@@ -34,8 +42,28 @@ const MAX_THREAD_CHECKPOINTS = 500;
 
 function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error") {
   if (status === "error") return "error" as const;
-  if (status === "missing") return "interrupted" as const;
   return "completed" as const;
+}
+
+function latestTurnStateAfterCheckpoint(
+  existingState: NonNullable<OrchestrationThread["latestTurn"]>["state"],
+  status: "ready" | "missing" | "error",
+) {
+  if (existingState === "interrupted" || existingState === "error") return existingState;
+  return checkpointStatusToLatestTurnState(status);
+}
+
+/**
+ * Merges a streamed content field (assistant text or reasoning/chain-of-thought)
+ * into its existing value. While `streaming`, deltas are appended. On the
+ * non-streaming completion event, a non-empty incoming value replaces the
+ * accumulated value; an empty one preserves what was already streamed.
+ */
+function mergeStreamedContent(existing: string, incoming: string, streaming: boolean): string {
+  if (streaming) {
+    return `${existing}${incoming}`;
+  }
+  return incoming.length > 0 ? incoming : existing;
 }
 
 /**
@@ -207,6 +235,8 @@ export function projectEvent(
             title: payload.title,
             workspaceRoot: payload.workspaceRoot,
             defaultModelSelection: payload.defaultModelSelection,
+            defaultThreadEnvMode: null,
+            faviconPath: payload.faviconPath ?? null,
             scripts: payload.scripts,
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
@@ -238,6 +268,12 @@ export function projectEvent(
                     : {}),
                   ...(payload.defaultModelSelection !== undefined
                     ? { defaultModelSelection: payload.defaultModelSelection }
+                    : {}),
+                  ...(payload.defaultThreadEnvMode !== undefined
+                    ? { defaultThreadEnvMode: payload.defaultThreadEnvMode }
+                    : {}),
+                  ...(payload.faviconPath !== undefined
+                    ? { faviconPath: payload.faviconPath }
                     : {}),
                   ...(payload.scripts !== undefined ? { scripts: payload.scripts } : {}),
                   updatedAt: payload.updatedAt,
@@ -286,6 +322,10 @@ export function projectEvent(
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
             archivedAt: null,
+            settledOverride: null,
+            settledAt: null,
+            snoozedUntil: null,
+            snoozedAt: null,
             deletedAt: null,
             messages: [],
             activities: [],
@@ -321,6 +361,7 @@ export function projectEvent(
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
             archivedAt: payload.archivedAt,
+            titleRegeneration: null,
             updatedAt: payload.updatedAt,
           }),
         })),
@@ -337,12 +378,100 @@ export function projectEvent(
         })),
       );
 
+    case "thread.settled":
+      return decodeForEvent(ThreadSettledPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            settledOverride: "settled",
+            settledAt: payload.settledAt,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.unsettled":
+      return decodeForEvent(ThreadUnsettledPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            settledOverride: payload.reason === "user" ? "active" : null,
+            settledAt: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.snoozed":
+      return decodeForEvent(ThreadSnoozedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            snoozedUntil: payload.snoozedUntil,
+            snoozedAt: payload.snoozedAt,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.unsnoozed":
+      return decodeForEvent(ThreadUnsnoozedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            snoozedUntil: null,
+            snoozedAt: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.pinned":
+      return decodeForEvent(ThreadPinnedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            pinnedAt: payload.pinnedAt,
+            ...(payload.pinOrderKey !== undefined ? { pinOrderKey: payload.pinOrderKey } : {}),
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.unpinned":
+      return decodeForEvent(ThreadUnpinnedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            pinnedAt: null,
+            // Unpin clears the slot: re-pinning is "pin again", not "restore
+            // an ancient position".
+            pinOrderKey: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.pin-reordered":
+      return decodeForEvent(ThreadPinReorderedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            pinOrderKey: payload.orderKey,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
     case "thread.meta-updated":
       return decodeForEvent(ThreadMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
             ...(payload.title !== undefined ? { title: payload.title } : {}),
+            ...(payload.titleRegeneration !== undefined
+              ? { titleRegeneration: payload.titleRegeneration }
+              : {}),
             ...(payload.modelSelection !== undefined
               ? { modelSelection: payload.modelSelection }
               : {}),
@@ -380,6 +509,32 @@ export function projectEvent(
         })),
       );
 
+    case "thread.turn-interrupt-requested":
+      return decodeForEvent(
+        ThreadTurnInterruptRequestedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => {
+          if (payload.turnId === undefined) return nextBase;
+          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+          if (thread?.latestTurn?.turnId !== payload.turnId) return nextBase;
+          return {
+            ...nextBase,
+            threads: updateThread(nextBase.threads, payload.threadId, {
+              latestTurn: {
+                ...thread.latestTurn,
+                state: "interrupted",
+                startedAt: thread.latestTurn.startedAt ?? payload.createdAt,
+                completedAt: thread.latestTurn.completedAt ?? payload.createdAt,
+              },
+              updatedAt: event.occurredAt,
+            }),
+          };
+        }),
+      );
+
     case "thread.message-sent":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
@@ -399,6 +554,8 @@ export function projectEvent(
             id: payload.messageId,
             role: payload.role,
             text: payload.text,
+            reasoningText: payload.reasoning,
+            ...(payload.phase !== undefined ? { phase: payload.phase } : {}),
             ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
             turnId: payload.turnId,
             streaming: payload.streaming,
@@ -415,11 +572,13 @@ export function projectEvent(
               entry.id === message.id
                 ? {
                     ...entry,
-                    text: message.streaming
-                      ? `${entry.text}${message.text}`
-                      : message.text.length > 0
-                        ? message.text
-                        : entry.text,
+                    text: mergeStreamedContent(entry.text, message.text, message.streaming),
+                    reasoningText: mergeStreamedContent(
+                      entry.reasoningText ?? "",
+                      message.reasoningText ?? "",
+                      message.streaming,
+                    ),
+                    ...(message.phase !== undefined ? { phase: message.phase } : {}),
                     streaming: message.streaming,
                     updatedAt: message.updatedAt,
                     turnId: message.turnId,
@@ -594,7 +753,10 @@ export function projectEvent(
               ? thread.latestTurn
               : {
                   turnId: payload.turnId,
-                  state: checkpointStatusToLatestTurnState(payload.status),
+                  state:
+                    thread.latestTurn?.turnId === payload.turnId
+                      ? latestTurnStateAfterCheckpoint(thread.latestTurn.state, payload.status)
+                      : checkpointStatusToLatestTurnState(payload.status),
                   requestedAt:
                     thread.latestTurn?.turnId === payload.turnId
                       ? thread.latestTurn.requestedAt
@@ -603,7 +765,12 @@ export function projectEvent(
                     thread.latestTurn?.turnId === payload.turnId
                       ? (thread.latestTurn.startedAt ?? payload.completedAt)
                       : payload.completedAt,
-                  completedAt: payload.completedAt,
+                  completedAt:
+                    thread.latestTurn?.turnId === payload.turnId &&
+                    (thread.latestTurn.state === "interrupted" ||
+                      thread.latestTurn.state === "error")
+                      ? (thread.latestTurn.completedAt ?? payload.completedAt)
+                      : payload.completedAt,
                   assistantMessageId: payload.assistantMessageId,
                 },
             updatedAt: event.occurredAt,
@@ -674,10 +841,14 @@ export function projectEvent(
           if (!thread) {
             return nextBase;
           }
+          const activity =
+            payload.activity.sequence === undefined
+              ? { ...payload.activity, sequence: event.sequence }
+              : payload.activity;
 
           const activities = [
-            ...thread.activities.filter((entry) => entry.id !== payload.activity.id),
-            payload.activity,
+            ...thread.activities.filter((entry) => entry.id !== activity.id),
+            activity,
           ]
             .toSorted(compareThreadActivities)
             .slice(-500);

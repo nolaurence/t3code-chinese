@@ -62,3 +62,12 @@ export function I18nProvider({
 export function useI18n(): I18nValue {
   return use(I18nContext);
 }
+
+export function I18nText({
+  children,
+}: {
+  readonly children: (t: Translate) => ReactNode;
+}): ReactElement {
+  const { t } = useI18n();
+  return <>{children(t)}</>;
+}

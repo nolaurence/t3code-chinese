@@ -31,6 +31,8 @@ import {
   OrchestrationProjectionPipelineLive,
 } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
+import * as ThreadBackgroundLiveness from "../ThreadBackgroundLiveness.ts";
+import * as ThreadPlanProgress from "../ThreadPlanProgress.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { ServerConfig } from "../../config.ts";
@@ -171,6 +173,70 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       for (const row of stateRows) {
         assert.equal(row.lastAppliedSequence, 3);
       }
+
+      // Settled lifecycle through the DB pipeline: thread.settled writes the
+      // override + timestamp, thread.unsettled(user) flips to the active pin.
+      yield* eventStore.append({
+        type: "thread.settled",
+        eventId: EventId.make("evt-settle-1"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-1"),
+        occurredAt: "2026-01-01T00:00:01.000Z",
+        commandId: CommandId.make("cmd-settle-1"),
+        causationEventId: null,
+        correlationId: CommandId.make("cmd-settle-1"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-1"),
+          settledAt: "2026-01-01T00:00:01.000Z",
+          updatedAt: "2026-01-01T00:00:01.000Z",
+        },
+      });
+      yield* projectionPipeline.bootstrap;
+
+      const settledRows = yield* sql<{
+        readonly settledOverride: string | null;
+        readonly settledAt: string | null;
+      }>`
+        SELECT
+          settled_override AS "settledOverride",
+          settled_at AS "settledAt"
+        FROM projection_threads
+        WHERE thread_id = 'thread-1'
+      `;
+      assert.deepEqual(settledRows, [
+        { settledOverride: "settled", settledAt: "2026-01-01T00:00:01.000Z" },
+      ]);
+
+      yield* eventStore.append({
+        type: "thread.unsettled",
+        eventId: EventId.make("evt-unsettle-1"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-1"),
+        occurredAt: "2026-01-01T00:00:02.000Z",
+        commandId: CommandId.make("cmd-unsettle-1"),
+        causationEventId: null,
+        correlationId: CommandId.make("cmd-unsettle-1"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-1"),
+          reason: "user",
+          updatedAt: "2026-01-01T00:00:02.000Z",
+        },
+      });
+      yield* projectionPipeline.bootstrap;
+
+      const unsettledRows = yield* sql<{
+        readonly settledOverride: string | null;
+        readonly settledAt: string | null;
+      }>`
+        SELECT
+          settled_override AS "settledOverride",
+          settled_at AS "settledAt"
+        FROM projection_threads
+        WHERE thread_id = 'thread-1'
+      `;
+      assert.deepEqual(unsettledRows, [{ settledOverride: "active", settledAt: null }]);
     }),
   );
 });
@@ -1365,6 +1431,13 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       assert.deepEqual(settledRows, [
         { state: "completed", completedAt: "2026-01-01T00:01:00.000Z" },
       ]);
+
+      const threadRows = yield* sql<{ readonly latestTurnId: string | null }>`
+        SELECT latest_turn_id AS "latestTurnId"
+        FROM projection_threads
+        WHERE thread_id = ${threadId}
+      `;
+      assert.deepEqual(threadRows, [{ latestTurnId: turnId }]);
     }),
   );
 
@@ -1589,7 +1662,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   );
 
   it.effect(
-    "resolves turn-count conflicts when checkpoint completion rewrites provisional turns",
+    "resolves turn-count conflicts without allowing checkpoint completion to rewrite interrupted turns",
     () =>
       Effect.gen(function* () {
         const projectionPipeline = yield* OrchestrationProjectionPipeline;
@@ -1708,15 +1781,61 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           },
         });
 
+        yield* appendAndProject({
+          type: "thread.turn-diff-completed",
+          eventId: EventId.make("evt-conflict-6"),
+          aggregateKind: "thread",
+          aggregateId: ThreadId.make("thread-conflict"),
+          occurredAt: "2026-02-26T13:00:05.000Z",
+          commandId: CommandId.make("cmd-conflict-6"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-conflict-6"),
+          metadata: {},
+          payload: {
+            threadId: ThreadId.make("thread-conflict"),
+            turnId: TurnId.make("turn-interrupted"),
+            checkpointTurnCount: 2,
+            checkpointRef: CheckpointRef.make("refs/t3/checkpoints/thread-conflict/turn/2"),
+            status: "ready",
+            files: [],
+            assistantMessageId: null,
+            completedAt: "2026-02-26T13:00:05.000Z",
+          },
+        });
+
+        yield* appendAndProject({
+          type: "thread.turn-diff-completed",
+          eventId: EventId.make("evt-conflict-7"),
+          aggregateKind: "thread",
+          aggregateId: ThreadId.make("thread-conflict"),
+          occurredAt: "2026-02-26T13:00:06.000Z",
+          commandId: CommandId.make("cmd-conflict-7"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-conflict-7"),
+          metadata: {},
+          payload: {
+            threadId: ThreadId.make("thread-conflict"),
+            turnId: TurnId.make("turn-placeholder"),
+            checkpointTurnCount: 3,
+            checkpointRef: CheckpointRef.make("provider-diff:evt-conflict-7"),
+            status: "missing",
+            files: [],
+            assistantMessageId: null,
+            completedAt: "2026-02-26T13:00:06.000Z",
+          },
+        });
+
         const turnRows = yield* sql<{
           readonly turnId: string;
           readonly checkpointTurnCount: number | null;
           readonly status: string;
+          readonly completedAt: string | null;
         }>`
         SELECT
           turn_id AS "turnId",
           checkpoint_turn_count AS "checkpointTurnCount",
-          state AS "status"
+          state AS "status",
+          completed_at AS "completedAt"
         FROM projection_turns
         WHERE thread_id = 'thread-conflict'
         ORDER BY
@@ -1728,8 +1847,24 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           requested_at ASC
       `;
         assert.deepEqual(turnRows, [
-          { turnId: "turn-completed", checkpointTurnCount: 1, status: "completed" },
-          { turnId: "turn-interrupted", checkpointTurnCount: null, status: "interrupted" },
+          {
+            turnId: "turn-completed",
+            checkpointTurnCount: 1,
+            status: "completed",
+            completedAt: "2026-02-26T13:00:04.000Z",
+          },
+          {
+            turnId: "turn-interrupted",
+            checkpointTurnCount: 2,
+            status: "interrupted",
+            completedAt: "2026-02-26T13:00:02.000Z",
+          },
+          {
+            turnId: "turn-placeholder",
+            checkpointTurnCount: 3,
+            status: "completed",
+            completedAt: "2026-02-26T13:00:06.000Z",
+          },
         ]);
       }),
   );
@@ -2400,6 +2535,74 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   );
 });
 
+it.layer(makeProjectionPipelinePrefixedTestLayer("t3-pending-turn-terminal-test-"))(
+  "OrchestrationProjectionPipeline pending turn cleanup",
+  (it) => {
+    it.effect("clears pending turn starts when startup reaches a terminal session state", () =>
+      Effect.gen(function* () {
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const eventStore = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
+
+        for (const [index, status] of (["error", "interrupted", "stopped"] as const).entries()) {
+          const threadId = ThreadId.make(`thread-terminal-${status}`);
+          const requestedAt = `2026-02-26T14:00:0${index}.000Z`;
+          yield* eventStore.append({
+            type: "thread.turn-start-requested",
+            eventId: EventId.make(`evt-terminal-pending-${status}`),
+            aggregateKind: "thread",
+            aggregateId: threadId,
+            occurredAt: requestedAt,
+            commandId: CommandId.make(`cmd-terminal-pending-${status}`),
+            causationEventId: null,
+            correlationId: CorrelationId.make(`cmd-terminal-pending-${status}`),
+            metadata: {},
+            payload: {
+              threadId,
+              messageId: MessageId.make(`message-terminal-${status}`),
+              runtimeMode: "approval-required",
+              createdAt: requestedAt,
+            },
+          });
+          yield* eventStore.append({
+            type: "thread.session-set",
+            eventId: EventId.make(`evt-terminal-session-${status}`),
+            aggregateKind: "thread",
+            aggregateId: threadId,
+            occurredAt: requestedAt,
+            commandId: CommandId.make(`cmd-terminal-session-${status}`),
+            causationEventId: null,
+            correlationId: CorrelationId.make(`cmd-terminal-session-${status}`),
+            metadata: {},
+            payload: {
+              threadId,
+              session: {
+                threadId,
+                status,
+                providerName: "codex",
+                runtimeMode: "approval-required",
+                activeTurnId: null,
+                lastError: status === "error" ? "startup failed" : null,
+                updatedAt: requestedAt,
+              },
+            },
+          });
+        }
+
+        yield* projectionPipeline.bootstrap;
+
+        const pendingRows = yield* sql<{ readonly threadId: string }>`
+          SELECT thread_id AS "threadId"
+          FROM projection_turns
+          WHERE turn_id IS NULL
+            AND state = 'pending'
+        `;
+        assert.deepEqual(pendingRows, []);
+      }),
+    );
+  },
+);
+
 it.effect("restores pending turn-start metadata across projection pipeline restart", () =>
   Effect.gen(function* () {
     const { dbPath } = yield* ServerConfig;
@@ -2532,6 +2735,8 @@ it.effect("restores pending turn-start metadata across projection pipeline resta
 const engineLayer = it.layer(
   OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
+    Layer.provide(ThreadBackgroundLiveness.layer),
+    Layer.provide(ThreadPlanProgress.layer),
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
@@ -2621,15 +2826,18 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5",
         },
+        faviconPath: "brand/icon.svg",
       });
 
       const projectRows = yield* sql<{
         readonly scriptsJson: string;
         readonly defaultModelSelection: string;
+        readonly faviconPath: string | null;
       }>`
         SELECT
           scripts_json AS "scriptsJson",
-          default_model_selection_json AS "defaultModelSelection"
+          default_model_selection_json AS "defaultModelSelection",
+          favicon_path AS "faviconPath"
         FROM projection_projects
         WHERE project_id = 'project-scripts'
       `;
@@ -2638,6 +2846,7 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
           scriptsJson:
             '[{"id":"script-1","name":"Build","command":"bun run build","icon":"build","runOnWorktreeCreate":false}]',
           defaultModelSelection: '{"instanceId":"codex","model":"gpt-5"}',
+          faviconPath: "brand/icon.svg",
         },
       ]);
     }),

@@ -1,9 +1,21 @@
 "use client";
 
+import type { DesktopPreviewColorScheme } from "@t3tools/contracts";
 import { Minus, MoreVertical, Plus as PlusIcon, RotateCcw } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
-import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useI18n } from "~/i18n";
 
@@ -20,10 +32,16 @@ interface Props {
   hasWebContents: boolean;
   /** Current zoom factor as a number (1.0 = 100%). */
   zoomFactor: number;
+  /** Emulated `prefers-color-scheme` for the guest page. */
+  colorScheme: DesktopPreviewColorScheme;
   /** Fixed viewport modes expose the device toolbar and resize rails. */
   deviceToolbarVisible: boolean;
   /** Switches between fill-panel mode and a fixed responsive viewport. */
   onToggleDeviceToolbar: () => void;
+  /** Whether the separate native always-on-top preview window is open. */
+  nativePictureInPicture: boolean;
+  /** Toggles the optional native always-on-top preview window. */
+  onNativePictureInPicture: () => void;
 }
 
 /**
@@ -35,8 +53,11 @@ export function PreviewMoreMenu({
   tabId,
   hasWebContents,
   zoomFactor,
+  colorScheme,
   deviceToolbarVisible,
   onToggleDeviceToolbar,
+  nativePictureInPicture,
+  onNativePictureInPicture,
 }: Props) {
   const { t } = useI18n();
   if (!previewBridge) return null;
@@ -76,9 +97,43 @@ export function PreviewMoreMenu({
         <MenuItem onClick={callTab(bridge.openDevTools)} disabled={tabDisabled}>
           {t("preview.openDevTools")}
         </MenuItem>
+        <MenuItem onClick={onNativePictureInPicture} disabled={tabDisabled}>
+          {nativePictureInPicture
+            ? t("preview.closeSeparateWindow")
+            : t("preview.openSeparateWindow")}
+        </MenuItem>
         <MenuItem onClick={onToggleDeviceToolbar} disabled={tabDisabled}>
           {deviceToolbarVisible ? t("preview.hideDeviceToolbar") : t("preview.showDeviceToolbar")}
         </MenuItem>
+        <MenuSub>
+          <MenuSubTrigger disabled={tabDisabled}>{t("settings.nav.appearance")}</MenuSubTrigger>
+          <MenuSubPopup className="min-w-32">
+            <MenuRadioGroup
+              value={colorScheme}
+              onValueChange={(value) => {
+                if (!tabId) return;
+                void bridge
+                  .setColorScheme(tabId, value as DesktopPreviewColorScheme)
+                  .catch(() => undefined);
+              }}
+            >
+              {(
+                [
+                  { value: "system", label: t("settings.theme.system") },
+                  { value: "light", label: t("settings.theme.light") },
+                  { value: "dark", label: t("settings.theme.dark") },
+                ] satisfies ReadonlyArray<{
+                  value: DesktopPreviewColorScheme;
+                  label: string;
+                }>
+              ).map((option) => (
+                <MenuRadioItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuRadioItem>
+              ))}
+            </MenuRadioGroup>
+          </MenuSubPopup>
+        </MenuSub>
         <MenuSeparator />
         {/*
           Zoom row: label + inline control cluster. `closeOnClick=false`
@@ -121,6 +176,7 @@ export function PreviewMoreMenu({
               type="button"
               onClick={callTab(bridge.resetZoom)}
               aria-label={t("preview.resetZoom")}
+              className="[:hover,[data-pressed]]:bg-foreground/10"
               disabled={tabDisabled}
             >
               <RotateCcw />

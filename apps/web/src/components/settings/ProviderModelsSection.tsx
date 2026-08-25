@@ -16,15 +16,15 @@ import {
   type ProviderInstanceId,
   type ServerProviderModel,
 } from "@t3tools/contracts";
-import { normalizeModelSlug } from "@t3tools/shared/model";
+import { normalizeCustomModelSlug } from "@t3tools/shared/model";
 
 import { cn } from "../../lib/utils";
+import { useI18n } from "../../i18n";
 import { sortModelsForProviderInstance } from "../../modelOrdering";
 import { MAX_CUSTOM_MODEL_LENGTH } from "../../modelSelection";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { useI18n } from "../../i18n";
 
 /**
  * Placeholder text for the "add a custom model" input, keyed by driver
@@ -113,7 +113,7 @@ export function ProviderModelsSection({
   }, [favoriteModelSet, modelOrder, models]);
 
   const handleAdd = () => {
-    const normalized = driverKind ? normalizeModelSlug(input, driverKind) : input.trim() || null;
+    const normalized = normalizeCustomModelSlug(input);
     if (!normalized) {
       setError(t("providers.modelEnter"));
       return;
@@ -187,12 +187,12 @@ export function ProviderModelsSection({
   };
 
   return (
-    <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+    <div>
       <div className="text-xs font-medium text-foreground">{t("providers.models")}</div>
       <div className="mt-1 text-xs text-muted-foreground">
-        {models.length === 1
-          ? t("providers.modelCountOne")
-          : t("providers.modelCountMany", { count: models.length })}
+        {t(models.length === 1 ? "providers.modelCountOne" : "providers.modelCountMany", {
+          count: models.length,
+        })}
       </div>
       <div ref={listRef} className="mt-2 max-h-40 overflow-y-auto pb-1">
         {orderedModels.map((model, index) => {
@@ -249,9 +249,9 @@ export function ProviderModelsSection({
                     <TooltipTrigger
                       render={
                         <Button
-                          size="icon-xs"
+                          size="icon-micro"
                           variant="ghost"
-                          className="size-5 rounded-sm p-0 text-muted-foreground/60 hover:text-muted-foreground"
+                          className="text-muted-foreground/60 hover:text-muted-foreground"
                           aria-label={t("providers.modelDetails", { model: model.name })}
                         />
                       }
@@ -290,19 +290,16 @@ export function ProviderModelsSection({
                   <TooltipTrigger
                     render={
                       <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        className={cn(
-                          "size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground",
-                          isFavorite && "text-yellow-500 hover:text-yellow-600",
-                        )}
+                        size="icon-micro"
+                        variant="ghost-muted"
+                        className={cn(isFavorite && "text-yellow-500 hover:text-yellow-600")}
                         onClick={() => handleToggleFavorite(model.slug)}
                         aria-label={t("providers.modelFavoriteAria", {
                           action: isFavorite
                             ? t("providers.modelRemoveFavorite")
                             : t("providers.modelAddFavorite"),
                           model: model.name,
-                          target: "",
+                          target: t("common.favorites"),
                         })}
                       />
                     }
@@ -319,9 +316,8 @@ export function ProviderModelsSection({
                   <TooltipTrigger
                     render={
                       <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                        size="icon-micro"
+                        variant="ghost-muted"
                         disabled={!canMoveUp}
                         onClick={() => handleMove(model.slug, -1)}
                         aria-label={t("providers.modelMoveAria", {
@@ -339,9 +335,8 @@ export function ProviderModelsSection({
                   <TooltipTrigger
                     render={
                       <Button
-                        size="icon-xs"
-                        variant="ghost"
-                        className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                        size="icon-micro"
+                        variant="ghost-muted"
                         disabled={!canMoveDown}
                         onClick={() => handleMove(model.slug, 1)}
                         aria-label={t("providers.modelMoveAria", {
@@ -360,9 +355,8 @@ export function ProviderModelsSection({
                     <TooltipTrigger
                       render={
                         <Button
-                          size="icon-xs"
-                          variant="ghost"
-                          className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                          size="icon-micro"
+                          variant="ghost-muted"
                           onClick={() => handleToggleHidden(model.slug)}
                           aria-label={t("providers.modelVisibilityAria", {
                             action: isHidden ? t("providers.modelShow") : t("providers.modelHide"),
@@ -387,9 +381,8 @@ export function ProviderModelsSection({
                     <TooltipTrigger
                       render={
                         <Button
-                          size="icon-xs"
-                          variant="ghost"
-                          className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                          size="icon-micro"
+                          variant="ghost-muted"
                           aria-label={t("providers.modelRemoveAria", { model: model.slug })}
                           onClick={() => handleRemove(model.slug)}
                         />

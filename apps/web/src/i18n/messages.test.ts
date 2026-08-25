@@ -51,4 +51,34 @@ describe("translated messages", () => {
     expect(t("chat.openIntegratedBrowser")).toBe("在内置浏览器中打开");
     expect(t("chat.openSystemBrowser")).toBe("在系统浏览器中打开");
   });
+
+  it("localizes chat timeline activity and changed-file controls", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(t("chat.timeline.workingFor", { duration: "6s" })).toBe("已工作 6s");
+    expect(t("chat.timeline.previousToolCalls", { count: 3 })).toBe("+3 次之前的工具调用");
+    expect(t("chat.timeline.showFewerToolCalls")).toBe("收起工具调用");
+    expect(t("chat.changedFiles.heading", { count: 54 })).toBe("已更改文件（54）");
+    expect(t("chat.changedFiles.expandAll")).toBe("全部展开");
+    expect(t("chat.changedFiles.viewDiff")).toBe("查看差异");
+  });
+
+  it("localizes provider update notifications", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(t("providerUpdate.running.title")).toBe("正在更新提供商");
+    expect(t("providerUpdate.running.description")).toBe("正在运行提供商更新命令。");
+    expect(t("providerUpdate.action.update")).toBe("更新");
+    expect(t("providerUpdate.action.settings")).toBe("设置");
+  });
+
+  it("localizes the native agents and skills surfaces", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(t("agents.empty.title")).toBe("暂无 Agent");
+    expect(t("agents.phase.activeDone", { active: 2, done: 3 })).toBe("执行中 2 · 已完成 3");
+    expect(t("chat.skills.empty")).toBe("未找到技能。可输入 / 浏览供应商命令。");
+    expect(t("chat.skills.source.repo")).toBe("仓库");
+    expect(t("settings.skillsMenu.title")).toBe("在斜杠命令菜单中显示技能");
+  });
 });

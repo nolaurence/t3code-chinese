@@ -5,6 +5,6 @@
 - [T3 Connect](./cloud/t3-connect-clerk.md)
 - [集成](./integrations/source-control-providers.md)
 - [运维](./operations/ci.md)
-- [供应商](./providers/codex.md)
+- 供应商：[Codex](./providers/codex.md)、[Claude](./providers/claude.md)、[Pi](./providers/pi.md)
 - [参考手册](./reference/encyclopedia.md)
 - [用户指南](./user/keybindings.md)

@@ -12,7 +12,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   ServerProcessDiagnosticsEntry,
   ServerProcessResourceHistorySummary,
@@ -22,8 +22,9 @@ import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 
 import { cn } from "../../lib/utils";
+import { ensureLocalApi } from "../../localApi";
 import { resolveAndPersistPreferredEditor } from "../../editorPreferences";
-import { formatRelativeTime } from "../../timestampFormat";
+import { formatRelativeTimeLabel, getRelativeTimeState } from "../../timestampFormat";
 import { useEnvironmentQuery } from "../../state/query";
 import {
   primaryServerAvailableEditorsAtom,
@@ -37,9 +38,10 @@ import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
+import { useI18n, type Translate } from "../../i18n";
+import { ResourceTelemetryDiagnostics } from "./ResourceTelemetryDiagnostics";
 import { SettingsPageContainer, SettingsSection, useRelativeTimeTick } from "./settingsLayout";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { useI18n, type Translate } from "../../i18n";
 
 const NUMBER_FORMAT = new Intl.NumberFormat();
 
@@ -66,8 +68,7 @@ function formatBytes(value: number): string {
 
 function formatRelative(value: DateTime.Utc | null, t: Translate): string {
   if (!value) return t("diagnostics.noTraceRecords");
-  const relative = formatRelativeTime(DateTime.formatIso(value));
-  return relative.suffix ? `${relative.value} ${relative.suffix}` : relative.value;
+  return formatRelativeTimeLabel(DateTime.formatIso(value), t);
 }
 
 function formatRelativeNoWrap(value: DateTime.Utc | null, t: Translate): string {
@@ -105,7 +106,7 @@ function StatBlock({
               render={
                 <button
                   type="button"
-                  className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground"
+                  className="cursor-pointer inline-flex size-3.5 shrink-0 items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground"
                   aria-label={t("diagnostics.details", { label })}
                 >
                   <InfoIcon className="size-3" />
@@ -190,7 +191,7 @@ function ExpandableText({
       {canExpand ? (
         <button
           type="button"
-          className="mt-1 text-[11px] font-medium text-foreground/70 underline-offset-2 hover:text-foreground hover:underline"
+          className="cursor-pointer mt-1 text-[11px] font-medium text-foreground/70 underline-offset-2 hover:text-foreground hover:underline"
           onClick={() => setExpanded((value) => !value)}
         >
           {expanded ? t("diagnostics.showLess") : (expandLabel ?? t("diagnostics.showFullError"))}
@@ -276,14 +277,14 @@ function TraceIdCell({ traceId }: { traceId: string }) {
       <Tooltip>
         <TooltipTrigger
           render={
-            <button
-              type="button"
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+            <Button
+              size="icon-micro"
+              variant="ghost-muted"
               aria-label={copied ? t("diagnostics.traceCopied") : t("diagnostics.copyTrace")}
               onClick={() => copyToClipboard(traceId)}
             >
               <CopyIcon className="size-3" />
-            </button>
+            </Button>
           }
         />
         <TooltipPopup side="top">
@@ -330,18 +331,17 @@ function ProcessNameCell({
       style={{ paddingLeft: `${Math.min(process.depth, 6) * 10}px` }}
     >
       {hasChildren ? (
-        <button
-          type="button"
-          className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label={
-            isExpanded
-              ? t("diagnostics.process.collapse", { name })
-              : t("diagnostics.process.expand", { name })
-          }
+        <Button
+          size="icon-micro"
+          variant="ghost-muted"
+          aria-label={t(
+            isExpanded ? "diagnostics.process.collapse" : "diagnostics.process.expand",
+            { name },
+          )}
           onClick={() => onToggle(process.pid)}
         >
           <ChevronIcon className="size-3.5" />
-        </button>
+        </Button>
       ) : (
         <span className="size-5 shrink-0" aria-hidden="true" />
       )}
@@ -379,7 +379,7 @@ function ProcessSignalActions({
             <button
               type="button"
               disabled={isSignaling}
-              className="text-[11px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-50"
+              className="cursor-pointer text-[11px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-50"
               onClick={() => onSignal(process.pid, "SIGINT")}
             >
               INT
@@ -396,7 +396,7 @@ function ProcessSignalActions({
             <button
               type="button"
               disabled={isSignaling}
-              className="text-[11px] font-medium text-destructive underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-50"
+              className="cursor-pointer text-[11px] font-medium text-destructive underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-50"
               onClick={() => onSignal(process.pid, "SIGKILL")}
             >
               KILL
@@ -475,10 +475,10 @@ function ProcessDiagnosticsTable({
         <thead className="sticky top-0 z-10 border-b border-border/60 bg-card text-[11px] uppercase tracking-[0.08em] text-muted-foreground/70">
           <tr>
             <th className="px-4 py-2 font-semibold sm:pl-5">{t("diagnostics.column.name")}</th>
-            <th className="px-3 py-2 text-right font-semibold">CPU</th>
+            <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.cpu")}</th>
             <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.memory")}</th>
             <th className="px-3 py-2 font-semibold">{t("diagnostics.column.command")}</th>
-            <th className="px-3 py-2 text-right font-semibold">PID</th>
+            <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.pid")}</th>
             <th className="px-3 py-2 font-semibold">{t("diagnostics.column.type")}</th>
             <th className="p-2 text-right font-semibold sm:pr-4">{t("diagnostics.column.kill")}</th>
           </tr>
@@ -672,7 +672,7 @@ function ResourceHistoryWindowSelector({
           key={option.windowMs}
           type="button"
           className={cn(
-            "h-6 rounded-sm px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground",
+            "cursor-pointer h-6 rounded-sm px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground",
             selectedWindowMs === option.windowMs && "bg-muted text-foreground",
           )}
           onClick={() => onSelect(option.windowMs)}
@@ -732,7 +732,9 @@ function ProcessResourceHistoryTable({
               {t("diagnostics.column.maxMemory")}
             </th>
             <th className="px-3 py-2 font-semibold">{t("diagnostics.column.command")}</th>
-            <th className="px-3 py-2 text-right font-semibold sm:pr-5">PID</th>
+            <th className="px-3 py-2 text-right font-semibold sm:pr-5">
+              {t("diagnostics.column.pid")}
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border/50">
@@ -797,18 +799,26 @@ function ProcessResourceHistoryTable({
 function DiagnosticsLastChecked({ checkedAt }: { checkedAt: DateTime.Utc | null }) {
   const { t } = useI18n();
   useRelativeTimeTick();
-  const relative = checkedAt ? formatRelativeTime(DateTime.formatIso(checkedAt)) : null;
+  const relative = getRelativeTimeState(checkedAt ? DateTime.formatIso(checkedAt) : null, t);
 
-  if (!relative) {
+  if (relative.status === "missing") {
     return (
       <span className="text-[11px] text-muted-foreground/50">{t("diagnostics.checking")}</span>
+    );
+  }
+
+  if (relative.status === "invalid") {
+    return (
+      <span className="text-[11px] text-muted-foreground/50">
+        {t("diagnostics.checkedUnavailable")}
+      </span>
     );
   }
 
   return (
     <span className="text-[11px] text-muted-foreground/60">
       {t("diagnostics.checked", {
-        time: relative.suffix ? `${relative.value} ${relative.suffix}` : relative.value,
+        time: `${relative.value}${relative.suffix ? ` ${relative.suffix}` : ""}`,
       })}
     </span>
   );
@@ -828,9 +838,8 @@ function DiagnosticsRefreshButton({
       <TooltipTrigger
         render={
           <Button
-            size="icon-xs"
-            variant="ghost"
-            className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+            size="icon-micro"
+            variant="ghost-muted"
             disabled={isPending}
             onClick={onClick}
             aria-label={label}
@@ -894,6 +903,11 @@ export function DiagnosticsSettingsPanel() {
   const [isOpeningLogsDirectory, setIsOpeningLogsDirectory] = useState(false);
   const [openLogsDirectoryError, setOpenLogsDirectoryError] = useState<string | null>(null);
   const [signalingPid, setSignalingPid] = useState<number | null>(null);
+  const signalingPidRef = useRef<number | null>(null);
+  const environmentIdRef = useRef(environmentId);
+  const processDataRef = useRef(processData);
+  environmentIdRef.current = environmentId;
+  processDataRef.current = processData;
 
   const openLogsDirectory = useCallback(() => {
     const logsDirectoryPath = observability?.logsDirectoryPath ?? null;
@@ -932,21 +946,54 @@ export function DiagnosticsSettingsPanel() {
   const isInitialLoading = isPending && data === null;
   const isProcessInitialLoading = isProcessPending && processData === null;
   const signalProcess = useCallback(
-    (pid: number, signal: ServerProcessSignal) => {
-      if (signal === "SIGKILL" && !window.confirm(t("diagnostics.process.confirmKill", { pid }))) {
+    async (pid: number, signal: ServerProcessSignal) => {
+      if (signalingPidRef.current !== null) return;
+      signalingPidRef.current = pid;
+      setSignalingPid(pid);
+      const clearSignaling = () => {
+        signalingPidRef.current = null;
+        setSignalingPid(null);
+      };
+      if (signal === "SIGKILL") {
+        let confirmed = false;
+        try {
+          confirmed = await ensureLocalApi().dialogs.confirm(
+            t("diagnostics.process.confirmKill", { pid }),
+            { variant: "destructive" },
+          );
+        } catch (error) {
+          clearSignaling();
+          toastManager.add({
+            type: "error",
+            title: t("diagnostics.process.confirmFailed"),
+            description:
+              error instanceof Error
+                ? error.message
+                : t("diagnostics.process.sendFailed", { signal }),
+          });
+          return;
+        }
+        if (!confirmed) {
+          clearSignaling();
+          return;
+        }
+      }
+      const currentEnvironmentId = environmentIdRef.current;
+      if (currentEnvironmentId === null) {
+        clearSignaling();
         return;
       }
-      if (environmentId === null) {
+      const process = processDataRef.current?.processes.find((entry) => entry.pid === pid);
+      if (process === undefined) {
+        clearSignaling();
         return;
       }
 
-      setSignalingPid(pid);
-      void (async () => {
+      try {
         const result = await signalServerProcess({
-          environmentId,
-          input: { pid, signal },
+          environmentId: currentEnvironmentId,
+          input: { pid, startTimeMs: process.startTimeMs, signal },
         });
-        setSignalingPid(null);
         if (result._tag === "Failure") {
           if (!isAtomCommandInterrupted(result)) {
             const error = squashAtomCommandFailure(result);
@@ -981,9 +1028,11 @@ export function DiagnosticsSettingsPanel() {
           return;
         }
         refreshProcesses();
-      })();
+      } finally {
+        clearSignaling();
+      }
     },
-    [environmentId, refreshProcesses, signalServerProcess, t],
+    [refreshProcesses, signalServerProcess, t],
   );
 
   const processDiagnosticsError = processData ? Option.getOrNull(processData.error) : null;
@@ -994,7 +1043,9 @@ export function DiagnosticsSettingsPanel() {
     : false;
 
   return (
-    <SettingsPageContainer>
+    <SettingsPageContainer width="expanded" className="gap-10">
+      <ResourceTelemetryDiagnostics />
+
       <SettingsSection
         title={t("diagnostics.live.title")}
         headerAction={
@@ -1014,7 +1065,7 @@ export function DiagnosticsSettingsPanel() {
             value={processData ? formatCount(processData.processCount) : "..."}
           />
           <StatBlock
-            label="CPU"
+            label={t("diagnostics.column.cpu")}
             value={processData ? `${processData.totalCpuPercent.toFixed(1)}%` : "..."}
             tooltip={t("diagnostics.live.cpuDescription")}
           />
@@ -1127,9 +1178,8 @@ export function DiagnosticsSettingsPanel() {
               <TooltipTrigger
                 render={
                   <Button
-                    size="icon-xs"
-                    variant="ghost"
-                    className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                    size="icon-micro"
+                    variant="ghost-muted"
                     disabled={!observability?.logsDirectoryPath || isOpeningLogsDirectory}
                     onClick={openLogsDirectory}
                     aria-label={t("diagnostics.logs.open")}

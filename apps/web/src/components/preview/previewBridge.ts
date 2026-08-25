@@ -1,3 +1,14 @@
+import type { DesktopPreviewBridge, PreviewAutomationFeature } from "@t3tools/contracts";
+
+type CompatiblePreviewAutomationBridge = Pick<
+  DesktopPreviewBridge["automation"],
+  "supportedFeatures"
+>;
+
+export const readPreviewAutomationSupportedFeatures = (
+  automation: CompatiblePreviewAutomationBridge | null | undefined,
+): ReadonlyArray<PreviewAutomationFeature> => automation?.supportedFeatures ?? [];
+
 /**
  * Module-level handle to the desktop preview bridge.
  *

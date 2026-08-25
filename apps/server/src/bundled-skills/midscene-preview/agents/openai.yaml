@@ -1,0 +1,4 @@
+interface:
+  display_name: "Midscene Preview"
+  short_description: "Control and verify the built-in browser"
+  default_prompt: "Use $midscene-preview to interact with the built-in browser."

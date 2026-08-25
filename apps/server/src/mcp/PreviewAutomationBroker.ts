@@ -15,6 +15,7 @@ import {
   PreviewAutomationUnsupportedClientError,
   PreviewTabId,
   type PreviewAutomationError,
+  type PreviewAutomationFeature,
   type PreviewAutomationOperation,
   type PreviewAutomationHost,
   type PreviewAutomationHostFocus,
@@ -22,7 +23,6 @@ import {
   type PreviewAutomationStreamEvent,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -64,6 +64,7 @@ interface ClientConnection {
   readonly connectionId: string;
   readonly environmentId: PreviewAutomationHost["environmentId"];
   readonly supportedOperations: ReadonlySet<PreviewAutomationOperation>;
+  readonly supportedFeatures: ReadonlySet<PreviewAutomationFeature>;
   readonly focused: boolean;
   readonly focusOrder: number;
   readonly queue: Queue.Queue<PreviewAutomationStreamEvent>;
@@ -75,11 +76,18 @@ interface PendingRequest {
   readonly context: PreviewAutomationRequestErrorContext;
 }
 
+/**
+ * A lease pinning one provider session to one desktop runtime. It lives exactly
+ * as long as the connection it names: `connectionId`/`queue` identity is what
+ * makes a lease valid, so a disconnected or replaced host is dropped on the next
+ * lookup. The lease deliberately has no clock of its own — it used to inherit
+ * the MCP credential's expiry, which coupled host stickiness to an unrelated
+ * auth deadline and could migrate a live session to another runtime mid-flow.
+ */
 interface HostAssignment {
   readonly clientId: ClientConnection["clientId"];
   readonly connectionId: ClientConnection["connectionId"];
   readonly queue: ClientConnection["queue"];
-  readonly expiresAt: number;
   readonly tabId?: PreviewTabId;
   readonly tabSequence?: number;
 }
@@ -159,6 +167,25 @@ const supportsOperation = (
   connection: ClientConnection,
   operation: PreviewAutomationOperation,
 ): boolean => connection.supportedOperations.has(operation);
+
+const requiredFeatureForRequest = (
+  operation: PreviewAutomationOperation,
+  input: unknown,
+): PreviewAutomationFeature | undefined => {
+  if (operation !== "scroll" || typeof input !== "object" || input === null) return undefined;
+  const scrollInput = input as { readonly x?: unknown; readonly y?: unknown };
+  return scrollInput.x !== undefined || scrollInput.y !== undefined
+    ? "coordinateScrollWheel"
+    : undefined;
+};
+
+const supportsRequest = (
+  connection: ClientConnection,
+  operation: PreviewAutomationOperation,
+  requiredFeature: PreviewAutomationFeature | undefined,
+): boolean =>
+  supportsOperation(connection, operation) &&
+  (requiredFeature === undefined || connection.supportedFeatures.has(requiredFeature));
 
 type RemoteDetailKind = "null" | "array" | "object" | "string" | "number" | "boolean";
 
@@ -325,6 +352,7 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
       connectionId,
       environmentId: host.environmentId,
       supportedOperations: new Set(host.supportedOperations ?? PREVIEW_AUTOMATION_V1_OPERATIONS),
+      supportedFeatures: new Set(host.supportedFeatures ?? []),
       focused: false,
       focusOrder: 0,
       queue,
@@ -421,14 +449,13 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
     input: Parameters<PreviewAutomationBroker["Service"]["invoke"]>[0],
   ): Effect.fn.Return<A, PreviewAutomationError> {
     const timeoutMs = input.timeoutMs ?? 15_000;
+    const requiredFeature = requiredFeatureForRequest(input.operation, input.input);
     const deferred = yield* Deferred.make<unknown, PreviewAutomationError>();
-    const now = yield* Clock.currentTimeMillis;
     const route = yield* SynchronizedRef.modify(state, (current) => {
       const assignments = new Map(
         Array.from(current.assignments).filter(([, assignment]) => {
           const connection = current.clients.get(assignment.clientId);
           return (
-            assignment.expiresAt > now &&
             connection?.connectionId === assignment.connectionId &&
             connection.queue === assignment.queue
           );
@@ -445,7 +472,7 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
       // capability failure and can deliberately start a fresh provider
       // session. A dead lease is pruned above and may fail over.
       const connection =
-        hasLiveAssignment && supportsOperation(assignedConnection, input.operation)
+        hasLiveAssignment && supportsRequest(assignedConnection, input.operation, requiredFeature)
           ? assignedConnection
           : hasLiveAssignment
             ? undefined
@@ -453,11 +480,12 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
                 .filter(
                   (host) =>
                     host.environmentId === input.scope.environmentId &&
-                    supportsOperation(host, input.operation),
+                    supportsRequest(host, input.operation, requiredFeature),
                 )
                 .sort(
                   (left, right) =>
                     right.supportedOperations.size - left.supportedOperations.size ||
+                    right.supportedFeatures.size - left.supportedFeatures.size ||
                     Number(right.focused) - Number(left.focused) ||
                     right.focusOrder - left.focusOrder,
                 )[0];
@@ -473,7 +501,6 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
         clientId: connection.clientId,
         connectionId: connection.connectionId,
         queue: connection.queue,
-        expiresAt: input.scope.expiresAt,
         ...(canReuseAssignedTab && assigned.tabId !== undefined ? { tabId: assigned.tabId } : {}),
         ...(canReuseAssignedTab && assigned.tabSequence !== undefined
           ? { tabSequence: assigned.tabSequence }
@@ -511,6 +538,7 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
         threadId: input.scope.threadId,
         providerSessionId: input.scope.providerSessionId,
         providerInstanceId: input.scope.providerInstanceId,
+        ...(requiredFeature === undefined ? {} : { requiredFeature }),
       });
     }
     const { connection, requestId, requestContext, requestSequence } = route;
@@ -548,8 +576,7 @@ export const make = Effect.gen(function* PreviewAutomationBrokerMake() {
       });
     });
     const result = yield* awaitResponse().pipe(Effect.ensuring(removePending));
-    // A stop artifact identifies the globally recorded tab, not the caller's browsing target.
-    const responseTabId = input.operation === "recordingStop" ? undefined : readResultTabId(result);
+    const responseTabId = readResultTabId(result);
     const resultTabId = responseTabId === undefined ? input.tabId : responseTabId;
     if (resultTabId === undefined) return result;
     const assignmentKey = hostAssignmentKey(input.scope);

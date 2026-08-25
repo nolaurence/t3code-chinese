@@ -31,7 +31,6 @@ const scope = {
   providerInstanceId: ProviderInstanceId.make("codex"),
   capabilities: new Set(["preview"] as const),
   issuedAt: 1,
-  expiresAt: Number.MAX_SAFE_INTEGER,
 };
 
 const makeHost = (overrides: Partial<PreviewAutomationHost> = {}): PreviewAutomationHost => ({
@@ -174,7 +173,7 @@ it.effect("does not let an older response replace a newer explicit tab target", 
   ),
 );
 
-it.effect("does not replace the default tab with a globally stopped recording tab", () =>
+it.effect("tracks the tab returned by a targeted recording stop", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const broker = yield* makeBroker;
@@ -203,7 +202,7 @@ it.effect("does not replace the default tab with a globally stopped recording ta
       yield* broker.invoke({ scope, operation: "recordingStop", input: {} });
       yield* broker.invoke({ scope, operation: "snapshot", input: {} });
 
-      expect(routedRequests.at(-1)?.tabId).toBe(browsingTabId);
+      expect(routedRequests.at(-1)?.tabId).toBe(recordingTabId);
     }),
   ),
 );
@@ -670,6 +669,106 @@ it.effect("does not route new operations to legacy hosts that did not advertise 
 
       expect(error).toBeInstanceOf(PreviewAutomationNoAvailableHostError);
       expect(error).toMatchObject({ operation: "resize", environmentId: scope.environmentId });
+    }),
+  ),
+);
+
+it.effect("does not send coordinate scrolls to hosts without wheel-scroll support", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const broker = yield* makeBroker;
+      let routedRequests = 0;
+      const legacyRequests = requestsFrom(
+        yield* broker.connect(makeHost({ supportedOperations: ["scroll"] })),
+      );
+      yield* Stream.runForEach(legacyRequests, (request) => {
+        routedRequests += 1;
+        return broker.respond({
+          clientId: "client-1",
+          connectionId: request.connectionId,
+          requestId: request.requestId,
+          ok: true,
+          result: "legacy-scroll",
+        });
+      }).pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+
+      const error = yield* broker
+        .invoke<void>({
+          scope,
+          operation: "scroll",
+          input: { deltaY: 400, x: 120, y: 240 },
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(PreviewAutomationNoAvailableHostError);
+      expect(error).toMatchObject({
+        operation: "scroll",
+        requiredFeature: "coordinateScrollWheel",
+      });
+      expect(error.message).toContain("Omit x and y");
+      expect(routedRequests).toBe(0);
+
+      expect(
+        yield* broker.invoke<string>({
+          scope,
+          operation: "scroll",
+          input: { deltaY: 400 },
+        }),
+      ).toBe("legacy-scroll");
+      expect(routedRequests).toBe(1);
+    }),
+  ),
+);
+
+it.effect("routes coordinate scrolls only to hosts advertising wheel-scroll support", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const broker = yield* makeBroker;
+      let legacyRequestCount = 0;
+      const legacyRequests = requestsFrom(
+        yield* broker.connect(
+          makeHost({ clientId: "client-legacy", supportedOperations: ["scroll"] }),
+        ),
+      );
+      const capableRequests = requestsFrom(
+        yield* broker.connect(
+          makeHost({
+            clientId: "client-capable",
+            supportedOperations: ["scroll"],
+            supportedFeatures: ["coordinateScrollWheel"],
+          }),
+        ),
+      );
+      yield* Stream.runForEach(legacyRequests, (request) => {
+        legacyRequestCount += 1;
+        return broker.respond({
+          clientId: "client-legacy",
+          connectionId: request.connectionId,
+          requestId: request.requestId,
+          ok: true,
+          result: "legacy",
+        });
+      }).pipe(Effect.forkScoped);
+      yield* Stream.runForEach(capableRequests, (request) =>
+        broker.respond({
+          clientId: "client-capable",
+          connectionId: request.connectionId,
+          requestId: request.requestId,
+          ok: true,
+          result: "capable",
+        }),
+      ).pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+
+      expect(
+        yield* broker.invoke<string>({
+          scope: { ...scope, providerSessionId: "coordinate-scroll-session" },
+          operation: "scroll",
+          input: { deltaX: 25, deltaY: 50, x: 160, y: 280 },
+        }),
+      ).toBe("capable");
+      expect(legacyRequestCount).toBe(0);
     }),
   ),
 );

@@ -7,6 +7,7 @@ import {
   DownloadIcon,
   LoaderIcon,
   PlusIcon,
+  RefreshCwIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import * as Result from "effect/Result";
 import { useState, type ReactNode } from "react";
 import {
   isProviderDriverKind,
+  resolveProviderInstanceEnabled,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
   type ProviderInstanceId,
@@ -24,7 +26,8 @@ import {
 } from "@t3tools/contracts";
 
 import { cn } from "../../lib/utils";
-import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { useI18n } from "../../i18n";
+import { localizedClipboardErrorMessage, useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -44,13 +47,13 @@ import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import {
+  canRetryProviderStatusCheck,
   getProviderVersionAdvisoryPresentation,
   PROVIDER_STATUS_STYLES,
   getProviderSummary,
   getProviderVersionLabel,
   type ProviderStatusKey,
 } from "./providerStatus";
-import { useI18n } from "../../i18n";
 
 const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -354,6 +357,9 @@ interface ProviderInstanceCardProps {
   readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
   readonly onRunUpdate?: (() => void) | undefined;
   readonly isUpdating?: boolean | undefined;
+  readonly onRetryStatusCheck?: (() => void) | undefined;
+  readonly isRetryingStatusCheck?: boolean | undefined;
+  readonly isRetryStatusCheckDisabled?: boolean | undefined;
 }
 
 /**
@@ -373,12 +379,10 @@ interface ProviderInstanceCardProps {
  *     notice instead of editable fields, so fork instances round-trip
  *     without accidentally destroying their config.
  *   - The enabled Switch writes to the envelope's `instance.enabled`
- *     field; the server's registry consults this at `entry.enabled ?? true`
- *     before materializing the instance, and the probe also checks its
- *     driver-specific `config.enabled`. We treat the envelope flag as the
- *     single source of truth from the UI — built-in cards used to write
- *     the inner flag, but on the promotion-to-instance path every edit
- *     flows through the envelope.
+ *     field, which is the single enabled flag: the server folds any legacy
+ *     driver-specific `config.enabled` into the envelope on load and both
+ *     sides resolve through `resolveProviderInstanceEnabled` (an explicit
+ *     false wins, then envelope, then config, then the driver default).
  */
 export function ProviderInstanceCard({
   instanceId,
@@ -398,9 +402,12 @@ export function ProviderInstanceCard({
   onModelOrderChange,
   onRunUpdate,
   isUpdating = false,
+  onRetryStatusCheck,
+  isRetryingStatusCheck = false,
+  isRetryStatusCheckDisabled = false,
 }: ProviderInstanceCardProps) {
   const { t } = useI18n();
-  const enabled = instance.enabled ?? true;
+  const enabled = resolveProviderInstanceEnabled(instance);
   // The server-reported status wins when present; otherwise fall back to
   // "disabled"/"warning" based on the local `enabled` flag so the dot
   // reflects the persisted intent even before the first probe completes.
@@ -422,6 +429,12 @@ export function ProviderInstanceCard({
   const displayName =
     instance.displayName?.trim() || driverOption?.label || String(instance.driver);
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
+  const showRetryStatusCheck =
+    onRetryStatusCheck !== undefined && canRetryProviderStatusCheck(liveProvider);
+  const retryStatusCheckLabel = t(
+    isRetryingStatusCheck ? "providers.retryingStatus" : "providers.retryStatus",
+    { provider: displayName },
+  );
   const { copyToClipboard } = useCopyToClipboard<{ providerName: string }>({
     onCopy: ({ providerName }) => {
       toastManager.add({
@@ -435,7 +448,7 @@ export function ProviderInstanceCard({
         stackedThreadToast({
           type: "error",
           title: t("providers.updateCopyFailed", { provider: providerName }),
-          description: error.message,
+          description: localizedClipboardErrorMessage(error, t),
         }),
       );
     },
@@ -537,7 +550,7 @@ export function ProviderInstanceCard({
   const titleHeadNode = (
     <>
       {titleIconNode}
-      <h3 className="truncate text-[13px] font-semibold tracking-[-0.01em] text-foreground">
+      <h3 className="truncate text-sm font-medium tracking-[-0.005em] text-foreground">
         {displayName}
       </h3>
       {String(instanceId) !== String(instance.driver) ? (
@@ -566,9 +579,9 @@ export function ProviderInstanceCard({
             <TooltipTrigger
               render={
                 <Button
-                  size="icon-xs"
+                  size="icon-micro"
                   variant="ghost"
-                  className="size-5 rounded-sm p-0 text-muted-foreground hover:text-destructive"
+                  className="text-muted-foreground hover:text-destructive"
                   onClick={onDelete}
                   aria-label={t("providers.deleteInstanceAria", { id: instanceId })}
                 >
@@ -584,21 +597,47 @@ export function ProviderInstanceCard({
   );
 
   const authRowNode = (
-    <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs text-muted-foreground/80">
-      {hasAuthenticatedEmail ? (
-        <>
-          <span>{t("providers.authenticatedAs")}</span>
-          <ProviderAuthEmail email={authEmail} />
-          {authenticatedDetail ? <span>· {authenticatedDetail}</span> : null}
-        </>
-      ) : (
-        <>
-          <span>{summary.headline}</span>
-          <ProviderAuthEmail email={authEmail} separator prefix={t("providers.email")} />
-        </>
-      )}
-      {summary.detail ? <span>- {summary.detail}</span> : null}
-    </p>
+    <div className="flex min-w-0 items-center gap-1.5">
+      <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-[13px] leading-[1.45] text-muted-foreground/80">
+        {hasAuthenticatedEmail ? (
+          <>
+            <span>{t("providers.authenticatedAs")}</span>
+            <ProviderAuthEmail email={authEmail} />
+            {authenticatedDetail ? <span>· {authenticatedDetail}</span> : null}
+          </>
+        ) : (
+          <>
+            <span>{summary.headline}</span>
+            <ProviderAuthEmail email={authEmail} separator prefix={t("providers.email")} />
+          </>
+        )}
+        {summary.detail ? <span>- {summary.detail}</span> : null}
+      </p>
+      {showRetryStatusCheck ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                className="size-5 shrink-0 rounded-sm p-0 text-muted-foreground hover:text-foreground"
+                disabled={isRetryStatusCheckDisabled || isRetryingStatusCheck}
+                onClick={onRetryStatusCheck}
+                aria-label={retryStatusCheckLabel}
+              >
+                {isRetryingStatusCheck ? (
+                  <LoaderIcon className="size-3 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="size-3" />
+                )}
+              </Button>
+            }
+          />
+          <TooltipPopup side="top">{retryStatusCheckLabel}</TooltipPopup>
+        </Tooltip>
+      ) : null}
+    </div>
   );
 
   const versionCodeNode = versionLabel ? (
@@ -606,8 +645,8 @@ export function ProviderInstanceCard({
   ) : null;
 
   return (
-    <div className="border-t border-border/60 first:border-t-0">
-      <div className="px-4 py-3.5 sm:px-5">
+    <div className="rounded-xl transition-colors hover:bg-muted/20">
+      <div className="px-3 py-3 sm:px-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -625,7 +664,7 @@ export function ProviderInstanceCard({
                           "size-5 rounded-sm p-0",
                           versionAdvisory.emphasis === "strong"
                             ? "text-warning hover:text-warning"
-                            : "text-primary hover:text-primary",
+                            : "text-update-foreground hover:text-update-foreground",
                         )}
                         aria-label={t("providers.updateDetailsAria")}
                       >
@@ -714,9 +753,8 @@ export function ProviderInstanceCard({
           </div>
           <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
             <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              size="compact"
+              variant="ghost-muted"
               onClick={() => onExpandedChange(!isExpanded)}
               aria-label={t("providers.toggleDetails", { provider: displayName })}
             >
@@ -735,8 +773,8 @@ export function ProviderInstanceCard({
 
       <Collapsible open={isExpanded} onOpenChange={onExpandedChange}>
         <CollapsibleContent>
-          <div className="space-y-0">
-            <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+          <div className="space-y-5 px-3 pb-4 pt-2 sm:px-4">
+            <div>
               <label htmlFor={`provider-instance-${instanceId}-display-name`} className="block">
                 <span className="text-xs font-medium text-foreground">
                   {t("providers.displayName")}
@@ -755,7 +793,7 @@ export function ProviderInstanceCard({
               </label>
             </div>
 
-            <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+            <div>
               <ProviderAccentColorPicker
                 displayName={displayName}
                 value={accentColor}
@@ -765,7 +803,7 @@ export function ProviderInstanceCard({
               />
             </div>
 
-            <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+            <div>
               <ProviderEnvironmentSection
                 environment={instance.environment ?? []}
                 onChange={updateEnvironment}
@@ -797,9 +835,12 @@ export function ProviderInstanceCard({
                 onModelOrderChange={onModelOrderChange}
               />
             ) : (
-              <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+              <div>
                 <p className="text-xs text-muted-foreground">
-                  {t("providers.unknownDriver", { driver: String(instance.driver) })}
+                  This instance uses a driver (
+                  <code className="text-foreground">{String(instance.driver)}</code>) that is not
+                  shipped with the current build. Configuration values are preserved but cannot be
+                  edited from this surface.
                 </p>
               </div>
             )}

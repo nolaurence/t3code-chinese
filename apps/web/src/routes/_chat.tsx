@@ -1,14 +1,17 @@
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
-import { isCommandPaletteOpen } from "../commandPaletteContext";
+import { isCommandPaletteOpen } from "../commandPaletteBus";
+import { useClientSettings, useLegacySidebarEnabled } from "../hooks/useSettings";
+import { openCommandPalette } from "../commandPaletteBus";
+import { useProjects } from "../state/entities";
+import { usePrimaryEnvironmentId } from "../state/environments";
+import { selectProjectGroupingSettings } from "../logicalProject";
+import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
 import { dispatchPreviewAction } from "../components/preview/previewActionBus";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
-import {
-  startNewLocalThreadFromContext,
-  startNewThreadFromContext,
-} from "../lib/chatThreadActions";
+import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { resolveShortcutCommand } from "../keybindings";
@@ -17,14 +20,30 @@ import { isPreviewSupportedInRuntime } from "../previewStateStore";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { useI18n } from "~/i18n";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 
 function ChatRouteGlobalShortcuts() {
+  const { t } = useI18n();
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
   const selectedThreadKeysSize = useThreadSelectionStore((state) => state.selectedThreadKeys.size);
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread, routeThreadRef } =
     useHandleNewThread();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const legacySidebarEnabled = useLegacySidebarEnabled();
+  const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
+  const projects = useProjects();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const projectGroupCount = useMemo(
+    () =>
+      buildSidebarProjectSnapshots({
+        projects,
+        settings: projectGroupingSettings,
+        primaryEnvironmentId,
+        resolveEnvironmentLabel: () => null,
+      }).length,
+    [primaryEnvironmentId, projectGroupingSettings, projects],
+  );
   const terminalOpen = useTerminalUiStateStore((state) =>
     routeThreadRef
       ? selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef).terminalOpen
@@ -63,7 +82,7 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.newLocal") {
         event.preventDefault();
         event.stopPropagation();
-        void startNewLocalThreadFromContext({
+        void startNewThreadFromContext({
           activeDraftThread,
           activeThread: activeThread ?? undefined,
           defaultProjectRef,
@@ -75,6 +94,13 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.new") {
         event.preventDefault();
         event.stopPropagation();
+        // The default sidebar routes creation through the command palette
+        // whenever there is a real choice to make; the legacy sidebar (and
+        // single-project setups) keep the immediate contextual create.
+        if (!legacySidebarEnabled && projectGroupCount > 1) {
+          openCommandPalette({ open: "new-thread-in" });
+          return;
+        }
         void startNewThreadFromContext({
           activeDraftThread,
           activeThread: activeThread ?? undefined,
@@ -92,8 +118,8 @@ function ChatRouteGlobalShortcuts() {
           toastManager.add(
             stackedThreadToast({
               type: "info",
-              title: "Preview is desktop-only",
-              description: "Open T3 Code in the desktop app to use the in-app preview.",
+              title: t("preview.desktopOnly"),
+              description: t("preview.desktopOnlyDescription"),
             }),
           );
           return;
@@ -140,9 +166,12 @@ function ChatRouteGlobalShortcuts() {
     keybindings,
     defaultProjectRef,
     previewOpen,
+    projectGroupCount,
     routeThreadRef,
     selectedThreadKeysSize,
+    legacySidebarEnabled,
     terminalOpen,
+    t,
   ]);
 
   return null;

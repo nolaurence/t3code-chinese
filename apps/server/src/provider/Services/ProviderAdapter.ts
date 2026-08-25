@@ -16,6 +16,8 @@ import type {
   ProviderSendTurnInput,
   ProviderSession,
   ProviderSessionStartInput,
+  ProviderUploadFeedbackInput,
+  ProviderUploadFeedbackResult,
   ThreadId,
   ProviderTurnStartResult,
   TurnId,
@@ -40,6 +42,19 @@ export interface ProviderThreadTurnSnapshot {
 export interface ProviderThreadSnapshot {
   readonly threadId: ThreadId;
   readonly turns: ReadonlyArray<ProviderThreadTurnSnapshot>;
+}
+
+export interface ProviderContextMessage {
+  readonly id: string;
+  readonly role: string | null;
+  readonly createdAt: string | null;
+  readonly content: unknown;
+}
+
+export interface ProviderThreadContextSnapshot {
+  readonly threadId: ThreadId;
+  readonly provider: ProviderDriverKind;
+  readonly messages: ReadonlyArray<ProviderContextMessage>;
 }
 
 export interface ProviderAdapterShape<TError> {
@@ -107,12 +122,29 @@ export interface ProviderAdapterShape<TError> {
   readonly readThread: (threadId: ThreadId) => Effect.Effect<ProviderThreadSnapshot, TError>;
 
   /**
+   * Read the provider-native context (raw messages) for a thread.
+   *
+   * Optional: adapters that cannot enumerate the exact payloads sent to the
+   * model leave this undefined and the capability is reported as unsupported.
+   */
+  readonly readThreadContext?: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ProviderThreadContextSnapshot, TError>;
+
+  /**
    * Roll back a provider thread by N turns.
    */
   readonly rollbackThread: (
     threadId: ThreadId,
     numTurns: number,
   ) => Effect.Effect<ProviderThreadSnapshot, TError>;
+
+  /**
+   * Upload a thread to the provider when the adapter supports feedback.
+   */
+  readonly uploadFeedback?: (
+    input: ProviderUploadFeedbackInput,
+  ) => Effect.Effect<ProviderUploadFeedbackResult, TError>;
 
   /**
    * Stop all sessions owned by this adapter.

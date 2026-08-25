@@ -1,186 +1,65 @@
-# Release Checklist
+# Fork Releases
 
-This document covers the unified release workflow for stable and nightly desktop releases.
+> For maintainers of `nolaurence/t3code-chinese`.
 
-## What the workflow does
+This fork has one GitHub Actions workflow: [`.github/workflows/release.yml`](../../.github/workflows/release.yml).
+Upstream CI, deployment, npm, mobile, and AUR workflows are intentionally not carried by the fork.
 
-- Workflow: `.github/workflows/release.yml`
-- Triggers:
-  - push tag matching `v*.*.*` for stable releases
-  - scheduled nightly check every three hours
-  - manual `workflow_dispatch` for either channel
-- Runs quality gates first: lint, typecheck, test.
-- Builds four artifacts in parallel for both channels:
-  - macOS `arm64` DMG
-  - macOS `x64` DMG
-  - Linux `x64` AppImage
-  - Windows `x64` NSIS installer
-- Publishes one GitHub Release with all produced files.
-  - Stable tags with a suffix after `X.Y.Z` (for example `1.2.3-alpha.1`) are published as GitHub prereleases.
-  - Only plain stable `X.Y.Z` releases are marked as the repository's latest release.
-  - Nightly runs are always GitHub prereleases and never marked latest.
-  - Automatically generated release notes are pinned to the previous tag in the same channel, so stable compares to the previous stable tag and nightly compares to the previous nightly tag.
-- Includes Electron auto-update metadata (for example `latest*.yml`, `nightly*.yml`, and `*.blockmap`) in release assets.
-- Signing is optional and auto-detected per platform from secrets.
+## Schedule and triggers
 
-## T3 Connect relay deployment
+- The workflow checks `main` once a day at 18:00 UTC (02:00 Asia/Shanghai).
+- A scheduled run exits after the change check when `main` still points at the last nightly tag.
+- `workflow_dispatch` always builds a nightly and can be used to validate workflow changes.
+- Pushing an exact `vX.Y.Z` tag builds a stable release. Suffixed versions such as `-dev` are rejected.
+- Concurrency is limited to one release run; an active release is never cancelled by a newer run.
 
-The relay is a shared control plane versioned separately from client releases. Stable and nightly
-client builds must point at the same relay so users see the same linked environments when switching
-release channels.
+## Published artifacts
 
-`.github/workflows/deploy-relay.yml` deploys Alchemy stage `prod` on every push to `main`. Desktop
-releases are built independently and do not require relay deployment credentials or a `production`
-GitHub Actions environment.
+Every release runs the workspace quality gates and release smoke checks, then builds:
 
-Required repository variables shared by relay deployments:
+- macOS arm64 DMG and update ZIP
+- macOS x64 DMG and update ZIP
+- Linux x64 AppImage
+- Windows x64 NSIS installer
+- Electron update manifests and blockmaps for those artifacts
 
-- `CLOUDFLARE_ACCOUNT_ID`
-- `PLANETSCALE_ORGANIZATION`
-- `AXIOM_ORG_ID`
+The workflow publishes nightly files as a GitHub prerelease and stable files as the latest GitHub
+release in this repository. It does not publish the `t3` npm package, deploy T3 Connect Relay or the
+hosted web app, update AUR, or send announcements.
 
-Required repository secrets shared by relay deployments:
+Because the fork does not publish `t3`, a client cannot automatically update an independently
+installed remote server to the nightly's exact version through npm. The desktop-bundled server and
+manually deployed compatible remote servers remain available. Restoring exact-version remote updates
+requires a fork-owned npm package plus matching client/server update configuration.
 
-- `CLOUDFLARE_API_TOKEN`
-- `PLANETSCALE_API_TOKEN_ID`
-- `PLANETSCALE_API_TOKEN`
-- `AXIOM_TOKEN`
+Nightly tags use `vX.Y.Z-nightly.YYYYMMDD.<run_number>`. The base is the next patch after the version
+in `apps/desktop/package.json`. Package versions are changed only inside the release runners.
+Stable tags and package versions use exact `X.Y.Z` versions.
 
-Required `production` environment variables:
+## Optional public configuration
 
-- `RELAY_API_ZONE_NAME`
-- `RELAY_TUNNEL_ZONE_NAME`
+Desktop artifacts work without T3 Connect. Define these repository variables only when the fork has
+its own compatible services:
+
+- `RELAY_URL`
 - `CLERK_PUBLISHABLE_KEY`
-- `CLERK_JWT_AUDIENCE`
 - `CLERK_JWT_TEMPLATE`
 - `CLERK_CLI_OAUTH_CLIENT_ID`
-- `APNS_ENVIRONMENT`
-- `APNS_TEAM_ID`
-- `APNS_KEY_ID`
-- `APNS_BUNDLE_ID`
+- `CLERK_PASSKEY_RP_DOMAINS`
 
-Optional `production` environment variables:
+The updater repository is derived from `GITHUB_REPOSITORY`, so fork builds check this repository for
+updates instead of the upstream repository.
 
-- `RELAY_DOMAIN` when overriding the derived `relay.<RELAY_API_ZONE_NAME>` domain
+## Optional signing
 
-Required `production` environment secrets:
+Unsigned artifacts are the default. macOS signing and notarization require all of:
 
-- `CLERK_SECRET_KEY`
-- `APNS_PRIVATE_KEY`
+- Secrets: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`,
+  `APPLE_API_ISSUER`, `MACOS_PROVISIONING_PROFILE`
+- Variable: `APPLE_TEAM_ID`
+- Either `CLERK_PUBLISHABLE_KEY` or `CLERK_PASSKEY_RP_DOMAINS` for the passkey entitlement
 
-The account-scoped repository credentials are consumed by Alchemy while provisioning relay stages; they
-are not bound into the relay Worker. The production deployment uses an Axiom personal access token,
-so `AXIOM_ORG_ID` must accompany `AXIOM_TOKEN`. The `prod` stage owns the retained PlanetScale
-database. Local personal stages provision isolated branches from it and are never deployed by CI.
-Production adopts the configured relay API and tunnel DNS zones as retained Cloudflare resources.
-Personal stages reference the production-owned zones.
-
-Developers deploy personal stages locally rather than through pull-request automation:
-
-```sh
-vp run --filter t3code-relay deploy -- --stage "$USER" --env-file .env.local
-```
-
-## Nightly builds
-
-- Workflow: `.github/workflows/release.yml`
-- Triggers:
-  - scheduled check every three hours
-  - manual `workflow_dispatch` with `channel=nightly`
-- Runs the same desktop quality gates and artifact matrix as the tagged release flow.
-- Publishes a GitHub prerelease only:
-  - tag format: `nightly-vX.Y.Z-nightly.YYYYMMDD.<run_number>`
-  - release name includes the short commit SHA
-  - `make_latest` is always `false`
-- Uses the next stable patch version as the nightly base. For example, `0.0.17` produces nightlies on `0.0.18-nightly.*`.
-- Publishes Electron auto-update metadata to the dedicated `nightly` updater channel, so desktop users can opt into that track independently from stable.
-- Does not commit version bumps back to `main`.
-
-## Desktop auto-update notes
-
-- Runtime updater: `electron-updater` in `apps/desktop/src/main.ts`.
-- Update UX:
-  - Background checks run on startup delay + interval.
-  - No automatic download or install.
-  - The desktop UI shows a rocket update button when an update is available; click once to download, click again after download to restart/install.
-- Provider: GitHub Releases (`provider: github`) configured at build time.
-- Repository slug source:
-  - `T3CODE_DESKTOP_UPDATE_REPOSITORY` (format `owner/repo`), if set.
-  - otherwise `GITHUB_REPOSITORY` from GitHub Actions.
-- Temporary private-repo auth workaround:
-  - set `T3CODE_DESKTOP_UPDATE_GITHUB_TOKEN` (or `GH_TOKEN`) in the desktop app runtime environment.
-  - the app forwards it as an `Authorization: Bearer <token>` request header for updater HTTP calls.
-- Required release assets for updater:
-  - platform installers (`.exe`, `.dmg`, `.AppImage`, plus macOS `.zip` for Squirrel.Mac update payloads)
-  - channel metadata: `latest*.yml` for stable releases, `nightly*.yml` for nightly releases
-  - `*.blockmap` files (used for differential downloads)
-- macOS metadata note:
-  - `electron-updater` reads `latest-mac.yml` on stable and `nightly-mac.yml` on nightly, for both Intel and Apple Silicon.
-  - The workflow merges the per-arch mac manifests into one channel-specific mac manifest before publishing the GitHub Release.
-
-## 0) Dry-run release without signing
-
-Use this first to validate the release pipeline.
-
-1. Confirm no signing secrets are required for this test.
-2. Create a test tag:
-   - `git tag v0.0.0-test.1`
-   - `git push origin v0.0.0-test.1`
-3. Wait for `.github/workflows/release.yml` to finish.
-4. Verify the GitHub Release contains all platform artifacts.
-5. Download each artifact and sanity-check installation on each OS.
-
-## 1) Apple signing + notarization setup (macOS)
-
-Required secrets used by the workflow:
-
-- `CSC_LINK`
-- `CSC_KEY_PASSWORD`
-- `APPLE_API_KEY`
-- `APPLE_API_KEY_ID`
-- `APPLE_API_ISSUER`
-- `MACOS_PROVISIONING_PROFILE` (base64-encoded provisioning profile with Associated Domains)
-
-Required repository variables:
-
-- `APPLE_TEAM_ID`
-
-Optional repository variables:
-
-- `CLERK_PASSKEY_RP_DOMAINS`: comma-separated RP-domain override. By default, the build derives the
-  domain from the production Clerk publishable key.
-
-Checklist:
-
-1. Apple Developer account access:
-   - Team has rights to create Developer ID certificates.
-2. Create an explicit App ID for `com.t3tools.t3code` and enable Associated Domains.
-3. Create a `Developer ID Application` certificate and a compatible provisioning profile for that
-   App ID with Associated Domains enabled.
-4. Export the certificate + private key as `.p12` from Keychain.
-5. Base64-encode the `.p12` and store as `CSC_LINK`.
-6. Base64-encode the provisioning profile and store it as `MACOS_PROVISIONING_PROFILE`.
-7. Store the `.p12` export password as `CSC_KEY_PASSWORD`, and set `APPLE_TEAM_ID` to the
-   10-character Apple Developer Team ID.
-8. In App Store Connect, create an API key (Team key).
-9. Add API key values:
-   - `APPLE_API_KEY`: contents of the downloaded `.p8`
-   - `APPLE_API_KEY_ID`: Key ID
-   - `APPLE_API_ISSUER`: Issuer ID
-10. Complete the Clerk Native API and AASA setup in [T3 Connect Clerk Setup](../cloud/t3-connect-clerk.md#desktop-passkeys).
-11. Re-run a tag release and confirm macOS artifacts are signed/notarized and contain the expected
-    `com.apple.developer.associated-domains` entitlement.
-
-Notes:
-
-- `APPLE_API_KEY` is stored as raw key text in secrets.
-- The workflow writes it to a temporary `AuthKey_<id>.p8` file at runtime.
-- The workflow decodes `MACOS_PROVISIONING_PROFILE`, validates it with `security cms`, and passes it
-  to the desktop packager.
-
-## 2) Azure Trusted Signing setup (Windows)
-
-Required secrets used by the workflow:
+Windows Azure Trusted Signing requires all of:
 
 - `AZURE_TENANT_ID`
 - `AZURE_CLIENT_ID`
@@ -190,40 +69,23 @@ Required secrets used by the workflow:
 - `AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME`
 - `AZURE_TRUSTED_SIGNING_PUBLISHER_NAME`
 
-Checklist:
+If a complete credential set is absent, that platform builds unsigned. A partially configured
+credential set should be treated as an error and completed or removed.
 
-1. Create Azure Trusted Signing account and certificate profile.
-2. Record ATS values:
-   - Endpoint
-   - Account name
-   - Certificate profile name
-   - Publisher name
-3. Create/choose an Entra app registration (service principal).
-4. Grant service principal permissions required by Trusted Signing.
-5. Create a client secret for the service principal.
-6. Add Azure secrets listed above in GitHub Actions secrets.
-7. Re-run a tag release and confirm Windows installer is signed.
+## Validation
 
-## 3) Ongoing release checklist
+1. Push the workflow to a branch in this repository.
+2. Open **Actions > Fork Release > Run workflow** and select that branch.
+3. Confirm all four build variants and the quality job pass.
+4. Confirm the GitHub release contains installers, macOS ZIPs, manifests, and blockmaps.
+5. Install at least one artifact per operating system before relying on the daily schedule.
 
-1. Ensure `main` is green in CI.
-2. Bump app version as needed.
-3. Create release tag: `vX.Y.Z`.
-4. Push tag.
-5. Verify workflow steps:
-   - preflight passes
-   - all matrix builds pass
-   - release job uploads expected files
-6. Smoke test downloaded artifacts.
+The local release-only checks are:
 
-## 4) Troubleshooting
-
-- macOS build unsigned when expected signed:
-  - Check all Apple secrets plus `APPLE_TEAM_ID` are populated and non-empty.
-  - Confirm the provisioning profile belongs to `APPLE_TEAM_ID.com.t3tools.t3code` and includes
-    Associated Domains.
-- Windows build unsigned when expected signed:
-  - Check all Azure ATS and auth secrets are populated and non-empty.
-- Build fails with signing error:
-  - Retry with secrets removed to confirm unsigned path still works.
-  - Re-check certificate/profile names and tenant/client credentials.
+```bash
+vp run release:smoke
+vp test run scripts/resolve-nightly-release.test.ts \
+  scripts/resolve-previous-release-tag.test.ts \
+  scripts/update-release-package-versions.test.ts \
+  scripts/merge-update-manifests.test.ts
+```

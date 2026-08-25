@@ -10,6 +10,7 @@ import type {
 } from "@t3tools/contracts";
 
 import { cn } from "../../lib/utils";
+import { useI18n, type Translate } from "../../i18n";
 import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
@@ -111,6 +112,23 @@ export function deriveProviderSettingsFields(
     });
 }
 
+export function localizeProviderSettingsFields(
+  definition: ProviderClientDefinition,
+  fields: ReadonlyArray<ProviderSettingsFieldModel>,
+  t: Translate,
+): ReadonlyArray<ProviderSettingsFieldModel> {
+  return fields.map((field) => {
+    const messages = definition.settingsFieldMessages?.[field.key];
+    if (!messages) return field;
+    return {
+      ...field,
+      label: t(messages.label),
+      ...(messages.description ? { description: t(messages.description) } : {}),
+      ...(messages.placeholder ? { placeholder: t(messages.placeholder) } : {}),
+    };
+  });
+}
+
 export function readProviderConfigString(config: unknown, key: string): string {
   if (config === null || typeof config !== "object") return "";
   const value = (config as Record<string, unknown>)[key];
@@ -167,7 +185,7 @@ function FieldFrame(props: {
   readonly children: ReactNode;
 }) {
   if (props.variant === "card") {
-    return <div className="border-t border-border/60 px-4 py-3 sm:px-5">{props.children}</div>;
+    return <div>{props.children}</div>;
   }
   return <div className="grid gap-1.5">{props.children}</div>;
 }
@@ -281,7 +299,11 @@ export function ProviderSettingsForm({
   variant,
   onChange,
 }: ProviderSettingsFormProps) {
-  const fields = useMemo(() => deriveProviderSettingsFields(definition), [definition]);
+  const { t, locale } = useI18n();
+  const fields = useMemo(
+    () => localizeProviderSettingsFields(definition, deriveProviderSettingsFields(definition), t),
+    [definition, locale, t],
+  );
 
   if (fields.length === 0) {
     return null;

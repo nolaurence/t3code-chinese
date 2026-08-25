@@ -14,11 +14,13 @@ import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppDisplayName } from "../branding.logic";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
+import { ConfirmDialogHost } from "../components/ConfirmDialogHost";
 import { ConnectOnboardingDialog } from "../components/cloud/ConnectOnboardingDialog";
 import { RelayClientInstallDialog } from "../components/cloud/RelayClientInstallDialog";
 import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPromptDialog";
 import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
 import { SlowRpcRequestToastCoordinator } from "../components/SlowRpcRequestToastCoordinator";
+import { ThemeEditorHost } from "../components/settings/ThemeEditorHost";
 import { Button } from "../components/ui/button";
 import {
   AnchoredToastProvider,
@@ -27,8 +29,10 @@ import {
   toastManager,
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
+import { applyAppearanceFontVariables } from "~/appearanceFonts";
+import { applyAppearanceContrast } from "~/appearanceContrast";
 import { useClientSettings } from "../hooks/useSettings";
-import { useI18n } from "../i18n/I18nProvider";
+import { PlanAgentSelectionHeal } from "../planAgentSelectionHeal";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
@@ -36,10 +40,10 @@ import {
 } from "../logicalProject";
 import { useUiStateStore } from "../uiStateStore";
 import { syncBrowserChromeTheme } from "../hooks/useTheme";
-import { getRootErrorDetails, getRootErrorMessage } from "../rootErrorPresentation";
 import { configureClientTracing } from "../observability/clientTracing";
 import { resolveInitialServerAuthGateState } from "../environments/primary";
 import { hasHostedPairingRequest, isHostedStaticApp } from "../hostedPairing";
+import { useI18n, type Translate } from "../i18n";
 import { shellEnvironment } from "../state/shell";
 import { useAtomValue } from "@effect/atom-react";
 import { useAtomCommand } from "../state/use-atom-command";
@@ -99,7 +103,7 @@ function RootRouteView() {
     };
   }, [pathname]);
 
-  if (pathname === "/pair") {
+  if (pathname === "/pair" || pathname === "/connect" || pathname.startsWith("/connect/")) {
     return (
       <>
         <DocumentTitleSync />
@@ -129,18 +133,78 @@ function RootRouteView() {
     <ToastProvider>
       <AnchoredToastProvider>
         <DocumentTitleSync />
+        <ContrastAppearanceSync />
+        <GlassAppearanceSync />
+        <FontAppearanceSync />
         {primaryEnvironmentAuthenticated ? <AuthenticatedTracingBootstrap /> : null}
         <RelayClientInstallDialog />
         <ConnectOnboardingDialog />
         <SshPasswordPromptDialog />
+        <ConfirmDialogHost />
         <SlowRpcRequestToastCoordinator />
         <HostedStaticEnvironmentBootstrap />
         {primaryEnvironmentAuthenticated ? <EventRouter /> : null}
+        {primaryEnvironmentAuthenticated ? <PlanAgentSelectionHeal /> : null}
         {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
         {appShell}
+        {/* Above the router: a theme draft is judged by walking the app, so the
+            editor has to survive navigation away from settings. */}
+        <ThemeEditorHost />
       </AnchoredToastProvider>
     </ToastProvider>
   );
+}
+
+function ContrastAppearanceSync() {
+  const appearanceContrast = useClientSettings((settings) => settings.appearanceContrast);
+
+  useEffect(() => {
+    applyAppearanceContrast(document.documentElement, appearanceContrast);
+  }, [appearanceContrast]);
+
+  return null;
+}
+
+function GlassAppearanceSync() {
+  const glassOpacity = useClientSettings((settings) => settings.glassOpacity);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--glass-opacity", `${glassOpacity}%`);
+  }, [glassOpacity]);
+
+  return null;
+}
+
+function FontAppearanceSync() {
+  const fontFamilySans = useClientSettings((settings) => settings.fontFamilySans);
+  const fontFamilyCode = useClientSettings((settings) => settings.fontFamilyCode);
+  const fontFamilyComposer = useClientSettings((settings) => settings.fontFamilyComposer);
+  const fontSizeInterface = useClientSettings((settings) => settings.fontSizeInterface);
+  const fontSizePrompt = useClientSettings((settings) => settings.fontSizePrompt);
+  const fontSizeCode = useClientSettings((settings) => settings.fontSizeCode);
+  const fontSmoothing = useClientSettings((settings) => settings.fontSmoothing);
+
+  useEffect(() => {
+    applyAppearanceFontVariables(document.documentElement, {
+      sans: fontFamilySans,
+      code: fontFamilyCode,
+      composer: fontFamilyComposer,
+      sizeInterface: fontSizeInterface,
+      sizePrompt: fontSizePrompt,
+      sizeCode: fontSizeCode,
+      smoothing: fontSmoothing,
+    });
+  }, [
+    fontFamilyCode,
+    fontFamilyComposer,
+    fontFamilySans,
+    fontSizeCode,
+    fontSizeInterface,
+    fontSizePrompt,
+    fontSmoothing,
+  ]);
+
+  return null;
 }
 
 function DocumentTitleSync() {
@@ -190,8 +254,8 @@ function HostedStaticEnvironmentBootstrap() {
 
 function RootRouteErrorView({ error, reset }: ErrorComponentProps) {
   const { t } = useI18n();
-  const message = getRootErrorMessage(error, t);
-  const details = getRootErrorDetails(error, t);
+  const message = errorMessage(error, t);
+  const details = errorDetails(error, t);
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
@@ -230,6 +294,34 @@ function RootRouteErrorView({ error, reset }: ErrorComponentProps) {
       </section>
     </div>
   );
+}
+
+function errorMessage(error: unknown, t: Translate): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  return t("rootError.messageFallback");
+}
+
+function errorDetails(error: unknown, t: Translate): string {
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error, null, 2);
+  } catch {
+    return t("rootError.detailsFallback");
+  }
 }
 
 function AuthenticatedTracingBootstrap() {

@@ -14,5 +14,6 @@ export {
   type Translate,
   type TranslateValues,
 } from "./messages";
-export { I18nProvider, useI18n, type I18nValue } from "./I18nProvider";
+export { I18nProvider, I18nText, useI18n, type I18nValue } from "./I18nProvider";
 export { localizedConnectionStatusText } from "./connection";
+export { localizedSourceControlDiscoveryText } from "./sourceControl";

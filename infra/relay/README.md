@@ -1,7 +1,7 @@
 # T3 Connect Relay
 
-> [!WARNING]
-> T3 Connect is currently in private beta. Join the waitlist in the app under Settings > T3 Connect.
+> [!NOTE]
+> Sign in to T3 Connect from the app under Settings > Connections.
 
 The relay is the hosted control plane for T3 Connect. It helps clients discover and connect to
 remote environments, manages the cloud-side records needed for those connections, and delivers
@@ -9,7 +9,7 @@ optional mobile notifications and Live Activities.
 
 The relay is intentionally not in the hot path for normal T3 Code traffic. After a client connects,
 regular API and WebSocket traffic goes directly between that client and the selected environment.
-See the [T3 Connect architecture overview](../../docs/cloud/t3-code-connect-auth-flow.html) for the larger system
+See the [T3 Connect architecture overview](../../docs/internals/t3-code-connect-auth-flow.html) for the larger system
 design.
 
 ## Responsibilities
@@ -25,7 +25,7 @@ The relay currently owns:
 - Persisting relay state and exposing relay-specific traces for diagnostics.
 
 The environment server and relay have separate credentials and trust boundaries. Read
-[Environment Authentication Profile](../../docs/environment-auth.md) before changing token,
+[Environment Authentication Profile](../../docs/internals/environment-auth.md) before changing token,
 credential, or authorization behavior.
 
 ## Code Map
@@ -114,19 +114,18 @@ the URL manually.
 
 ### Deployment CI
 
-The relay is versioned separately from client releases. `.github/workflows/deploy-relay.yml` deploys
-the shared Alchemy `prod` stage on every push to `main`. Stable and nightly release builds both
-resolve their static public config from the same
-`production` GitHub environment. Pull requests do not deploy relay stages. Developers can
-deploy personal non-production stages locally with any stage name other than `prod`.
+This fork does not deploy Relay from GitHub Actions. Developers deploy personal non-production
+stages locally with any stage name other than `prod`. A fork-owned production Relay must also be
+deployed explicitly and its public URL supplied to release builds through the `RELAY_URL` repository
+variable.
 
-The repository must define these Actions variables shared by relay deployments:
+An explicit production deployment needs these variables in its deployment environment:
 
 - `CLOUDFLARE_ACCOUNT_ID`
 - `PLANETSCALE_ORGANIZATION`
 - `AXIOM_ORG_ID`
 
-The repository must define these Actions secrets shared by relay deployments:
+It also needs these secrets:
 
 - `CLOUDFLARE_API_TOKEN`
 - `PLANETSCALE_API_TOKEN_ID`
@@ -159,8 +158,8 @@ and hosted web builds.
 
 See:
 
-- [T3 Connect Clerk Setup](../../docs/cloud/t3-connect-clerk.md) for Clerk keys, JWT templates, and waitlist
+- [T3 Connect Clerk Setup](../../docs/internals/t3-connect.md) for Clerk keys, JWT templates, and sign-up restrictions
   setup.
-- [Relay Observability](../../docs/relay-observability.md) for deployment tracing and diagnostics.
-- [T3 Connect Architecture Overview](../../docs/cloud/t3-code-connect-auth-flow.html) for the full link,
+- [Relay Observability](../../docs/operations/relay-observability.md) for deployment tracing and diagnostics.
+- [T3 Connect Architecture Overview](../../docs/internals/t3-code-connect-auth-flow.html) for the full link,
   connect, endpoint, and notification flows.

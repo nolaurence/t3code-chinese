@@ -25,6 +25,21 @@ export const PROVIDER_STATUS_STYLES = {
 export type ProviderStatusKey = keyof typeof PROVIDER_STATUS_STYLES;
 
 /**
+ * Status probes can be retried when the provider binary was found but the
+ * probe itself failed before authentication could be determined. This matches
+ * the generic "Unavailable" presentation without showing a misleading retry
+ * action for disabled, missing, or explicitly unauthenticated providers.
+ */
+export function canRetryProviderStatusCheck(provider: ServerProvider | undefined): boolean {
+  return (
+    provider?.enabled === true &&
+    provider.installed &&
+    provider.status === "error" &&
+    provider.auth.status === "unknown"
+  );
+}
+
+/**
  * Derive the headline + detail copy shown under a provider's name in the
  * settings page. Prefers `provider.message` for server-supplied detail and
  * falls back to generic phrasing when the server has not yet reported any

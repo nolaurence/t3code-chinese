@@ -17,6 +17,7 @@ import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopServerExposure from "./DesktopServerExposure.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
+import * as DesktopWslServerTree from "../wsl/DesktopWslServerTree.ts";
 
 const PersistedServerObservabilitySettingsDocument = Schema.Struct({
   observability: Schema.Struct({
@@ -52,6 +53,7 @@ function makeEnvironmentLayer(
   baseDir: string,
   options?: {
     readonly appPath?: string;
+    readonly dirname?: string;
     readonly isPackaged?: boolean;
     readonly devServerUrl?: string;
     readonly platform?: NodeJS.Platform;
@@ -59,7 +61,7 @@ function makeEnvironmentLayer(
   },
 ) {
   return DesktopEnvironment.layer({
-    dirname: "/repo/apps/desktop/src",
+    dirname: options?.dirname ?? "/repo/apps/desktop/src",
     homeDirectory: baseDir,
     platform: options?.platform ?? "darwin",
     processArch: "x64",
@@ -114,6 +116,7 @@ const withHarness = <A, E, R>(
           Layer.provideMerge(serverExposureLayer),
           Layer.provideMerge(DesktopAppSettings.layerTest()),
           Layer.provideMerge(DesktopWslEnvironment.layerTest()),
+          Layer.provideMerge(DesktopWslServerTree.layerTest()),
           Layer.provideMerge(makeEnvironmentLayer(baseDir)),
         ),
       ),
@@ -152,6 +155,47 @@ describe("DesktopBackendConfiguration", () => {
     ),
   );
 
+  it.effect("resolvePrimary starts from server.asar without materializing the WSL tree", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-backend-config-test-",
+      });
+      const resourcesPath = `${baseDir}/resources`;
+
+      const config = yield* Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        return yield* configuration.resolvePrimary;
+      }).pipe(
+        Effect.provide(
+          DesktopBackendConfiguration.layer.pipe(
+            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslEnvironment.layerTest()),
+            Layer.provideMerge(
+              Layer.succeed(
+                DesktopWslServerTree.DesktopWslServerTree,
+                DesktopWslServerTree.DesktopWslServerTree.of({
+                  ensure: Effect.die("Windows primary must not extract the WSL server tree"),
+                }),
+              ),
+            ),
+            Layer.provideMerge(
+              makeEnvironmentLayer(baseDir, {
+                appPath: `${resourcesPath}/app.asar`,
+                platform: "win32",
+                resourcesPath,
+              }),
+            ),
+          ),
+        ),
+      );
+
+      assert.equal(config.entryPath, `${resourcesPath}/server.asar/apps/server/dist/bin.mjs`);
+      assert.equal(config.env.ELECTRON_RUN_AS_NODE, "1");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("resolveWsl reuses the primary's bootstrap token", () =>
     withHarness(
       Effect.gen(function* () {
@@ -172,7 +216,7 @@ describe("DesktopBackendConfiguration", () => {
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3-desktop-backend-config-test-",
       });
-      const entryPath = path.join(baseDir, "app.asar.unpacked/apps/server/dist/bin.mjs");
+      const entryPath = path.join(baseDir, "apps/server/dist/bin.mjs");
       yield* fileSystem.makeDirectory(path.dirname(entryPath), { recursive: true });
       yield* fileSystem.writeFileString(entryPath, "");
 
@@ -185,6 +229,7 @@ describe("DesktopBackendConfiguration", () => {
           DesktopBackendConfiguration.layer.pipe(
             Layer.provideMerge(serverExposureLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(
               DesktopWslEnvironment.layerTest({
                 isAvailable: true,
@@ -233,7 +278,7 @@ describe("DesktopBackendConfiguration", () => {
         const baseDir = yield* fileSystem.makeTempDirectoryScoped({
           prefix: "t3-desktop-backend-config-test-",
         });
-        const entryPath = path.join(baseDir, "app.asar.unpacked/apps/server/dist/bin.mjs");
+        const entryPath = path.join(baseDir, "apps/server/dist/bin.mjs");
         yield* fileSystem.makeDirectory(path.dirname(entryPath), { recursive: true });
         yield* fileSystem.writeFileString(entryPath, "");
 
@@ -249,6 +294,7 @@ describe("DesktopBackendConfiguration", () => {
             DesktopBackendConfiguration.layer.pipe(
               Layer.provideMerge(serverExposureLayer),
               Layer.provideMerge(DesktopAppSettings.layerTest()),
+              Layer.provideMerge(DesktopWslServerTree.layerTest()),
               Layer.provideMerge(
                 DesktopWslEnvironment.layerTest({
                   isAvailable: true,
@@ -385,6 +431,7 @@ describe("DesktopBackendConfiguration", () => {
             DesktopBackendConfiguration.layer.pipe(
               Layer.provideMerge(serverExposureLayer),
               Layer.provideMerge(DesktopAppSettings.layerTest()),
+              Layer.provideMerge(DesktopWslServerTree.layerTest()),
               Layer.provideMerge(DesktopWslEnvironment.layerTest()),
               Layer.provideMerge(makeEnvironmentLayer(baseDir)),
               Layer.provideMerge(failingFileSystemLayer),
@@ -426,6 +473,7 @@ describe("DesktopBackendConfiguration", () => {
           DesktopBackendConfiguration.layer.pipe(
             Layer.provideMerge(serverExposureLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(DesktopWslEnvironment.layerTest()),
             Layer.provideMerge(
               makeEnvironmentLayer(baseDir, {
@@ -448,11 +496,29 @@ describe("DesktopBackendConfiguration", () => {
 
       const previousWslEnv = process.env.WSLENV;
       const previousOpenAiKey = process.env.OPENAI_API_KEY;
+      const previousOpenAiBaseUrl = process.env.OPENAI_BASE_URL;
       const previousAnthropicKey = process.env.ANTHROPIC_API_KEY;
+      const midsceneModelVariablePattern = /^MIDSCENE_(?:(?:INSIGHT|PLANNING)_)?MODEL_/u;
+      const previousMidsceneModelEnvironment = new Map(
+        Object.entries(process.env).filter(
+          (entry): entry is [string, string] =>
+            midsceneModelVariablePattern.test(entry[0]) && entry[1] !== undefined,
+        ),
+      );
       try {
+        for (const name of previousMidsceneModelEnvironment.keys()) delete process.env[name];
         process.env.WSLENV = "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u";
         process.env.OPENAI_API_KEY = "openai-key";
+        process.env.OPENAI_BASE_URL = "https://openai.example.test/v1";
         process.env.ANTHROPIC_API_KEY = "anthropic-key";
+        process.env.MIDSCENE_MODEL_NAME = "browser-model";
+        process.env.MIDSCENE_MODEL_FAMILY = "gpt-5";
+        process.env.MIDSCENE_MODEL_API_KEY = "midscene-key";
+        process.env.MIDSCENE_MODEL_BASE_URL = "https://midscene.example.test/v1";
+        process.env.MIDSCENE_MODEL_EXTRA_BODY_JSON = '{"reasoning":{"effort":"high"}}';
+        process.env.MIDSCENE_MODEL_TIMEOUT = "";
+        process.env.MIDSCENE_PLANNING_MODEL_API_KEY = "planning-key";
+        process.env.MIDSCENE_INSIGHT_MODEL_NAME = "insight-model";
 
         yield* Effect.gen(function* () {
           const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
@@ -464,25 +530,40 @@ describe("DesktopBackendConfiguration", () => {
           // both wslhost-forwarded localhost and the distro's eth0 IP.
           assert.equal(config.bootstrap.host, "0.0.0.0");
           assert.equal(config.bootstrap.tailscaleServeEnabled, false);
+          assert.notProperty(config.bootstrap, "desktopTelemetryFd");
+          assert.notProperty(config.bootstrap, "resourceMonitorPath");
           // httpBaseUrl uses the resolved distro IP from the test stub,
           // not localhost — the renderer reaches the backend directly to
           // avoid relying on wslhost forwarding.
           assert.equal(config.httpBaseUrl.href, "http://172.27.0.99:5050/");
           assert.equal(config.env.OPENAI_API_KEY, "openai-key");
+          assert.equal(config.env.OPENAI_BASE_URL, "https://openai.example.test/v1");
           assert.equal(config.env.ANTHROPIC_API_KEY, "anthropic-key");
+          assert.equal(config.env.MIDSCENE_MODEL_NAME, "browser-model");
+          assert.equal(config.env.MIDSCENE_MODEL_FAMILY, "gpt-5");
+          assert.equal(config.env.MIDSCENE_MODEL_API_KEY, "midscene-key");
+          assert.equal(config.env.MIDSCENE_MODEL_BASE_URL, "https://midscene.example.test/v1");
+          assert.equal(
+            config.env.MIDSCENE_MODEL_EXTRA_BODY_JSON,
+            '{"reasoning":{"effort":"high"}}',
+          );
+          assert.equal(config.env.MIDSCENE_PLANNING_MODEL_API_KEY, "planning-key");
+          assert.equal(config.env.MIDSCENE_INSIGHT_MODEL_NAME, "insight-model");
           // The existing WSLENV is preserved byte-for-byte (note the empty
           // "::" segment survives — WSL ignores it, so we don't normalize
-          // it away) and ANTHROPIC_API_KEY is appended. OPENAI_API_KEY is
-          // already declared, so it isn't forwarded twice.
+          // it away). OPENAI_API_KEY is already declared, so the static and
+          // discovered Midscene model settings are appended without duplicating it.
           assert.equal(
             config.env.WSLENV,
-            "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u:ANTHROPIC_API_KEY",
+            "GOPATH/p:OPENAI_API_KEY/u:EMPTY::AZURE_DEVOPS_EXT_PAT/u:OPENAI_BASE_URL:ANTHROPIC_API_KEY:MIDSCENE_INSIGHT_MODEL_NAME:MIDSCENE_MODEL_API_KEY:MIDSCENE_MODEL_BASE_URL:MIDSCENE_MODEL_EXTRA_BODY_JSON:MIDSCENE_MODEL_FAMILY:MIDSCENE_MODEL_NAME:MIDSCENE_PLANNING_MODEL_API_KEY",
           );
+          assert.notInclude(config.env.WSLENV ?? "", "MIDSCENE_MODEL_TIMEOUT");
         }).pipe(
           Effect.provide(
             DesktopBackendConfiguration.layer.pipe(
               Layer.provideMerge(serverExposureLayer),
               Layer.provideMerge(DesktopAppSettings.layerTest()),
+              Layer.provideMerge(DesktopWslServerTree.layerTest()),
               Layer.provideMerge(
                 DesktopWslEnvironment.layerTest({
                   isAvailable: true,
@@ -497,7 +578,12 @@ describe("DesktopBackendConfiguration", () => {
       } finally {
         restoreEnv("WSLENV", previousWslEnv);
         restoreEnv("OPENAI_API_KEY", previousOpenAiKey);
+        restoreEnv("OPENAI_BASE_URL", previousOpenAiBaseUrl);
         restoreEnv("ANTHROPIC_API_KEY", previousAnthropicKey);
+        for (const name of Object.keys(process.env)) {
+          if (midsceneModelVariablePattern.test(name)) delete process.env[name];
+        }
+        for (const [name, value] of previousMidsceneModelEnvironment) process.env[name] = value;
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
@@ -533,6 +619,7 @@ describe("DesktopBackendConfiguration", () => {
                   wslOnly: true,
                 }),
               ),
+              Layer.provideMerge(DesktopWslServerTree.layerTest()),
               Layer.provideMerge(DesktopWslEnvironment.layerTest({ isAvailable: false })),
               Layer.provideMerge(makeEnvironmentLayer(baseDir, { platform: "win32" })),
             ),
@@ -570,6 +657,7 @@ describe("DesktopBackendConfiguration", () => {
                   wslDistro: "Removed-Distro",
                 }),
               ),
+              Layer.provideMerge(DesktopWslServerTree.layerTest()),
               Layer.provideMerge(
                 DesktopWslEnvironment.layerTest({
                   isAvailable: true,
@@ -603,6 +691,7 @@ describe("DesktopBackendConfiguration", () => {
           DesktopBackendConfiguration.layer.pipe(
             Layer.provideMerge(serverExposureLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(
               DesktopWslEnvironment.layerTest({
                 isAvailable: true,
@@ -637,6 +726,49 @@ describe("DesktopBackendConfiguration", () => {
           DesktopBackendConfiguration.layer.pipe(
             Layer.provideMerge(serverExposureLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
+            Layer.provideMerge(
+              DesktopWslEnvironment.layerTest({
+                isAvailable: true,
+                distros: [{ name: "Ubuntu", isDefault: true, version: 2 }],
+              }),
+            ),
+            Layer.provideMerge(makeEnvironmentLayer(baseDir, { platform: "win32" })),
+          ),
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("resolveWsl surfaces sidecar extraction failures through typed preflight", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-backend-config-test-",
+      });
+
+      yield* Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        const config = yield* configuration.resolveWsl({ port: 5050, distro: "Ubuntu" });
+        const failure = Option.getOrThrow(config.preflightFailure);
+
+        assert.isFalse(failure.fatal);
+        assert.equal(failure.retryLimit, 12);
+        assert.include(failure.reason, "could not be extracted");
+      }).pipe(
+        Effect.provide(
+          DesktopBackendConfiguration.layer.pipe(
+            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(
+              DesktopWslServerTree.layerTest({
+                result: {
+                  ok: false,
+                  reason: "WSL server files could not be extracted",
+                  fatal: false,
+                },
+              }),
+            ),
             Layer.provideMerge(
               DesktopWslEnvironment.layerTest({
                 isAvailable: true,
@@ -669,6 +801,7 @@ describe("DesktopBackendConfiguration", () => {
           DesktopBackendConfiguration.layer.pipe(
             Layer.provideMerge(serverExposureLayer),
             Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(
               DesktopWslEnvironment.layerTest({
                 isAvailable: true,
@@ -705,8 +838,102 @@ describe("DesktopBackendConfiguration", () => {
                 wslDistro: "Ubuntu",
               }),
             ),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(DesktopWslEnvironment.layerTest({ isAvailable: true })),
             Layer.provideMerge(makeEnvironmentLayer(baseDir, { platform: "win32" })),
+          ),
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("prefers the external packaged resource monitor over the copy inside the asar", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-backend-config-test-",
+      });
+      const resourcesPath = `${baseDir}/resources`;
+      const dirname = `${resourcesPath}/app.asar/apps/desktop/dist-electron`;
+      const embeddedMonitorPath = `${resourcesPath}/app.asar/apps/desktop/prod-resources/resource-monitor/t3-resource-monitor`;
+      const monitorPath = `${resourcesPath}/resource-monitor/t3-resource-monitor`;
+      yield* fileSystem.makeDirectory(
+        `${resourcesPath}/app.asar/apps/desktop/prod-resources/resource-monitor`,
+        { recursive: true },
+      );
+      yield* fileSystem.makeDirectory(`${resourcesPath}/resource-monitor`, {
+        recursive: true,
+      });
+      yield* fileSystem.writeFileString(embeddedMonitorPath, "embedded");
+      yield* fileSystem.writeFileString(monitorPath, "binary");
+      yield* fileSystem.chmod(monitorPath, 0o755);
+
+      yield* Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        const config = yield* configuration.resolvePrimary;
+        assert.equal(config.bootstrap.resourceMonitorPath, monitorPath);
+        assert.equal(config.bootstrap.desktopTelemetryFd, 4);
+        assert.equal(config.bootstrap.desktopTelemetryControlFd, 5);
+      }).pipe(
+        Effect.provide(
+          DesktopBackendConfiguration.layer.pipe(
+            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
+            Layer.provideMerge(DesktopWslEnvironment.layerTest()),
+            Layer.provideMerge(
+              makeEnvironmentLayer(baseDir, {
+                appPath: `${resourcesPath}/app.asar`,
+                dirname,
+                isPackaged: true,
+                resourcesPath,
+              }),
+            ),
+          ),
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("prefers the release resource monitor when both development builds exist", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-desktop-backend-config-test-",
+      });
+      const dirname = path.join(baseDir, "apps/desktop/src");
+      const releaseMonitorPath = path.join(
+        baseDir,
+        "native/resource-monitor/target/release/t3-resource-monitor",
+      );
+      const debugMonitorPath = path.join(
+        baseDir,
+        "native/resource-monitor/target/debug/t3-resource-monitor",
+      );
+      yield* fileSystem.makeDirectory(path.dirname(releaseMonitorPath), { recursive: true });
+      yield* fileSystem.makeDirectory(path.dirname(debugMonitorPath), { recursive: true });
+      yield* fileSystem.writeFileString(releaseMonitorPath, "release");
+      yield* fileSystem.writeFileString(debugMonitorPath, "debug");
+
+      yield* Effect.gen(function* () {
+        const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
+        const config = yield* configuration.resolvePrimary;
+        assert.equal(config.bootstrap.resourceMonitorPath, releaseMonitorPath);
+      }).pipe(
+        Effect.provide(
+          DesktopBackendConfiguration.layer.pipe(
+            Layer.provideMerge(serverExposureLayer),
+            Layer.provideMerge(DesktopAppSettings.layerTest()),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
+            Layer.provideMerge(DesktopWslEnvironment.layerTest()),
+            Layer.provideMerge(
+              makeEnvironmentLayer(baseDir, {
+                dirname,
+                devServerUrl: "http://127.0.0.1:5733",
+                isPackaged: false,
+              }),
+            ),
           ),
         ),
       );
@@ -749,6 +976,7 @@ describe("DesktopBackendConfiguration", () => {
                 wslDistro: "Ubuntu",
               }),
             ),
+            Layer.provideMerge(DesktopWslServerTree.layerTest()),
             Layer.provideMerge(DesktopWslEnvironment.layerTest({ isAvailable: false })),
             Layer.provideMerge(makeEnvironmentLayer(baseDir, { platform: "win32" })),
           ),
@@ -770,6 +998,7 @@ describe("DesktopBackendConfiguration", () => {
       DesktopBackendConfiguration.layer.pipe(
         Layer.provideMerge(serverExposureLayer),
         Layer.provideMerge(DesktopAppSettings.layerTest()),
+        Layer.provideMerge(DesktopWslServerTree.layerTest()),
         Layer.provideMerge(DesktopWslEnvironment.layer),
         // isAvailable on win32 only touches the filesystem, never the spawner,
         // so a die-stub is enough to satisfy the layer's deps.

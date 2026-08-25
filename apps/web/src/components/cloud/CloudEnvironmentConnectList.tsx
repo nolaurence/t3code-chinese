@@ -1,5 +1,6 @@
 import { findErrorTraceId } from "@t3tools/client-runtime/errors";
 import {
+  type EnvironmentConnectionPresentation,
   RelayConnectionRegistration,
   RelayConnectionTarget,
 } from "@t3tools/client-runtime/connection";
@@ -10,9 +11,10 @@ import {
 import type { EnvironmentId } from "@t3tools/contracts";
 import type { RelayClientEnvironmentRecord } from "@t3tools/contracts/relay";
 import * as Option from "effect/Option";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { environmentCatalog } from "~/connection/catalog";
+import { useI18n } from "~/i18n";
 import { cn } from "~/lib/utils";
 import { relayEnvironmentDiscovery } from "~/state/relay";
 import { useRelayEnvironmentDiscovery } from "~/state/environments";
@@ -22,6 +24,12 @@ import { ITEM_ROW_CLASSNAME, ITEM_ROW_INNER_CLASSNAME } from "../settings/itemRo
 import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import { toastManager } from "../ui/toast";
+import { presentSavedCloudEnvironmentConnection } from "./cloudEnvironmentConnectionPresentation";
+
+export interface SavedCloudEnvironmentConnection {
+  readonly environmentId: EnvironmentId;
+  readonly connection: EnvironmentConnectionPresentation;
+}
 
 export function RemoteEnvironmentRowsSkeleton() {
   return (
@@ -40,21 +48,22 @@ export function RemoteEnvironmentRowsSkeleton() {
 /**
  * The user's T3 Connect environments from relay discovery, each with a
  * Connect button. The primary environment is always excluded; already-saved
- * environments are hidden unless `showSavedAsConnected` renders them as
- * connected instead (used by onboarding, where the full device mesh should be
- * visible).
+ * environments are hidden unless `showSavedEnvironments` renders them with
+ * their live connection state (used by onboarding, where the full device mesh
+ * should be visible).
  */
 export function CloudEnvironmentConnectRows({
   primaryEnvironmentId,
-  savedEnvironmentIds,
-  showSavedAsConnected = false,
+  savedEnvironments,
+  showSavedEnvironments = false,
   empty = null,
 }: {
   readonly primaryEnvironmentId: EnvironmentId | null;
-  readonly savedEnvironmentIds: ReadonlyArray<EnvironmentId>;
-  readonly showSavedAsConnected?: boolean;
+  readonly savedEnvironments: ReadonlyArray<SavedCloudEnvironmentConnection>;
+  readonly showSavedEnvironments?: boolean;
   readonly empty?: ReactNode;
 }) {
+  const { t } = useI18n();
   const environmentsState = useRelayEnvironmentDiscovery();
   const registerEnvironment = useAtomCommand(environmentCatalog.register, {
     reportFailure: false,
@@ -77,7 +86,9 @@ export function CloudEnvironmentConnectRows({
   const [connectingEnvironmentId, setConnectingEnvironmentId] = useState<EnvironmentId | null>(
     null,
   );
-  const savedIds = useMemo(() => new Set(savedEnvironmentIds), [savedEnvironmentIds]);
+  const savedById = new Map(
+    savedEnvironments.map((environment) => [environment.environmentId, environment]),
+  );
 
   useEffect(() => {
     void refreshRelayEnvironments();
@@ -90,8 +101,8 @@ export function CloudEnvironmentConnectRows({
     if (result._tag === "Success") {
       toastManager.add({
         type: "success",
-        title: "Environment connected",
-        description: `${environment.label} is available through T3 Connect.`,
+        title: t("cloud.environmentAdded"),
+        description: t("cloud.connectingThrough", { environment: environment.label }),
       });
       return;
     }
@@ -99,18 +110,17 @@ export function CloudEnvironmentConnectRows({
       return;
     }
     const cause = squashAtomCommandFailure(result);
-    const message =
-      cause instanceof Error ? cause.message : "Could not connect the T3 Connect environment.";
+    const message = cause instanceof Error ? cause.message : t("cloud.connectFailedDescription");
     const traceId = findErrorTraceId(cause);
     console.error("[t3-connect] Could not connect environment", { message, traceId, cause });
     toastManager.add({
       type: "error",
-      title: "Could not connect environment",
+      title: t("cloud.connectFailed"),
       description: message,
       data: traceId
         ? {
             secondaryActionProps: {
-              children: "Copy trace ID",
+              children: t("common.copyTraceId"),
               onClick: () => void navigator.clipboard?.writeText(traceId),
             },
           }
@@ -121,10 +131,10 @@ export function CloudEnvironmentConnectRows({
   const visibleEnvironments = [...environmentsState.environments.values()].filter(
     ({ environment }) =>
       environment.environmentId !== primaryEnvironmentId &&
-      (showSavedAsConnected || !savedIds.has(environment.environmentId)),
+      (showSavedEnvironments || !savedById.has(environment.environmentId)),
   );
 
-  const standalone = showSavedAsConnected || savedEnvironmentIds.length === 0;
+  const standalone = showSavedEnvironments || savedEnvironments.length === 0;
 
   if (
     standalone &&
@@ -139,13 +149,13 @@ export function CloudEnvironmentConnectRows({
     // A failed or offline discovery is not "no environments" — misreporting it
     // as empty would read as the user's devices having disappeared.
     const discoveryProblem = environmentsState.offline
-      ? "You appear to be offline."
+      ? t("cloud.offline")
       : (Option.getOrNull(environmentsState.error)?.message ?? null);
     if (discoveryProblem !== null && !environmentsState.refreshing) {
       return (
         <div className={ITEM_ROW_CLASSNAME}>
           <p className="text-sm font-medium text-destructive">
-            Could not load T3 Connect environments
+            {t("cloud.loadEnvironmentsFailed")}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{discoveryProblem}</p>
           <Button
@@ -154,7 +164,7 @@ export function CloudEnvironmentConnectRows({
             className="mt-3"
             onClick={() => void refreshRelayEnvironments()}
           >
-            Try again
+            {t("rootError.tryAgain")}
           </Button>
         </div>
       );
@@ -163,31 +173,57 @@ export function CloudEnvironmentConnectRows({
   }
 
   return visibleEnvironments.map(({ environment, availability, error }) => {
-    const alreadyConnected = savedIds.has(environment.environmentId);
+    const savedEnvironment = savedById.get(environment.environmentId);
+    const savedConnection = savedEnvironment
+      ? presentSavedCloudEnvironmentConnection(savedEnvironment.connection, t)
+      : null;
+    const dotClassName = savedConnection
+      ? savedConnection.tone === "connected"
+        ? "bg-success"
+        : savedConnection.tone === "connecting"
+          ? "bg-warning"
+          : savedConnection.tone === "error"
+            ? "bg-destructive"
+            : "bg-muted-foreground/35"
+      : availability === "online"
+        ? "bg-success"
+        : availability === "error"
+          ? "bg-destructive"
+          : availability === "checking"
+            ? "bg-warning"
+            : "bg-muted-foreground/35";
+    const statusText = savedConnection
+      ? savedConnection.statusText
+      : availability === "online"
+        ? t("cloud.availableRelayOnline")
+        : availability === "offline"
+          ? t("cloud.availableRelayOffline")
+          : availability === "checking"
+            ? t("cloud.availableRelayChecking")
+            : (Option.getOrNull(error)?.message ?? t("cloud.availableRelayUnavailable"));
     return (
       <div key={environment.environmentId} className={ITEM_ROW_CLASSNAME}>
         <div className={ITEM_ROW_INNER_CLASSNAME}>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <ConnectionStatusDot
-                dotClassName={
-                  availability === "online"
-                    ? "bg-success"
-                    : availability === "error"
-                      ? "bg-destructive"
-                      : availability === "checking"
-                        ? "bg-warning"
-                        : "bg-muted-foreground/35"
+                dotClassName={dotClassName}
+                pingClassName={
+                  savedConnection?.tone === "connecting" ||
+                  (savedConnection === null && availability === "checking")
+                    ? "bg-warning/60 duration-2000"
+                    : null
                 }
-                pingClassName={availability === "checking" ? "bg-warning/60 duration-2000" : null}
                 tooltipText={
-                  availability === "online"
-                    ? "Relay online"
-                    : availability === "offline"
-                      ? "Relay offline"
-                      : availability === "checking"
-                        ? "Checking relay status"
-                        : (Option.getOrNull(error)?.message ?? "Relay status unavailable")
+                  savedConnection
+                    ? savedConnection.statusText
+                    : availability === "online"
+                      ? t("cloud.relayOnline")
+                      : availability === "offline"
+                        ? t("cloud.relayOffline")
+                        : availability === "checking"
+                          ? t("cloud.relayChecking")
+                          : (Option.getOrNull(error)?.message ?? t("cloud.relayUnavailable"))
                 }
               />
               <p className="truncate text-sm font-medium">{environment.label}</p>
@@ -195,21 +231,19 @@ export function CloudEnvironmentConnectRows({
             <p
               className={cn(
                 "mt-1 truncate text-xs",
-                availability === "error" ? "text-destructive" : "text-muted-foreground",
+                savedConnection?.tone === "error" ||
+                  (savedConnection?.tone === "connecting" && savedEnvironment?.connection.error) ||
+                  (savedConnection === null && availability === "error")
+                  ? "text-destructive"
+                  : "text-muted-foreground",
               )}
             >
-              {availability === "online"
-                ? "Available · Relay online"
-                : availability === "offline"
-                  ? "Available · Relay offline"
-                  : availability === "checking"
-                    ? "Available · Checking relay status…"
-                    : (Option.getOrNull(error)?.message ?? "Available · Relay status unavailable")}
+              {statusText}
             </p>
           </div>
-          {alreadyConnected ? (
+          {savedConnection ? (
             <Button size="sm" variant="outline" disabled>
-              Connected
+              {savedConnection.buttonLabel}
             </Button>
           ) : (
             <Button
@@ -217,7 +251,9 @@ export function CloudEnvironmentConnectRows({
               disabled={connectingEnvironmentId !== null}
               onClick={() => void connectEnvironment(environment)}
             >
-              {connectingEnvironmentId === environment.environmentId ? "Connecting…" : "Connect"}
+              {connectingEnvironmentId === environment.environmentId
+                ? t("cloud.connecting")
+                : t("cloud.connect")}
             </Button>
           )}
         </div>

@@ -4,8 +4,10 @@ import { isPreviewableUrl } from "@t3tools/shared/preview";
 import * as Schema from "effect/Schema";
 
 import type { OpenPreviewMutation } from "~/browser/openFileInPreview";
+import { recordVisitForThread } from "~/browserHistoryStore";
 import { applyPreviewServerSnapshot, isPreviewSupportedInRuntime } from "~/previewStateStore";
 import { useRightPanelStore } from "~/rightPanelStore";
+import type { Translate } from "~/i18n";
 
 const terminalLinkErrorContext = {
   environmentId: Schema.String,
@@ -39,6 +41,7 @@ interface OpenTerminalLinkInPreviewInput<E> {
   readonly openPreview: OpenPreviewMutation<E>;
   readonly localApi: LocalApi;
   readonly fallbackToBrowser: () => void;
+  readonly t?: Translate;
 }
 
 export async function openTerminalLinkInPreview<E>(
@@ -64,8 +67,14 @@ export async function openTerminalLinkInPreview<E>(
   try {
     choice = await input.localApi.contextMenu.show(
       [
-        { id: "open-in-preview", label: "Open in preview" },
-        { id: "open-in-browser", label: "Open in browser" },
+        {
+          id: "open-in-preview",
+          label: input.t?.("preview.openInPreview") ?? "Open in preview",
+        },
+        {
+          id: "open-in-browser",
+          label: input.t?.("preview.openBrowser") ?? "Open in browser",
+        },
       ],
       input.position,
     );
@@ -98,6 +107,7 @@ export async function openTerminalLinkInPreview<E>(
       input.fallbackToBrowser();
       return;
     }
+    recordVisitForThread(input.threadRef, input.url);
     applyPreviewServerSnapshot(input.threadRef, result.value);
     useRightPanelStore.getState().openBrowser(input.threadRef, result.value.tabId);
     return;

@@ -1,31 +1,27 @@
 import { ProviderInteractionMode, RuntimeMode } from "@t3tools/contracts";
 import { memo, type ReactNode } from "react";
-import { EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { EllipsisIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   Menu,
-  MenuItem,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
   MenuSeparator as MenuDivider,
   MenuTrigger,
 } from "../ui/menu";
-import { useI18n } from "../../i18n/I18nProvider";
+import { useI18n } from "~/i18n";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
-  activePlan: boolean;
   interactionMode: ProviderInteractionMode;
-  planSidebarLabel: string;
-  planSidebarOpen: boolean;
   runtimeMode: RuntimeMode;
   showInteractionModeToggle: boolean;
   traitsMenuContent?: ReactNode;
   onToggleInteractionMode: () => void;
-  onTogglePlanSidebar: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
   const { t } = useI18n();
+
   return (
     <Menu>
       <MenuTrigger
@@ -77,19 +73,9 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
         >
           <MenuRadioItem value="approval-required">{t("chat.access.supervised")}</MenuRadioItem>
           <MenuRadioItem value="auto-accept-edits">{t("chat.access.autoAccept")}</MenuRadioItem>
+          <MenuRadioItem value="auto">{t("chat.access.auto")}</MenuRadioItem>
           <MenuRadioItem value="full-access">{t("chat.access.full")}</MenuRadioItem>
         </MenuRadioGroup>
-        {props.activePlan ? (
-          <>
-            <MenuDivider />
-            <MenuItem onClick={props.onTogglePlanSidebar}>
-              <ListTodoIcon className="size-4 shrink-0" />
-              {props.planSidebarOpen
-                ? t("chat.sidebar.hide", { label: props.planSidebarLabel.toLowerCase() })
-                : t("chat.sidebar.show", { label: props.planSidebarLabel.toLowerCase() })}
-            </MenuItem>
-          </>
-        ) : null}
       </MenuPopup>
     </Menu>
   );

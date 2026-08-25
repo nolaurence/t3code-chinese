@@ -30,10 +30,30 @@ const checkpointOrder = O.mapInput(
 );
 
 const activityOrder = O.combineAll<OrchestrationThreadActivity>([
-  O.mapInput(O.Number, (a) => a.sequence ?? Number.MAX_SAFE_INTEGER),
+  // Legacy snapshots predate activity.sequence. Keep those rows before live
+  // sequenced events, matching the server projector and snapshot query.
+  O.mapInput(O.Number, (a) => a.sequence ?? -1),
   O.mapInput(O.String, (a) => a.createdAt),
   O.mapInput(O.String, (a) => a.id),
 ]);
+
+/**
+ * Matches the validity rule in `deriveLatestContextWindowSnapshot` (and the
+ * server's snapshot-side `dropStaleContextWindowActivities`): rows without a
+ * finite, non-negative `usedTokens` are skipped during the consumer's backward
+ * walk, so they must not replace an earlier resolvable row here.
+ */
+function isResolvableContextWindowActivity(activity: OrchestrationThreadActivity): boolean {
+  if (activity.kind !== "context-window.updated") {
+    return false;
+  }
+  const payload =
+    activity.payload && typeof activity.payload === "object"
+      ? (activity.payload as Record<string, unknown>)
+      : null;
+  const usedTokens = payload?.usedTokens;
+  return typeof usedTokens === "number" && Number.isFinite(usedTokens) && usedTokens >= 0;
+}
 
 /**
  * Apply a single orchestration event to an `OrchestrationThread`, returning
@@ -72,6 +92,10 @@ export function applyThreadDetailEvent(
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
           archivedAt: null,
+          settledOverride: null,
+          settledAt: null,
+          snoozedUntil: null,
+          snoozedAt: null,
           deletedAt: null,
           messages: [],
           proposedPlans: [],
@@ -90,6 +114,7 @@ export function applyThreadDetailEvent(
         thread: {
           ...thread,
           archivedAt: event.payload.archivedAt,
+          titleRegeneration: null,
           updatedAt: event.payload.updatedAt,
         },
       };
@@ -100,6 +125,84 @@ export function applyThreadDetailEvent(
         thread: { ...thread, archivedAt: null, updatedAt: event.payload.updatedAt },
       };
 
+    case "thread.settled":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          settledOverride: "settled",
+          settledAt: event.payload.settledAt,
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.unsettled":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          settledOverride: event.payload.reason === "user" ? "active" : null,
+          settledAt: null,
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.snoozed":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          snoozedUntil: event.payload.snoozedUntil,
+          snoozedAt: event.payload.snoozedAt,
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.unsnoozed":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          snoozedUntil: null,
+          snoozedAt: null,
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.pinned":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          pinnedAt: event.payload.pinnedAt,
+          ...(event.payload.pinOrderKey !== undefined
+            ? { pinOrderKey: event.payload.pinOrderKey }
+            : {}),
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.unpinned":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          pinnedAt: null,
+          pinOrderKey: null,
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.pin-reordered":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          pinOrderKey: event.payload.orderKey,
+          updatedAt: event.payload.updatedAt,
+        },
+      };
+
     // ── Thread metadata ─────────────────────────────────────────────
     case "thread.meta-updated":
       return {
@@ -107,6 +210,9 @@ export function applyThreadDetailEvent(
         thread: {
           ...thread,
           ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+          ...(event.payload.titleRegeneration !== undefined
+            ? { titleRegeneration: event.payload.titleRegeneration }
+            : {}),
           ...(event.payload.modelSelection !== undefined
             ? { modelSelection: event.payload.modelSelection }
             : {}),
@@ -182,6 +288,8 @@ export function applyThreadDetailEvent(
         id: event.payload.messageId,
         role: event.payload.role,
         text: event.payload.text,
+        reasoningText: event.payload.reasoning,
+        ...(event.payload.phase !== undefined ? { phase: event.payload.phase } : {}),
         ...(event.payload.attachments !== undefined
           ? { attachments: event.payload.attachments }
           : {}),
@@ -203,6 +311,12 @@ export function applyThreadDetailEvent(
                     : message.text.length > 0
                       ? message.text
                       : entry.text,
+                  reasoningText: message.streaming
+                    ? `${entry.reasoningText ?? ""}${message.reasoningText ?? ""}`
+                    : (message.reasoningText ?? "").length > 0
+                      ? (message.reasoningText ?? "")
+                      : (entry.reasoningText ?? ""),
+                  ...(message.phase !== undefined ? { phase: message.phase } : {}),
                   streaming: message.streaming,
                   ...(message.turnId !== undefined ? { turnId: message.turnId } : {}),
                   ...(message.streaming ? {} : { updatedAt: message.updatedAt }),
@@ -391,10 +505,17 @@ export function applyThreadDetailEvent(
         (thread.latestTurn === null || thread.latestTurn.turnId === event.payload.turnId)
           ? {
               turnId: event.payload.turnId,
-              state: checkpointStatusToTurnState(event.payload.status),
+              state:
+                thread.latestTurn === null
+                  ? checkpointStatusToTurnState(event.payload.status)
+                  : turnStateAfterCheckpoint(thread.latestTurn.state, event.payload.status),
               requestedAt: thread.latestTurn?.requestedAt ?? event.payload.completedAt,
               startedAt: thread.latestTurn?.startedAt ?? event.payload.completedAt,
-              completedAt: event.payload.completedAt,
+              completedAt:
+                thread.latestTurn !== null &&
+                (thread.latestTurn.state === "interrupted" || thread.latestTurn.state === "error")
+                  ? (thread.latestTurn.completedAt ?? event.payload.completedAt)
+                  : event.payload.completedAt,
               assistantMessageId: event.payload.assistantMessageId,
             }
           : thread.latestTurn;
@@ -457,10 +578,31 @@ export function applyThreadDetailEvent(
 
     // ── Activities ──────────────────────────────────────────────────
     case "thread.activity-appended": {
+      const activity =
+        event.payload.activity.sequence === undefined
+          ? { ...event.payload.activity, sequence: event.sequence }
+          : event.payload.activity;
+      // A resolvable context-window update supersedes earlier resolvable ones
+      // for the same turn: consumers only read the latest value (walking the
+      // array backwards), and providers stream these updates continuously, so
+      // retaining the history grows the thread by thousands of rows over a
+      // long session. Mirrors the server-side snapshot rule in
+      // dropStaleContextWindowActivities; retention stays per turn so a
+      // thread.reverted that discards turns can still resolve a value from
+      // the turns that survive.
+      const supersedesContextWindow = isResolvableContextWindowActivity(activity);
       const activities = pipe(
         thread.activities,
-        Arr.filter((activity) => activity.id !== event.payload.activity.id),
-        Arr.append(event.payload.activity),
+        Arr.filter(
+          (entry) =>
+            entry.id !== activity.id &&
+            !(
+              supersedesContextWindow &&
+              entry.turnId === activity.turnId &&
+              isResolvableContextWindowActivity(entry)
+            ),
+        ),
+        Arr.append(activity),
         Arr.sort(activityOrder),
       );
 
@@ -517,6 +659,14 @@ function checkpointStatusToTurnState(
     case "missing":
       return "completed";
   }
+}
+
+function turnStateAfterCheckpoint(
+  existingState: OrchestrationLatestTurn["state"],
+  status: "ready" | "missing" | "error",
+): OrchestrationLatestTurn["state"] {
+  if (existingState === "interrupted" || existingState === "error") return existingState;
+  return checkpointStatusToTurnState(status);
 }
 
 function rebindCheckpointAssistantMessage(
