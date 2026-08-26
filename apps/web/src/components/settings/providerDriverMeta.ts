@@ -1,5 +1,6 @@
 import {
   ClaudeSettings,
+  CopilotSettings,
   CodexSettings,
   CursorSettings,
   GrokSettings,
@@ -12,6 +13,7 @@ import type * as Schema from "effect/Schema";
 import {
   ClaudeAI,
   CursorIcon,
+  GithubCopilotIcon,
   GrokIcon,
   type Icon,
   OpenAI,
@@ -54,6 +56,7 @@ export interface ProviderClientDefinition {
       }
     >
   >;
+  readonly environmentHint?: string;
 }
 
 export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
@@ -68,6 +71,15 @@ export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = 
     label: "Claude",
     icon: ClaudeAI,
     settingsSchema: ClaudeSettings,
+  },
+  {
+    value: ProviderDriverKind.make("githubCopilot"),
+    label: "GitHub Copilot",
+    icon: GithubCopilotIcon,
+    badgeLabel: "SDK",
+    environmentHint:
+      "Add COPILOT_GITHUB_TOKEN as a sensitive environment variable. The bundled SDK does not require an external Copilot CLI.",
+    settingsSchema: CopilotSettings,
   },
   {
     value: ProviderDriverKind.make("cursor"),

@@ -15,7 +15,7 @@ import { useI18n, type Translate } from "../../i18n";
 import { cn } from "../../lib/utils";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Button } from "../ui/button";
-import { ACPRegistryIcon, Gemini, GithubCopilotIcon, PiAgentIcon, type Icon } from "../Icons";
+import { ACPRegistryIcon, Gemini, PiAgentIcon, type Icon } from "../Icons";
 import {
   Dialog,
   DialogDescription,
@@ -79,11 +79,6 @@ interface ComingSoonDriverOption {
 }
 
 const COMING_SOON_DRIVER_OPTIONS: readonly ComingSoonDriverOption[] = [
-  {
-    value: ProviderDriverKind.make("githubCopilot"),
-    label: "Github Copilot",
-    icon: GithubCopilotIcon,
-  },
   {
     value: ProviderDriverKind.make("gemini"),
     label: "Gemini",
@@ -418,7 +413,9 @@ export function AddProviderInstanceDialog({
                 </div>
               ) : wizardStep === 2 ? (
                 <div className="grid gap-2">
-                  <p className="text-sm text-muted-foreground">{t("providers.noConfig")}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {driverOption.environmentHint ?? t("providers.noConfig")}
+                  </p>
                 </div>
               ) : null}
             </AnimatedHeight>

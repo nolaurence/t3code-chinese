@@ -181,6 +181,31 @@ describe("ClientSettings sidebar", () => {
   });
 });
 
+describe("GitHub Copilot settings", () => {
+  it("defaults the bundled SDK provider on with no custom models", () => {
+    const settings = decodeServerSettings({});
+    expect(settings.providers.githubCopilot).toEqual({
+      enabled: true,
+      customModels: [],
+    });
+  });
+
+  it("accepts GitHub Copilot settings patches", () => {
+    const patch = decodeServerSettingsPatch({
+      providers: {
+        githubCopilot: {
+          enabled: false,
+          customModels: ["custom-copilot-model"],
+        },
+      },
+    });
+    expect(patch.providers?.githubCopilot).toEqual({
+      enabled: false,
+      customModels: ["custom-copilot-model"],
+    });
+  });
+});
+
 describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults text generation to Luna at low reasoning effort", () => {
     expect(DEFAULT_SERVER_SETTINGS.textGenerationModelSelection).toEqual({
