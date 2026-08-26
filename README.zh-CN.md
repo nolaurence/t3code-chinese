@@ -2,16 +2,17 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-T3 Code 是一个供编程智能体使用的简洁 Web 图形界面，目前支持 Codex、Claude、Cursor 和 OpenCode，后续还会支持更多智能体。
+T3 Code 是一个供编程智能体使用的简洁 Web 图形界面，目前支持 Codex、Claude、GitHub Copilot、Cursor 和 OpenCode，后续还会支持更多智能体。
 
 ## 安装
 
 > [!WARNING]
-> T3 Code 目前支持 Codex、Claude、Cursor 和 OpenCode。
+> T3 Code 目前支持 Codex、Claude、GitHub Copilot、Cursor 和 OpenCode。
 > 使用前，请至少安装并登录一个供应商：
 >
 > - Codex：安装 [Codex CLI](https://developers.openai.com/codex/cli)，然后运行 `codex login`
 > - Claude：安装 [Claude Code](https://claude.com/product/claude-code)，然后运行 `claude auth login`
+> - GitHub Copilot：无需安装外置 CLI。应用直接使用随包提供的 [Copilot SDK](https://github.com/github/copilot-sdk)；请在供应商实例中将 `COPILOT_GITHUB_TOKEN`（或 `GH_TOKEN`/`GITHUB_TOKEN`）配置为敏感环境变量。
 > - Cursor：安装 [Cursor CLI](https://cursor.com/cli)，然后运行 `cursor-agent login`
 > - OpenCode：安装 [OpenCode](https://opencode.ai)，然后运行 `opencode auth login`
 

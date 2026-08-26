@@ -158,6 +158,7 @@ function ProviderAuthEmail(props: {
 function ProviderEnvironmentSection(props: {
   readonly environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>;
   readonly onChange: (environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>) => void;
+  readonly description?: string | undefined;
 }) {
   const { t } = useI18n();
   const [rows, setRows] = useState<ReadonlyArray<EnvironmentDraftRow>>(() =>
@@ -230,9 +231,12 @@ function ProviderEnvironmentSection(props: {
           {t("common.add")}
         </Button>
       </div>
-      {rows.length === 0 ? (
+      {props.description ? (
+        <p className="text-xs text-muted-foreground">{props.description}</p>
+      ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">{t("providers.environmentDescription")}</p>
-      ) : (
+      ) : null}
+      {rows.length > 0 ? (
         <div className="overflow-hidden rounded-md border border-border/70">
           <Table>
             <TableHeader className="bg-muted/25 text-[11px] text-muted-foreground">
@@ -315,7 +319,7 @@ function ProviderEnvironmentSection(props: {
             </TableBody>
           </Table>
         </div>
-      )}
+      ) : null}
       <span className="text-xs text-muted-foreground">
         {t("providers.environmentSensitiveDescription")}
       </span>
@@ -769,6 +773,7 @@ export function ProviderInstanceCard({
               <ProviderEnvironmentSection
                 environment={instance.environment ?? []}
                 onChange={updateEnvironment}
+                description={driverOption?.environmentHint}
               />
             </div>
 
