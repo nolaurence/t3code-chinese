@@ -220,6 +220,7 @@ describe("PiRpcClient", () => {
         }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
         const response = yield* client.request({ type: "get_available_models" });
 
+        expect(client.protocolVersion).toBe(2);
         expect(commands).toEqual(["negotiate_protocol", "get_available_models"]);
         expect(response).toMatchObject({
           success: true,
@@ -320,14 +321,18 @@ describe("PiRpcClient", () => {
             id: message.id,
             command: message.type,
             success: false,
-            error: "model unavailable",
+            error: "message snapshot changed",
+            code: "stale_cursor",
           }),
         );
 
-        const error = yield* harness.client.request({ type: "get_state" }).pipe(Effect.flip);
+        const error = yield* harness.client
+          .request({ type: "get_messages_page", limit: 256 })
+          .pipe(Effect.flip);
         expect(error).toBeInstanceOf(PiRpcClientError);
-        expect(error.detail).toContain("model unavailable");
-        expect(error.message).toContain("model unavailable");
+        expect(error.detail).toContain("message snapshot changed");
+        expect(error.message).toContain("message snapshot changed");
+        expect(error.rpcCode).toBe("stale_cursor");
       }),
     ),
   );

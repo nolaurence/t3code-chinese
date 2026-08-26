@@ -38,6 +38,7 @@ it.layer(NodeServices.layer)("PiTextGeneration", (it) =>
           send: () => Effect.void,
           events: Stream.make({ type: "agent_end" as const }),
           ready: Effect.succeed({ type: "ready" as const }),
+          protocolVersion: 1,
           terminated: Effect.never,
           close: Effect.void,
         };

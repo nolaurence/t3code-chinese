@@ -28,6 +28,7 @@ export class PiRpcClientError extends Schema.TaggedErrorClass<PiRpcClientError>(
     detail: Schema.String,
     exitCode: Schema.optional(Schema.Number),
     stderr: Schema.optional(Schema.String),
+    rpcCode: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
@@ -49,6 +50,7 @@ export interface PiRpcClient {
   readonly send: (command: PiRpcCommand) => Effect.Effect<void, PiRpcClientError>;
   readonly events: Stream.Stream<Exclude<PiRpcOutput, PiRpcResponse>>;
   readonly ready: Effect.Effect<PiRpcReadyFrame, PiRpcClientError>;
+  readonly protocolVersion: 1 | 2;
   readonly terminated: Effect.Effect<PiRpcClientError>;
   readonly close: Effect.Effect<void>;
 }
@@ -69,6 +71,7 @@ const BEARER_TOKEN_REGEX = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const AUTHORIZATION_ASSIGNMENT_REGEX = /\b(authorization)(\s*[:=]\s*)[^\r\n]+/gi;
 const SENSITIVE_ASSIGNMENT_REGEX =
   /\b(api[_ -]?key|access[_ -]?token|refresh[_ -]?token|secret)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi;
+const isProtocolV2ResponseData = Schema.is(Schema.Struct({ protocolVersion: Schema.Literal(2) }));
 
 function sanitizePiRpcStderr(value: string): string {
   return value
@@ -86,6 +89,7 @@ function clientError(
     readonly cause?: unknown;
     readonly exitCode?: number;
     readonly stderr?: string;
+    readonly rpcCode?: string;
   } = {},
 ): PiRpcClientError {
   return new PiRpcClientError({
@@ -93,6 +97,7 @@ function clientError(
     detail,
     ...(options.exitCode === undefined ? {} : { exitCode: options.exitCode }),
     ...(options.stderr === undefined ? {} : { stderr: options.stderr }),
+    ...(options.rpcCode === undefined ? {} : { rpcCode: options.rpcCode }),
     ...(options.cause === undefined ? {} : { cause: options.cause }),
   });
 }
@@ -135,7 +140,11 @@ export const makePiRpcClient = Effect.fn("makePiRpcClient")(function* (transport
     } else {
       yield* Deferred.fail(
         deferred,
-        clientError("request", `Pi RPC ${output.command} failed: ${output.error}`),
+        clientError(
+          "request",
+          `Pi RPC ${output.command} failed: ${output.error}`,
+          output.code ? { rpcCode: output.code } : {},
+        ),
       );
     }
   });
@@ -220,6 +229,7 @@ export const makePiRpcClient = Effect.fn("makePiRpcClient")(function* (transport
     send,
     events: Stream.fromPubSub(events),
     ready: Deferred.await(ready),
+    protocolVersion: 1,
     terminated: Deferred.await(terminated),
     close,
   } satisfies PiRpcClient;
@@ -315,6 +325,13 @@ export const spawnPiRpcClient = Effect.fn("spawnPiRpcClient")(function* (
 
   const ready = yield* client.ready;
   if (!ready.supportedProtocolVersions?.includes(2)) return client;
-  yield* client.request({ type: "negotiate_protocol", protocolVersion: 2 });
-  return client;
+  const response = yield* client.request({ type: "negotiate_protocol", protocolVersion: 2 });
+  if (
+    !response.success ||
+    response.command !== "negotiate_protocol" ||
+    !isProtocolV2ResponseData(response.data)
+  ) {
+    return yield* clientError("protocol", "Pi RPC protocol v2 negotiation failed.");
+  }
+  return { ...client, protocolVersion: 2 } satisfies PiRpcClient;
 });

@@ -39,6 +39,12 @@ export type PiRpcCommand =
   | { readonly id?: string; readonly type: "abort" }
   | { readonly id?: string; readonly type: "get_state" }
   | { readonly id?: string; readonly type: "get_messages" }
+  | {
+      readonly id?: string;
+      readonly type: "get_messages_page";
+      readonly cursor?: string;
+      readonly limit?: number;
+    }
   | { readonly id?: string; readonly type: "get_last_assistant_text" }
   | { readonly id?: string; readonly type: "get_available_models" }
   | { readonly id?: string; readonly type: "get_session_stats" }
@@ -72,6 +78,7 @@ export type PiRpcResponse =
       readonly command: string;
       readonly success: false;
       readonly error: string;
+      readonly code?: string;
     };
 
 export type PiExtensionUIRequest = {
@@ -110,6 +117,8 @@ export type PiAgentEvent = {
     | "extension_error"
     | "agent_settled"
     | "prompt_result"
+    | "todo_reminder"
+    | "todo_auto_clear"
     | "entry_appended"
     | "session_info_changed"
     | "thinking_level_changed";
@@ -177,8 +186,11 @@ export function decodePiRpcOutput(value: unknown): PiRpcOutput {
     ) {
       throw new PiRpcProtocolError("Pi RPC response has invalid correlation fields.");
     }
-    if (record.success === false && typeof record.error !== "string") {
-      throw new PiRpcProtocolError("Failed Pi RPC response is missing its error message.");
+    if (
+      record.success === false &&
+      (typeof record.error !== "string" || !optionalString(record.code))
+    ) {
+      throw new PiRpcProtocolError("Failed Pi RPC response has invalid error fields.");
     }
     return record as PiRpcResponse;
   }
