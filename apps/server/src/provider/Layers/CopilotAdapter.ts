@@ -18,6 +18,7 @@ import {
   TurnId,
   type CanonicalItemType,
   type CanonicalRequestType,
+  type CopilotModelConfigurations,
   type ModelSelection,
   type ProviderApprovalDecision,
   type ProviderInstanceId,
@@ -114,6 +115,7 @@ export function selectCopilotRewindPoint<T>(
 export interface CopilotAdapterOptions {
   readonly instanceId: ProviderInstanceId;
   readonly attachmentsDir: string;
+  readonly modelConfigurations?: CopilotModelConfigurations;
 }
 
 type CopilotAdapter = ProviderAdapterShape<ProviderAdapterError>;
@@ -779,6 +781,7 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         const resume = parseResumeCursor(input.resumeCursor);
         const model = input.modelSelection?.model;
         const reasoningEffort = getReasoningEffort(input.modelSelection);
+        const modelConfiguration = model ? options.modelConfigurations?.[model] : undefined;
         const earlyEvents: SessionEvent[] = [];
         let ctx: CopilotSessionContext | undefined;
         const onEvent = (event: SessionEvent) => {
@@ -792,6 +795,18 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
               workingDirectory: cwd,
               ...(model ? { model } : {}),
               ...(reasoningEffort ? { reasoningEffort } : {}),
+              ...(modelConfiguration?.contextWindowTokens
+                ? {
+                    modelCapabilities: {
+                      limits: {
+                        max_context_window_tokens: modelConfiguration.contextWindowTokens,
+                      },
+                    },
+                  }
+                : {}),
+              // BYOK: a configured custom provider makes the whole session
+              // bypass GitHub Copilot auth and call the provider directly.
+              ...(runtime.sessionProvider ? { provider: runtime.sessionProvider } : {}),
               streaming: true,
               enableFileChangeTracking: true,
               clientName: "T3 Code",
@@ -944,6 +959,12 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
             ctx.sdkSession.send({
               prompt: effectivePrompt || "Use the attached file as the user request context.",
               ...(attachments.length > 0 ? { attachments } : {}),
+              agentMode:
+                interactionMode === "plan"
+                  ? "plan"
+                  : ctx.runtimeMode === "auto"
+                    ? "autopilot"
+                    : "interactive",
             }),
           catch: (cause) => makeRequestError("session.send", cause),
         }).pipe(

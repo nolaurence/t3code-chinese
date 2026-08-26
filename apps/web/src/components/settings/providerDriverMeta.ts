@@ -80,6 +80,28 @@ export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = 
     environmentHint:
       "Add COPILOT_GITHUB_TOKEN as a sensitive environment variable. The bundled SDK does not require an external Copilot CLI.",
     settingsSchema: CopilotSettings,
+    settingsFieldMessages: {
+      baseUrl: {
+        label: "providers.copilot.baseUrl.label",
+        description: "providers.copilot.baseUrl.description",
+      },
+      providerType: {
+        label: "providers.copilot.providerType.label",
+        description: "providers.copilot.providerType.description",
+      },
+      apiKey: {
+        label: "providers.copilot.apiKey.label",
+        description: "providers.copilot.apiKey.description",
+      },
+      wireApi: {
+        label: "providers.copilot.wireApi.label",
+        description: "providers.copilot.wireApi.description",
+      },
+      azureApiVersion: {
+        label: "providers.copilot.azureApiVersion.label",
+        description: "providers.copilot.azureApiVersion.description",
+      },
+    },
   },
   {
     value: ProviderDriverKind.make("cursor"),

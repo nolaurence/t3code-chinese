@@ -12,6 +12,7 @@ describe("settings navigation", () => {
       "外观",
       "快捷键",
       "供应商",
+      "GitHub Copilot SDK",
       "集成",
       "版本控制",
       "连接",

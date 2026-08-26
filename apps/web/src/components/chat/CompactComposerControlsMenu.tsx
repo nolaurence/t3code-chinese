@@ -15,6 +15,7 @@ import { useI18n } from "~/i18n";
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
+  isCopilot: boolean;
   showInteractionModeToggle: boolean;
   traitsMenuContent?: ReactNode;
   onToggleInteractionMode: () => void;
@@ -73,7 +74,9 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
         >
           <MenuRadioItem value="approval-required">{t("chat.access.supervised")}</MenuRadioItem>
           <MenuRadioItem value="auto-accept-edits">{t("chat.access.autoAccept")}</MenuRadioItem>
-          <MenuRadioItem value="auto">{t("chat.access.auto")}</MenuRadioItem>
+          <MenuRadioItem value="auto">
+            {props.isCopilot ? t("chat.access.autopilot") : t("chat.access.auto")}
+          </MenuRadioItem>
           <MenuRadioItem value="full-access">{t("chat.access.full")}</MenuRadioItem>
         </MenuRadioGroup>
       </MenuPopup>

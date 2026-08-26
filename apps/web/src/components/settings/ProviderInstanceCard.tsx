@@ -17,6 +17,8 @@ import { useState, type ReactNode } from "react";
 import {
   isProviderDriverKind,
   resolveProviderInstanceEnabled,
+  type CopilotModelConfiguration,
+  type CopilotModelConfigurations,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
   type ProviderInstanceId,
@@ -92,6 +94,13 @@ function readConfigStringArray(config: unknown, key: string): ReadonlyArray<stri
   const value = (config as Record<string, unknown>)[key];
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function readCopilotModelConfigurations(config: unknown): CopilotModelConfigurations {
+  if (config === null || typeof config !== "object") return {};
+  const value = (config as Record<string, unknown>).modelConfigurations;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as CopilotModelConfigurations;
 }
 
 /**
@@ -467,6 +476,8 @@ export function ProviderInstanceCard({
     : null;
 
   const customModels = readConfigStringArray(instance.config, "customModels");
+  const copilotModelConfigurations =
+    driverKind === "githubCopilot" ? readCopilotModelConfigurations(instance.config) : {};
   // Server-returned models may lag behind settings writes. Treat probe
   // models as the source for built-ins only; custom rows come directly
   // from the current instance config so add/remove reflects immediately.
@@ -510,6 +521,12 @@ export function ProviderInstanceCard({
 
   const updateCustomModels = (next: ReadonlyArray<string>) => {
     const nextConfig = nextConfigBlobWithValue(instance.config, "customModels", [...next]);
+    const { config: _omit, ...rest } = instance;
+    onUpdate({ ...rest, config: nextConfig } as ProviderInstanceConfig);
+  };
+
+  const updateCopilotModelConfigurations = (next: CopilotModelConfigurations) => {
+    const nextConfig = nextConfigBlobWithValue(instance.config, "modelConfigurations", next);
     const { config: _omit, ...rest } = instance;
     onUpdate({ ...rest, config: nextConfig } as ProviderInstanceConfig);
   };
@@ -834,10 +851,12 @@ export function ProviderInstanceCard({
                 hiddenModels={hiddenModels}
                 favoriteModels={favoriteModels}
                 modelOrder={modelOrder}
+                modelConfigurations={copilotModelConfigurations}
                 onChange={updateCustomModels}
                 onHiddenModelsChange={onHiddenModelsChange}
                 onFavoriteModelsChange={onFavoriteModelsChange}
                 onModelOrderChange={onModelOrderChange}
+                onModelConfigurationsChange={updateCopilotModelConfigurations}
               />
             ) : (
               <div>

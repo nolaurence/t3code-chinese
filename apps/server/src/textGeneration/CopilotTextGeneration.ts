@@ -58,6 +58,7 @@ export function makeCopilotTextGeneration(
             workingDirectory: input.cwd,
             model: input.modelSelection.model,
             ...(reasoningEffort ? { reasoningEffort } : {}),
+            ...(runtime.sessionProvider ? { provider: runtime.sessionProvider } : {}),
             streaming: false,
             availableTools: [],
             clientName: "T3 Code Text Generation",

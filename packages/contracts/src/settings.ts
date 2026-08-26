@@ -601,16 +601,103 @@ export const OmpSettings = makeProviderSettingsSchema(
 );
 export type OmpSettings = typeof OmpSettings.Type;
 
-export const CopilotSettings = makeProviderSettingsSchema({
-  enabled: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(true)),
-    Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+export const CopilotReasoningEffort = Schema.Literals(["low", "medium", "high", "xhigh", "max"]);
+export type CopilotReasoningEffort = typeof CopilotReasoningEffort.Type;
+
+export const CopilotModelConfiguration = Schema.Struct({
+  contextWindowTokens: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
   ),
-  customModels: Schema.Array(Schema.String).pipe(
-    Schema.withDecodingDefault(Effect.succeed([])),
-    Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
-  ),
+  reasoningEfforts: Schema.optional(Schema.Array(CopilotReasoningEffort)),
+  defaultReasoningEffort: Schema.optional(CopilotReasoningEffort),
 });
+export type CopilotModelConfiguration = typeof CopilotModelConfiguration.Type;
+
+export const CopilotModelConfigurations = Schema.Record(
+  TrimmedNonEmptyString,
+  CopilotModelConfiguration,
+);
+export type CopilotModelConfigurations = typeof CopilotModelConfigurations.Type;
+
+export const CopilotSettings = makeProviderSettingsSchema(
+  {
+    enabled: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(true)),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    baseUrl: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "API base URL",
+        description:
+          "Custom model provider endpoint (BYOK). Leave blank to use GitHub Copilot with a GitHub token.",
+        providerSettingsForm: {
+          placeholder: "https://api.openai.com/v1",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    providerType: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Provider type",
+        description:
+          "API shape of the custom provider: openai, azure, or anthropic. Defaults to openai.",
+        providerSettingsForm: {
+          placeholder: "openai",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    apiKey: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "API key",
+        description:
+          "API key for the custom provider. Stored in plain text on disk; not needed for GitHub Copilot auth.",
+        providerSettingsForm: {
+          control: "password",
+          placeholder: "Optional",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    wireApi: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Wire API",
+        description:
+          "API format for openai/azure providers: completions or responses. Defaults to completions.",
+        providerSettingsForm: {
+          placeholder: "completions",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    azureApiVersion: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Azure API version",
+        description: "Only used by azure providers. Leave blank for the GA versionless v1 route.",
+        providerSettingsForm: {
+          placeholder: "2024-10-21",
+          clearWhenEmpty: "omit",
+        },
+      }),
+    ),
+    customModels: Schema.Array(Schema.String).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    modelConfigurations: CopilotModelConfigurations.pipe(
+      Schema.withDecodingDefault(Effect.succeed({})),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+  },
+  {
+    order: ["baseUrl", "providerType", "apiKey", "wireApi", "azureApiVersion"],
+  },
+);
 export type CopilotSettings = typeof CopilotSettings.Type;
 
 export const ObservabilitySettings = Schema.Struct({
@@ -909,7 +996,13 @@ const GrokSettingsPatch = Schema.Struct({
 
 const CopilotSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
+  baseUrl: Schema.optionalKey(TrimmedString),
+  providerType: Schema.optionalKey(TrimmedString),
+  apiKey: Schema.optionalKey(TrimmedString),
+  wireApi: Schema.optionalKey(TrimmedString),
+  azureApiVersion: Schema.optionalKey(TrimmedString),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  modelConfigurations: Schema.optionalKey(CopilotModelConfigurations),
 });
 
 const OpenCodeSettingsPatch = Schema.Struct({

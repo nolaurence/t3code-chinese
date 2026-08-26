@@ -120,6 +120,7 @@ interface AddProviderInstanceDialogProps {
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;
   readonly onOpenChange: (open: boolean) => void;
+  readonly driverFilter?: ((driver: ProviderDriverKind) => boolean) | undefined;
 }
 
 export function AddProviderInstanceDialog({
@@ -127,13 +128,28 @@ export function AddProviderInstanceDialog({
   environmentId,
   environmentLabel,
   onOpenChange,
+  driverFilter,
 }: AddProviderInstanceDialogProps) {
   const { t } = useI18n();
   const settings = useEnvironmentSettings(environmentId);
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
 
+  const driverOptions = useMemo(
+    () =>
+      driverFilter ? DRIVER_OPTIONS.filter((option) => driverFilter(option.value)) : DRIVER_OPTIONS,
+    [driverFilter],
+  );
+  const comingSoonDriverOptions = useMemo(
+    () =>
+      driverFilter
+        ? COMING_SOON_DRIVER_OPTIONS.filter((option) => driverFilter(option.value))
+        : COMING_SOON_DRIVER_OPTIONS,
+    [driverFilter],
+  );
   const [wizardStep, setWizardStep] = useState(0);
-  const [driver, setDriver] = useState<ProviderDriverKind>(DEFAULT_DRIVER_KIND);
+  const [driver, setDriver] = useState<ProviderDriverKind>(
+    () => driverOptions[0]?.value ?? DEFAULT_DRIVER_KIND,
+  );
   const [label, setLabel] = useState("");
   const [accentColor, setAccentColor] = useState<string>("");
   const [instanceIdOverride, setInstanceIdOverride] = useState<string | null>(null);
@@ -149,7 +165,7 @@ export function AddProviderInstanceDialog({
     [settings.providerInstances],
   );
 
-  const driverOption = DRIVER_OPTION_BY_VALUE[driver] ?? DEFAULT_DRIVER_OPTION;
+  const driverOption = DRIVER_OPTION_BY_VALUE[driver] ?? driverOptions[0] ?? DEFAULT_DRIVER_OPTION;
   const instanceId = instanceIdOverride ?? deriveInstanceId(driver, label);
   const driverSettingsFields = useMemo(
     () => deriveProviderSettingsFields(driverOption),
@@ -264,7 +280,7 @@ export function AddProviderInstanceDialog({
                   aria-labelledby="add-instance-driver-label"
                   className="grid grid-cols-1 gap-2 sm:grid-cols-2"
                 >
-                  {DRIVER_OPTIONS.map((option) => {
+                  {driverOptions.map((option) => {
                     const IconComponent = option.icon;
                     return (
                       <RadioPrimitive.Root
@@ -290,7 +306,7 @@ export function AddProviderInstanceDialog({
                       </RadioPrimitive.Root>
                     );
                   })}
-                  {COMING_SOON_DRIVER_OPTIONS.map((option) => {
+                  {comingSoonDriverOptions.map((option) => {
                     const IconComponent = option.icon;
                     return (
                       <RadioPrimitive.Root

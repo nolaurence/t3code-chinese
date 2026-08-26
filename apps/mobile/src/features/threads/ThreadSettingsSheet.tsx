@@ -338,6 +338,7 @@ export function useExistingThreadSettingsRoutePresentation() {
 type ThreadSettingsSessionValue = {
   readonly providerGroups: ReadonlyArray<ProviderGroup>;
   readonly runtimeMode: RuntimeMode;
+  readonly isCopilot: boolean;
   readonly onUpdateRuntimeMode: (mode: RuntimeMode) => void;
   readonly displayedDescriptors: ReadonlyArray<ProviderOptionDescriptor>;
   readonly providerExpansionOverrides: ReadonlySet<string>;
@@ -398,6 +399,19 @@ function ThreadSettingsSessionProvider(
         : props.optionDescriptors,
     [pendingModel, props.optionDescriptors],
   );
+  const displayedModel = useMemo(
+    () =>
+      pendingModel ??
+      props.providerGroups
+        .flatMap((group) => group.models)
+        .find(
+          (model) =>
+            model.selection.instanceId === props.selectedModel?.instanceId &&
+            model.selection.model === props.selectedModel?.model,
+        ) ??
+      null,
+    [pendingModel, props.providerGroups, props.selectedModel],
+  );
 
   const hasLegacyModels = useMemo(
     () => props.providerGroups.some((group) => group.models.some((model) => model.isLegacy)),
@@ -456,6 +470,7 @@ function ThreadSettingsSessionProvider(
     () => ({
       providerGroups: props.providerGroups,
       runtimeMode: props.runtimeMode,
+      isCopilot: displayedModel?.providerDriver === "githubCopilot",
       onUpdateRuntimeMode: props.onUpdateRuntimeMode,
       displayedDescriptors,
       providerExpansionOverrides,
@@ -478,6 +493,7 @@ function ThreadSettingsSessionProvider(
       applyOptionChange,
       commitPendingModel,
       displayedDescriptors,
+      displayedModel,
       providerExpansionOverrides,
       hasLegacyModels,
       isApplied,
@@ -712,7 +728,10 @@ function ThreadSettingsOptionsItem(props: {
             isLast
             label="Runtime"
             value={
-              RUNTIME_MODE_CHOICES.find((choice) => choice.mode === session.runtimeMode)?.label
+              RUNTIME_MODE_CHOICES.find((choice) => choice.mode === session.runtimeMode)?.mode ===
+                "auto" && session.isCopilot
+                ? "Autopilot"
+                : RUNTIME_MODE_CHOICES.find((choice) => choice.mode === session.runtimeMode)?.label
             }
             onPress={() => props.onOpenSubmenu({ kind: "runtime" })}
           />
@@ -864,8 +883,11 @@ function ThreadSettingsChoiceContent(props: {
       ? {
           rows: RUNTIME_MODE_CHOICES.map((choice) => ({
             id: choice.mode,
-            label: choice.label,
-            description: choice.description,
+            label: choice.mode === "auto" && session.isCopilot ? "Autopilot" : choice.label,
+            description:
+              choice.mode === "auto" && session.isCopilot
+                ? "Let Copilot continue autonomously until the task is complete."
+                : choice.description,
             selected: choice.mode === session.runtimeMode,
             onPress: () => {
               void Haptics.selectionAsync();

@@ -2,6 +2,8 @@ import type { ModelInfo } from "@github/copilot-sdk";
 import {
   CopilotSettings,
   ProviderDriverKind,
+  type CopilotModelConfiguration,
+  type CopilotModelConfigurations,
   type ServerProvider,
   type ServerProviderModel,
 } from "@t3tools/contracts";
@@ -15,7 +17,7 @@ import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { makeCopilotTextGeneration } from "../../textGeneration/CopilotTextGeneration.ts";
 import { makeCopilotAdapter } from "../Layers/CopilotAdapter.ts";
-import { makeCopilotRuntime } from "../copilotRuntime.ts";
+import { makeCopilotRuntime, resolveCopilotSessionProvider } from "../copilotRuntime.ts";
 import { ProviderDriverError } from "../Errors.ts";
 import {
   defaultProviderContinuationIdentity,
@@ -48,8 +50,12 @@ function titleCase(value: string): string {
     .join(" ");
 }
 
-function modelFromSdk(model: ModelInfo): ServerProviderModel {
-  const efforts = model.supportedReasoningEfforts ?? [];
+function modelFromSdk(
+  model: ModelInfo,
+  configuration?: CopilotModelConfiguration,
+): ServerProviderModel {
+  const efforts = configuration?.reasoningEfforts ?? model.supportedReasoningEfforts ?? [];
+  const defaultEffort = configuration?.defaultReasoningEffort ?? model.defaultReasoningEffort;
   const optionDescriptors =
     efforts.length > 0
       ? [
@@ -61,9 +67,11 @@ function modelFromSdk(model: ModelInfo): ServerProviderModel {
             options: efforts.map((effort) => ({
               id: effort,
               label: titleCase(effort),
-              ...(effort === model.defaultReasoningEffort ? { isDefault: true } : {}),
+              ...(effort === defaultEffort ? { isDefault: true } : {}),
             })),
-            ...(model.defaultReasoningEffort ? { currentValue: model.defaultReasoningEffort } : {}),
+            ...(defaultEffort && efforts.includes(defaultEffort)
+              ? { currentValue: defaultEffort }
+              : {}),
           },
         ]
       : undefined;
@@ -71,28 +79,56 @@ function modelFromSdk(model: ModelInfo): ServerProviderModel {
     slug: model.id,
     name: model.name,
     isCustom: false,
+    contextWindowTokens:
+      configuration?.contextWindowTokens ?? model.capabilities.limits.max_context_window_tokens,
     capabilities: optionDescriptors ? { optionDescriptors } : null,
   };
 }
 
-function modelFromCustom(model: string): ServerProviderModel {
+function modelFromCustom(
+  model: string,
+  configuration?: CopilotModelConfiguration,
+): ServerProviderModel {
+  const efforts = configuration?.reasoningEfforts ?? [];
   return {
     slug: model,
     name: model,
     isCustom: true,
-    capabilities: null,
+    ...(configuration?.contextWindowTokens
+      ? { contextWindowTokens: configuration.contextWindowTokens }
+      : {}),
+    capabilities:
+      efforts.length > 0
+        ? modelFromSdk(
+            {
+              id: model,
+              name: model,
+              capabilities: {
+                supports: { vision: false, reasoningEffort: true },
+                limits: {
+                  max_context_window_tokens: configuration?.contextWindowTokens ?? 128_000,
+                },
+              },
+            },
+            configuration,
+          ).capabilities
+        : null,
   };
 }
 
-function mergeModels(models: ReadonlyArray<ModelInfo>, customModels: ReadonlyArray<string>) {
+function mergeModels(
+  models: ReadonlyArray<ModelInfo>,
+  customModels: ReadonlyArray<string>,
+  configurations: CopilotModelConfigurations,
+) {
   const merged = new Map<string, ServerProviderModel>();
   for (const model of models) {
     if (!model.policy || model.policy.state === "enabled") {
-      merged.set(model.id, modelFromSdk(model));
+      merged.set(model.id, modelFromSdk(model, configurations[model.id]));
     }
   }
   for (const model of customModels) {
-    if (!merged.has(model)) merged.set(model, modelFromCustom(model));
+    if (!merged.has(model)) merged.set(model, modelFromCustom(model, configurations[model]));
   }
   return [...merged.values()];
 }
@@ -104,6 +140,7 @@ function baseSnapshot(input: {
   readonly continuationKey: string;
   readonly enabled: boolean;
   readonly customModels: ReadonlyArray<string>;
+  readonly modelConfigurations: CopilotModelConfigurations;
 }): ServerProvider {
   return {
     instanceId: input.instanceId,
@@ -113,7 +150,7 @@ function baseSnapshot(input: {
     continuation: { groupKey: input.continuationKey },
     badgeLabel: "SDK",
     showInteractionModeToggle: true,
-    requiresNewThreadForModelChange: false,
+    requiresNewThreadForModelChange: true,
     enabled: input.enabled,
     installed: true,
     version: null,
@@ -124,7 +161,9 @@ function baseSnapshot(input: {
       ? "Checking bundled GitHub Copilot SDK runtime..."
       : "GitHub Copilot is disabled.",
     availability: "available",
-    models: input.customModels.map(modelFromCustom),
+    models: input.customModels.map((model) =>
+      modelFromCustom(model, input.modelConfigurations[model]),
+    ),
     slashCommands: [],
     skills: [],
   };
@@ -153,21 +192,39 @@ export const CopilotDriver: ProviderDriver<CopilotSettings, CopilotDriverEnv> = 
         continuationKey: continuationIdentity.continuationKey,
         enabled,
         customModels: effectiveConfig.customModels,
+        modelConfigurations: effectiveConfig.modelConfigurations,
       });
       const runtime = makeCopilotRuntime({
         instanceId,
         stateDir: serverConfig.stateDir,
         environment: mergeProviderInstanceEnvironment(environment),
+        sessionProvider: resolveCopilotSessionProvider(effectiveConfig),
+        modelConfigurations: effectiveConfig.modelConfigurations,
       });
       const adapter = yield* makeCopilotAdapter(runtime, {
         instanceId,
         attachmentsDir: serverConfig.attachmentsDir,
+        modelConfigurations: effectiveConfig.modelConfigurations,
       });
       const textGeneration = makeCopilotTextGeneration(runtime);
 
       const probe = Effect.tryPromise({
         try: async () => {
           if (!effectiveConfig.enabled) return initialSnapshot;
+          if (runtime.sessionProvider) {
+            const models = await runtime.listModels();
+            return {
+              ...initialSnapshot,
+              status: "ready" as const,
+              checkedAt: nowIso(),
+              message: `Using custom model provider at ${runtime.sessionProvider.baseUrl}.`,
+              models: mergeModels(
+                models,
+                effectiveConfig.customModels,
+                effectiveConfig.modelConfigurations,
+              ),
+            };
+          }
           const auth = await runtime.getAuthStatus();
           if (!auth.isAuthenticated) {
             return {
@@ -194,7 +251,11 @@ export const CopilotDriver: ProviderDriver<CopilotSettings, CopilotDriverEnv> = 
             },
             checkedAt: nowIso(),
             message: "GitHub Copilot SDK is ready.",
-            models: mergeModels(models, effectiveConfig.customModels),
+            models: mergeModels(
+              models,
+              effectiveConfig.customModels,
+              effectiveConfig.modelConfigurations,
+            ),
           };
         },
         catch: (cause) =>

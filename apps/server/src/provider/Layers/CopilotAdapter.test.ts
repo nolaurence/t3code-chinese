@@ -100,17 +100,22 @@ describe("Copilot turn lifecycle", () => {
       const instanceId = ProviderInstanceId.make("githubCopilot");
       const threadId = ThreadId.make("copilot-success");
       let onEvent: SessionConfig["onEvent"];
+      let sessionConfig: SessionConfig | undefined;
+      const send = vi.fn(() => Promise.resolve("assistant-1"));
       const sdkSession = {
         sessionId: "copilot-session",
-        send: vi.fn(() => Promise.resolve("assistant-1")),
+        send,
         abort: vi.fn(() => Promise.resolve()),
         disconnect: vi.fn(() => Promise.resolve()),
       } as unknown as CopilotSession;
       const runtime: CopilotRuntime = {
+        sessionProvider: undefined,
         ensureStarted: () => Promise.reject(new Error("not used by this test")),
+        ping: () => Promise.reject(new Error("not used by this test")),
         getAuthStatus: () => Promise.reject(new Error("not used by this test")),
         listModels: () => Promise.resolve([]),
         createSession: (config) => {
+          sessionConfig = config;
           onEvent = config.onEvent;
           return Promise.resolve(sdkSession);
         },
@@ -120,6 +125,9 @@ describe("Copilot turn lifecycle", () => {
       const adapter = yield* makeCopilotAdapter(runtime, {
         instanceId,
         attachmentsDir: process.cwd(),
+        modelConfigurations: {
+          "gpt-custom": { contextWindowTokens: 262_144 },
+        },
       });
 
       yield* adapter.startSession({
@@ -127,7 +135,19 @@ describe("Copilot turn lifecycle", () => {
         provider: ProviderDriverKind.make("githubCopilot"),
         providerInstanceId: instanceId,
         cwd: process.cwd(),
-        runtimeMode: "approval-required",
+        runtimeMode: "auto",
+        modelSelection: {
+          instanceId,
+          model: "gpt-custom",
+          options: [{ id: "reasoningEffort", value: "high" }],
+        },
+      });
+      expect(sessionConfig).toMatchObject({
+        model: "gpt-custom",
+        reasoningEffort: "high",
+        modelCapabilities: {
+          limits: { max_context_window_tokens: 262_144 },
+        },
       });
 
       const eventsFiber = yield* adapter.streamEvents.pipe(
@@ -137,6 +157,9 @@ describe("Copilot turn lifecycle", () => {
       );
       yield* Effect.yieldNow;
       yield* adapter.sendTurn({ threadId, input: "hello", attachments: [] });
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ prompt: "hello", agentMode: "autopilot" }),
+      );
       const timestamp = "2026-08-26T00:00:00.000Z";
       const events: ReadonlyArray<SessionEvent> = [
         {
@@ -201,7 +224,9 @@ describe("Copilot turn lifecycle", () => {
         disconnect: vi.fn(() => Promise.resolve()),
       } as unknown as CopilotSession;
       const runtime: CopilotRuntime = {
+        sessionProvider: undefined,
         ensureStarted: () => Promise.reject(new Error("not used by this test")),
+        ping: () => Promise.reject(new Error("not used by this test")),
         getAuthStatus: () => Promise.reject(new Error("not used by this test")),
         listModels: () => Promise.resolve([]),
         createSession: () => Promise.resolve(sdkSession),

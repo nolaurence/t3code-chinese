@@ -182,11 +182,17 @@ describe("ClientSettings sidebar", () => {
 });
 
 describe("GitHub Copilot settings", () => {
-  it("defaults the bundled SDK provider on with no custom models", () => {
+  it("defaults the bundled SDK provider on with no custom models or BYOK provider", () => {
     const settings = decodeServerSettings({});
     expect(settings.providers.githubCopilot).toEqual({
       enabled: true,
+      baseUrl: "",
+      providerType: "",
+      apiKey: "",
+      wireApi: "",
+      azureApiVersion: "",
       customModels: [],
+      modelConfigurations: {},
     });
   });
 
@@ -202,6 +208,48 @@ describe("GitHub Copilot settings", () => {
     expect(patch.providers?.githubCopilot).toEqual({
       enabled: false,
       customModels: ["custom-copilot-model"],
+    });
+  });
+
+  it("accepts BYOK provider configuration patches", () => {
+    const patch = decodeServerSettingsPatch({
+      providers: {
+        githubCopilot: {
+          baseUrl: "https://gateway.example.com/v1",
+          providerType: "openai",
+          apiKey: "sk-test",
+          wireApi: "responses",
+        },
+      },
+    });
+    expect(patch.providers?.githubCopilot).toEqual({
+      baseUrl: "https://gateway.example.com/v1",
+      providerType: "openai",
+      apiKey: "sk-test",
+      wireApi: "responses",
+    });
+  });
+
+  it("accepts per-model context and reasoning configuration", () => {
+    const patch = decodeServerSettingsPatch({
+      providers: {
+        githubCopilot: {
+          modelConfigurations: {
+            "gpt-custom": {
+              contextWindowTokens: 262_144,
+              reasoningEfforts: ["low", "medium", "high"],
+              defaultReasoningEffort: "medium",
+            },
+          },
+        },
+      },
+    });
+    expect(patch.providers?.githubCopilot?.modelConfigurations).toEqual({
+      "gpt-custom": {
+        contextWindowTokens: 262_144,
+        reasoningEfforts: ["low", "medium", "high"],
+        defaultReasoningEffort: "medium",
+      },
     });
   });
 });

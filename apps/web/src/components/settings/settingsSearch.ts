@@ -6,6 +6,7 @@ export type SettingsPath =
   | "/settings/appearance"
   | "/settings/keybindings"
   | "/settings/providers"
+  | "/settings/copilot-sdk"
   | "/settings/integrations"
   | "/settings/source-control"
   | "/settings/connections"
@@ -27,6 +28,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/appearance": "Appearance",
   "/settings/keybindings": "Keybindings",
   "/settings/providers": "Providers",
+  "/settings/copilot-sdk": "GitHub Copilot SDK",
   "/settings/integrations": "Integrations",
   "/settings/source-control": "Source Control",
   "/settings/connections": "Connections",
@@ -38,6 +40,7 @@ export const SETTINGS_SECTION_LABEL_KEYS: Readonly<Record<SettingsPath, MessageK
   "/settings/appearance": "settings.nav.appearance",
   "/settings/keybindings": "settings.nav.keybindings",
   "/settings/providers": "settings.nav.providers",
+  "/settings/copilot-sdk": "settings.nav.copilotSdk",
   "/settings/integrations": "settings.nav.integrations",
   "/settings/source-control": "settings.nav.sourceControl",
   "/settings/connections": "settings.nav.connections",
@@ -223,6 +226,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/providers",
   },
   {
+    id: "copilot-sdk",
+    title: "GitHub Copilot SDK",
+    to: "/settings/copilot-sdk",
+  },
+  {
     id: "agent-browser-access",
     title: "Agent browser access",
     to: "/settings/integrations",
@@ -304,6 +312,7 @@ export const SETTINGS_SEARCH_TITLE_KEYS: Readonly<Record<SettingsSearchItemId, M
   "legacy-sidebar": "settings.search.legacySidebar",
   keybindings: "settings.search.keybindings",
   providers: "settings.search.providers",
+  "copilot-sdk": "settings.search.copilotSdk",
   "agent-browser-access": "settings.search.agentBrowserAccess",
   "browser-default-viewport": "settings.search.browserDefaultViewport",
   "browser-default-zoom": "settings.search.browserDefaultZoom",

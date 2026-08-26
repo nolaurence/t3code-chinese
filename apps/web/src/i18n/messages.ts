@@ -411,6 +411,7 @@ const common = defineMessages(
     "settings.nav.integrations": "Integrations",
     "settings.nav.keybindings": "Keybindings",
     "settings.nav.providers": "Providers",
+    "settings.nav.copilotSdk": "GitHub Copilot SDK",
     "settings.nav.sourceControl": "Source Control",
     "settings.diagnostics.localTrace": "Local trace file",
     "settings.diagnostics.terminalLogs": "Terminal logs only",
@@ -1743,6 +1744,7 @@ const common = defineMessages(
     "settings.search.legacySidebar": "Sidebar (legacy)",
     "settings.search.keybindings": "Keybindings",
     "settings.search.providers": "Providers",
+    "settings.search.copilotSdk": "GitHub Copilot SDK",
     "settings.search.agentBrowserAccess": "Agent browser access",
     "settings.search.browserDefaultViewport": "Default browser viewport",
     "settings.search.browserDefaultZoom": "Default browser zoom",
@@ -2319,6 +2321,12 @@ const common = defineMessages(
     "git.checkout.preparingWorktree": "Preparing worktree...",
     "git.checkout.worktree": "Worktree",
     "providers.title": "Providers",
+    "copilotSdk.title": "Copilot SDK",
+    "providers.modelConfigure": "Configure {model}",
+    "providers.modelConfigureAction": "Configure model",
+    "providers.modelContextWindow": "Context window (tokens)",
+    "providers.modelReasoningEfforts": "Supported reasoning efforts",
+    "providers.modelDefaultReasoningEffort": "Default reasoning effort",
     "providers.addInstance": "Add provider instance",
     "providers.addDescription":
       "Configure an additional provider instance — for example, a second Codex install pointed at a different workspace.",
@@ -2350,6 +2358,21 @@ const common = defineMessages(
       "Used to distinguish this instance in picker rails and model lists.",
     "providers.noConfig":
       "This driver has no required configuration. You can add the instance now.",
+    "providers.copilot.baseUrl.label": "API base URL",
+    "providers.copilot.baseUrl.description":
+      "Custom model provider endpoint (BYOK). Leave blank to use GitHub Copilot with a GitHub token.",
+    "providers.copilot.providerType.label": "Provider type",
+    "providers.copilot.providerType.description":
+      "API shape of the custom provider: openai, azure, or anthropic. Defaults to openai.",
+    "providers.copilot.apiKey.label": "API key",
+    "providers.copilot.apiKey.description":
+      "API key for the custom provider. Stored in plain text on disk; not needed for GitHub Copilot auth.",
+    "providers.copilot.wireApi.label": "Wire API",
+    "providers.copilot.wireApi.description":
+      "API format for openai/azure providers: completions or responses. Defaults to completions.",
+    "providers.copilot.azureApiVersion.label": "Azure API version",
+    "providers.copilot.azureApiVersion.description":
+      "Only used by azure providers. Leave blank for the GA versionless v1 route.",
     "providers.pi.binaryPath.label": "Binary path",
     "providers.pi.binaryPath.description":
       "Path to the external Pi Coding Agent executable. Leave as 'pi' to use PATH discovery.",
@@ -2881,6 +2904,7 @@ const common = defineMessages(
     "connections.remote.sshDescription":
       "Use local SSH config, agent, and tunnels for the backend.",
     "chat.access.auto": "Auto",
+    "chat.access.autopilot": "Autopilot",
     "chat.annotation.attached": "Annotation attached to draft",
     "chat.annotation.sendUnavailable":
       "Sending is unavailable right now. Finish the current action, then send.",
@@ -3000,6 +3024,8 @@ const common = defineMessages(
     "chat.review.removeComment": "Remove comment on {label}",
     "chat.runtime.autoDescription":
       "Supported providers approve routine actions; others still ask.",
+    "chat.runtime.autopilotDescription":
+      "Let Copilot continue autonomously until the task is complete.",
     "chat.server.connectingTo": "Connecting to {environment}",
     "chat.server.dismissUpdate": "Dismiss update notice",
     "chat.server.finishingUpdate": "It may be finishing an update. One moment.",
@@ -4145,6 +4171,7 @@ const common = defineMessages(
     "settings.nav.integrations": "集成",
     "settings.nav.keybindings": "快捷键",
     "settings.nav.providers": "供应商",
+    "settings.nav.copilotSdk": "GitHub Copilot SDK",
     "settings.nav.sourceControl": "版本控制",
     "settings.diagnostics.localTrace": "本地 Trace 文件",
     "settings.diagnostics.terminalLogs": "仅终端日志",
@@ -5426,6 +5453,7 @@ const common = defineMessages(
     "settings.search.legacySidebar": "侧栏（旧版）",
     "settings.search.keybindings": "快捷键",
     "settings.search.providers": "供应商",
+    "settings.search.copilotSdk": "GitHub Copilot SDK",
     "settings.search.agentBrowserAccess": "智能体浏览器访问权限",
     "settings.search.browserDefaultViewport": "默认浏览器视口",
     "settings.search.browserDefaultZoom": "默认浏览器缩放",
@@ -5982,6 +6010,12 @@ const common = defineMessages(
     "git.checkout.preparingWorktree": "正在准备工作树...",
     "git.checkout.worktree": "工作树",
     "providers.title": "供应商",
+    "copilotSdk.title": "Copilot SDK",
+    "providers.modelConfigure": "配置 {model}",
+    "providers.modelConfigureAction": "配置模型",
+    "providers.modelContextWindow": "上下文长度（Token）",
+    "providers.modelReasoningEfforts": "支持的推理强度",
+    "providers.modelDefaultReasoningEffort": "默认推理强度",
     "providers.addInstance": "添加供应商实例",
     "providers.addDescription": "配置额外的供应商实例，例如指向不同工作区的第二个 Codex 安装。",
     "providers.step": "第 {number} 步",
@@ -6008,6 +6042,21 @@ const common = defineMessages(
     "providers.accentDescription": "显示在选择器中的可选标记。",
     "providers.accentPickerDescription": "用于在选择器轨道和模型列表中区分此实例。",
     "providers.noConfig": "此驱动没有必填配置，现在即可添加实例。",
+    "providers.copilot.baseUrl.label": "API 地址",
+    "providers.copilot.baseUrl.description":
+      "自定义模型供应商的 API 地址（BYOK）。留空则使用 GitHub Copilot 官方服务（需要 GitHub Token）。",
+    "providers.copilot.providerType.label": "供应商类型",
+    "providers.copilot.providerType.description":
+      "自定义供应商的 API 类型：openai、azure 或 anthropic。默认为 openai。",
+    "providers.copilot.apiKey.label": "API 密钥",
+    "providers.copilot.apiKey.description":
+      "自定义供应商的 API 密钥，明文存储在本地磁盘；使用 GitHub Copilot 官方服务时无需填写。",
+    "providers.copilot.wireApi.label": "Wire API",
+    "providers.copilot.wireApi.description":
+      "openai/azure 供应商的 API 格式：completions 或 responses。默认为 completions。",
+    "providers.copilot.azureApiVersion.label": "Azure API 版本",
+    "providers.copilot.azureApiVersion.description":
+      "仅 azure 供应商使用。留空时使用 GA 无版本 v1 路由。",
     "providers.pi.binaryPath.label": "可执行文件路径",
     "providers.pi.binaryPath.description":
       "外部 Pi Coding Agent 可执行文件的路径。保留为“pi”即可通过 PATH 自动探测。",
@@ -6507,6 +6556,7 @@ const common = defineMessages(
     "connections.remote.sshTitle": "SSH",
     "connections.remote.sshDescription": "使用本地 SSH 配置、代理和隧道连接后端。",
     "chat.access.auto": "自动",
+    "chat.access.autopilot": "Autopilot",
     "chat.annotation.attached": "标注已附加到草稿",
     "chat.annotation.sendUnavailable": "当前无法发送。请完成当前操作后再发送。",
     "chat.background.agentWorking": "{count} 个智能体正在工作",
@@ -6623,6 +6673,7 @@ const common = defineMessages(
     "chat.remoteOpen.sshHint": "将通过 SSH 打开，需要在 {environment} 上配置你的密钥",
     "chat.review.removeComment": "移除对 {label} 的评论",
     "chat.runtime.autoDescription": "受支持的提供商会批准常规操作，其他提供商仍会询问。",
+    "chat.runtime.autopilotDescription": "让 Copilot 自主继续执行，直到任务完成。",
     "chat.server.connectingTo": "正在连接到 {environment}",
     "chat.server.dismissUpdate": "关闭更新通知",
     "chat.server.finishingUpdate": "它可能正在完成更新，请稍候。",

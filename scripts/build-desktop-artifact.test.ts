@@ -556,12 +556,15 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         undefined,
       );
 
-      // All platforms keep app.asar fully packed; Windows ships the server
+      // All platforms keep app.asar fully packed except the Copilot platform
+      // packages: the extensionless CLI binary and its helper executables
+      // cannot be spawned out of an asar archive. Windows ships the server
       // tree as the hand-packed server.asar sidecar in extraResources instead
       // of unpacking thousands of loose files at install time.
-      assert.notProperty(mac, "asarUnpack");
-      assert.notProperty(linux, "asarUnpack");
-      assert.notProperty(win, "asarUnpack");
+      const copilotAsarUnpack = ["**/node_modules/@github/copilot-*/**"];
+      assert.deepStrictEqual(mac.asarUnpack, copilotAsarUnpack);
+      assert.deepStrictEqual(linux.asarUnpack, copilotAsarUnpack);
+      assert.deepStrictEqual(win.asarUnpack, copilotAsarUnpack);
       assert.deepStrictEqual(win.extraResources, [
         {
           from: "apps/desktop/prod-resources/resource-monitor",
@@ -588,7 +591,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       // and .bin shims never ship.
       assert.equal(
         WINDOWS_SERVER_ASAR_UNPACK_GLOB,
-        "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib}",
+        "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib,**/node_modules/@github/copilot-*/**}",
       );
       assert.deepStrictEqual(WINDOWS_SERVER_ASAR_IGNORE_GLOBS, [
         "**/node_modules/@anthropic-ai/claude-agent-sdk-*",

@@ -868,7 +868,7 @@ export const WINDOWS_SERVER_ASAR_RESOURCE = "server.asar";
 // helper executables live in the server.asar.unpacked sibling (the standard
 // asar redirect convention). Everything else stays packed.
 export const WINDOWS_SERVER_ASAR_UNPACK_GLOB =
-  "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib}";
+  "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib,**/node_modules/@github/copilot-*/**}";
 // Mirrors DESKTOP_FILE_EXCLUSIONS for the hand-packed sidecar: the Claude SDK
 // platform packages are dead weight (see above), and node_modules/.bin shims
 // are never spawned at runtime (and are symlinks on POSIX build hosts, which
@@ -1399,7 +1399,11 @@ export const validateDesktopStageRuntime = Effect.fn("validateDesktopStageRuntim
       packageName,
     );
     const packageDir = path.dirname(cliPath);
-    for (const entrypoint of ["index.js", "sdk/index.js"]) {
+    // The server spawns the native CLI binary directly (the JS loader cannot
+    // run from an Electron-as-Node child), so it must exist alongside the
+    // SDK entrypoints.
+    const cliBinary = packageName.startsWith("@github/copilot-win32") ? "copilot.exe" : "copilot";
+    for (const entrypoint of ["index.js", "sdk/index.js", cliBinary]) {
       if (!(yield* fs.exists(path.join(packageDir, entrypoint)))) {
         return yield* new DesktopStageRuntimeArtifactMissingError({
           artifact: `module:${packageName}/${entrypoint}`,
@@ -2317,8 +2321,13 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     },
     // All platforms keep app.asar fully packed; electron-builder's default
     // smart unpack extracts native libraries, which loaders find in
-    // app.asar.unpacked. Windows additionally ships the server tree as the
-    // hand-packed server.asar sidecar (see WINDOWS_SERVER_ASAR_RESOURCE).
+    // app.asar.unpacked. The Copilot CLI ships as an extensionless SEA binary
+    // (plus spawnable helpers like ripgrep) inside its platform packages, so
+    // those packages must be unpacked explicitly — processes cannot be
+    // spawned out of an asar archive. Windows additionally ships the server
+    // tree as the hand-packed server.asar sidecar (see
+    // WINDOWS_SERVER_ASAR_RESOURCE).
+    asarUnpack: ["**/node_modules/@github/copilot-*/**"],
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
