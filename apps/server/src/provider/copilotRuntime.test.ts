@@ -110,6 +110,88 @@ describe("resolveCopilotSessionProvider", () => {
         fetchCopilotProviderModels({ baseUrl: "https://gateway.example.com/v1" }, {}, fetchImpl),
       ).rejects.toThrow("data array");
     });
+
+    it("uses reasoning efforts reported by the provider", async () => {
+      const fetchImpl = vi.fn((_input: URL, _init?: RequestInit) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [
+                {
+                  id: "custom-reasoner",
+                  supported_reasoning_efforts: ["low", "high", "bogus"],
+                  default_reasoning_effort: "high",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+
+      const models = await fetchCopilotProviderModels(
+        { baseUrl: "https://gateway.example.com/v1" },
+        {},
+        fetchImpl,
+      );
+
+      expect(models[0]).toMatchObject({
+        id: "custom-reasoner",
+        supportedReasoningEfforts: ["low", "high"],
+        defaultReasoningEffort: "high",
+        capabilities: { supports: { reasoningEffort: true } },
+      });
+    });
+
+    it("falls back to known reasoning efforts when the provider reports none", async () => {
+      const fetchImpl = vi.fn((_input: URL, _init?: RequestInit) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: [{ id: "gpt-5.5" }, { id: "unknown-model" }],
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+
+      const models = await fetchCopilotProviderModels(
+        { baseUrl: "https://gateway.example.com/v1" },
+        {},
+        fetchImpl,
+      );
+
+      expect(models[0]).toMatchObject({
+        id: "gpt-5.5",
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+        capabilities: { supports: { reasoningEffort: true } },
+      });
+      expect(models[1]).toMatchObject({
+        id: "unknown-model",
+        capabilities: { supports: { reasoningEffort: false } },
+      });
+      expect(models[1]).not.toHaveProperty("supportedReasoningEfforts");
+    });
+
+    it("lets manual configuration override provider and known efforts", async () => {
+      const fetchImpl = vi.fn((_input: URL, _init?: RequestInit) =>
+        Promise.resolve(
+          new Response(JSON.stringify({ data: [{ id: "gpt-5.5" }] }), { status: 200 }),
+        ),
+      );
+
+      const models = await fetchCopilotProviderModels(
+        { baseUrl: "https://gateway.example.com/v1" },
+        { "gpt-5.5": { reasoningEfforts: ["low"], defaultReasoningEffort: "low" } },
+        fetchImpl,
+      );
+
+      expect(models[0]).toMatchObject({
+        id: "gpt-5.5",
+        supportedReasoningEfforts: ["low"],
+        defaultReasoningEffort: "low",
+      });
+    });
   });
 
   it("builds an OpenAI-compatible provider with the t3code user agent", () => {

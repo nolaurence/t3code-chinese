@@ -25,6 +25,39 @@ const PROVIDER_TYPES = ["openai", "azure", "anthropic"] as const;
 const WIRE_APIS = ["completions", "responses"] as const;
 const DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000;
 
+const REASONING_EFFORT_VALUES: ReadonlySet<string> = new Set([
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+type CopilotEffort = NonNullable<ModelInfo["defaultReasoningEffort"]>;
+
+/**
+ * Reasoning-effort metadata for models the provider does not describe itself.
+ * BYOK gateways rarely report effort levels and the Copilot catalog is
+ * unreachable without GitHub auth, so known ids get their picker options from
+ * this table. Unknown models stay without an effort selector — sending an
+ * unsupported effort would fail the turn.
+ */
+export const KNOWN_MODEL_REASONING_EFFORTS: Readonly<Record<string, ReadonlyArray<CopilotEffort>>> =
+  {
+    "gpt-5.4": ["low", "medium", "high", "xhigh"],
+    "gpt-5.5": ["low", "medium", "high", "xhigh"],
+    "gpt-5.6-sol": ["low", "medium", "high", "xhigh", "max"],
+    "gpt-5.6-luna": ["low", "medium", "high", "xhigh", "max"],
+    "gpt-5.6-terra": ["low", "medium", "high", "xhigh", "max"],
+    k3: ["low", "high", "max"],
+    "k3-256k": ["low", "high", "max"],
+  };
+
+export function knownModelReasoningEfforts(
+  modelId: string,
+): ReadonlyArray<CopilotEffort> | undefined {
+  return KNOWN_MODEL_REASONING_EFFORTS[modelId.trim().toLowerCase()];
+}
+
 export interface CopilotRuntime {
   /** BYOK provider applied to every session, or undefined for GitHub Copilot auth. */
   readonly sessionProvider: ProviderConfig | undefined;
@@ -114,6 +147,18 @@ function positiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
+function normalizeReasoningEffortList(value: unknown): CopilotEffort[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return [
+    ...new Set(
+      value.filter(
+        (entry): entry is CopilotEffort =>
+          typeof entry === "string" && REASONING_EFFORT_VALUES.has(entry),
+      ),
+    ),
+  ];
+}
+
 function apiModelToSdk(value: unknown, configurations: CopilotModelConfigurations): ModelInfo {
   const model = asRecord(value);
   const id = typeof model?.id === "string" ? model.id.trim() : "";
@@ -127,7 +172,31 @@ function apiModelToSdk(value: unknown, configurations: CopilotModelConfiguration
     positiveInteger(model?.max_context_window_tokens);
   const contextWindow =
     configured?.contextWindowTokens ?? apiContextWindow ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
-  const reasoningEfforts = configured?.reasoningEfforts ?? [];
+  const apiCapabilities = asRecord(model?.capabilities);
+  const apiEfforts = normalizeReasoningEffortList(
+    model?.supportedReasoningEfforts ??
+      model?.supported_reasoning_efforts ??
+      model?.reasoningEfforts ??
+      model?.reasoning_efforts ??
+      apiCapabilities?.supportedReasoningEfforts ??
+      apiCapabilities?.supported_reasoning_efforts,
+  );
+  const reasoningEfforts =
+    configured?.reasoningEfforts ??
+    (apiEfforts && apiEfforts.length > 0 ? apiEfforts : undefined) ??
+    knownModelReasoningEfforts(id) ??
+    [];
+  const apiDefaultEffort =
+    model?.defaultReasoningEffort ??
+    model?.default_reasoning_effort ??
+    apiCapabilities?.defaultReasoningEffort ??
+    apiCapabilities?.default_reasoning_effort;
+  const defaultReasoningEffort =
+    configured?.defaultReasoningEffort ??
+    (typeof apiDefaultEffort === "string" &&
+    reasoningEfforts.includes(apiDefaultEffort as CopilotEffort)
+      ? (apiDefaultEffort as CopilotEffort)
+      : undefined);
   const nameValue =
     typeof model?.name === "string"
       ? model.name
@@ -146,9 +215,7 @@ function apiModelToSdk(value: unknown, configurations: CopilotModelConfiguration
       limits: { max_context_window_tokens: contextWindow },
     },
     ...(reasoningEfforts.length > 0 ? { supportedReasoningEfforts: [...reasoningEfforts] } : {}),
-    ...(configured?.defaultReasoningEffort
-      ? { defaultReasoningEffort: configured.defaultReasoningEffort }
-      : {}),
+    ...(defaultReasoningEffort ? { defaultReasoningEffort } : {}),
   };
 }
 

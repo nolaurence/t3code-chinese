@@ -17,7 +17,11 @@ import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { makeCopilotTextGeneration } from "../../textGeneration/CopilotTextGeneration.ts";
 import { makeCopilotAdapter } from "../Layers/CopilotAdapter.ts";
-import { makeCopilotRuntime, resolveCopilotSessionProvider } from "../copilotRuntime.ts";
+import {
+  knownModelReasoningEfforts,
+  makeCopilotRuntime,
+  resolveCopilotSessionProvider,
+} from "../copilotRuntime.ts";
 import { ProviderDriverError } from "../Errors.ts";
 import {
   defaultProviderContinuationIdentity,
@@ -54,7 +58,12 @@ function modelFromSdk(
   model: ModelInfo,
   configuration?: CopilotModelConfiguration,
 ): ServerProviderModel {
-  const efforts = configuration?.reasoningEfforts ?? model.supportedReasoningEfforts ?? [];
+  const sdkEfforts = model.supportedReasoningEfforts;
+  const efforts =
+    configuration?.reasoningEfforts ??
+    (sdkEfforts && sdkEfforts.length > 0 ? sdkEfforts : undefined) ??
+    knownModelReasoningEfforts(model.id) ??
+    [];
   const defaultEffort = configuration?.defaultReasoningEffort ?? model.defaultReasoningEffort;
   const optionDescriptors =
     efforts.length > 0
@@ -89,7 +98,7 @@ function modelFromCustom(
   model: string,
   configuration?: CopilotModelConfiguration,
 ): ServerProviderModel {
-  const efforts = configuration?.reasoningEfforts ?? [];
+  const efforts = configuration?.reasoningEfforts ?? knownModelReasoningEfforts(model) ?? [];
   return {
     slug: model,
     name: model,
