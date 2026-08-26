@@ -47,6 +47,7 @@ import {
   resolveGitHubPublishConfig,
   resolveMockUpdateServerPort,
   resolveMockUpdateServerUrl,
+  resolveCopilotRuntimePackages,
   resolveMidsceneSharpRuntimeModules,
   resolvePackageManagerUserAgent,
   shouldRetryElectronBuilderFailure,
@@ -364,6 +365,17 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ]);
   });
 
+  it("requires Copilot runtimes for each packaged server backend", () => {
+    assert.deepStrictEqual(resolveCopilotRuntimePackages("mac", "universal"), [
+      "@github/copilot-darwin-arm64",
+      "@github/copilot-darwin-x64",
+    ]);
+    assert.deepStrictEqual(resolveCopilotRuntimePackages("win", "x64"), [
+      "@github/copilot-win32-x64",
+      "@github/copilot-linux-x64",
+    ]);
+  });
+
   it.effect("rejects a desktop stage without the bundled Midscene Skill", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -409,31 +421,33 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     }).pipe(Effect.scoped),
   );
 
-  it.effect("resolves the installed Midscene, Photon WASM, and native sharp runtime chain", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const hostPlatform = yield* HostProcessPlatform;
-      const hostArchitecture = yield* HostProcessArchitecture;
-      const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
-      const serverDir = path.join(repoRoot, "apps/server");
-      const serverDistDir = yield* fs.makeTempDirectoryScoped({
-        prefix: "t3code-desktop-runtime-resources-test-",
-      });
-      const skillPath = path.join(serverDistDir, "bundled-skills/midscene-preview/SKILL.md");
-      const piExtensionPath = path.join(serverDistDir, "bundled-pi-extension/index.mjs");
-      yield* fs.makeDirectory(path.dirname(skillPath), { recursive: true });
-      yield* fs.makeDirectory(path.dirname(piExtensionPath), { recursive: true });
-      yield* fs.writeFileString(skillPath, "---\nname: midscene-preview\n---\n");
-      yield* fs.writeFileString(piExtensionPath, "export default () => {};\n");
+  it.effect(
+    "resolves the installed Midscene, Copilot, Photon WASM, and native sharp runtime chain",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const hostPlatform = yield* HostProcessPlatform;
+        const hostArchitecture = yield* HostProcessArchitecture;
+        const repoRoot = yield* path.fromFileUrl(new URL("..", import.meta.url));
+        const serverDir = path.join(repoRoot, "apps/server");
+        const serverDistDir = yield* fs.makeTempDirectoryScoped({
+          prefix: "t3code-desktop-runtime-resources-test-",
+        });
+        const skillPath = path.join(serverDistDir, "bundled-skills/midscene-preview/SKILL.md");
+        const piExtensionPath = path.join(serverDistDir, "bundled-pi-extension/index.mjs");
+        yield* fs.makeDirectory(path.dirname(skillPath), { recursive: true });
+        yield* fs.makeDirectory(path.dirname(piExtensionPath), { recursive: true });
+        yield* fs.writeFileString(skillPath, "---\nname: midscene-preview\n---\n");
+        yield* fs.writeFileString(piExtensionPath, "export default () => {};\n");
 
-      yield* validateDesktopStageRuntime({
-        stageAppDir: serverDir,
-        serverDistDir,
-        platform: hostPlatform === "darwin" ? "mac" : hostPlatform === "win32" ? "win" : "linux",
-        arch: hostArchitecture === "arm64" ? "arm64" : "x64",
-      });
-    }).pipe(Effect.scoped),
+        yield* validateDesktopStageRuntime({
+          stageAppDir: serverDir,
+          serverDistDir,
+          platform: hostPlatform === "darwin" ? "mac" : hostPlatform === "win32" ? "win" : "linux",
+          arch: hostArchitecture === "arm64" ? "arm64" : "x64",
+        });
+      }).pipe(Effect.scoped),
   );
 
   it("stages pnpm 11 allowBuilds and patchedDependencies in the workspace yaml", () => {
@@ -566,6 +580,9 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.deepStrictEqual(mac.extraResources, DESKTOP_EXTRA_RESOURCES);
       assert.deepStrictEqual(linux.extraResources, DESKTOP_EXTRA_RESOURCES);
       assert.deepStrictEqual(win.nsis, { differentialPackage: true });
+      const macConfig = mac.mac as Record<string, unknown>;
+      assert.equal(macConfig.identity, "-");
+      assert.equal(macConfig.hardenedRuntime, false);
       // Native binaries and helper executables cannot load from inside an
       // asar; everything else stays packed. The Claude SDK platform packages
       // and .bin shims never ship.
@@ -1256,6 +1273,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
 
       const mac = config.mac as Record<string, unknown>;
       assert.equal(config.appId, "com.t3tools.t3code");
+      assert.notProperty(mac, "identity");
+      assert.notProperty(mac, "hardenedRuntime");
       assert.equal(mac.entitlements, "/tmp/entitlements.mac.plist");
       assert.equal(mac.provisioningProfile, "/tmp/t3code.provisionprofile");
       assert.deepStrictEqual(mac.protocols, [

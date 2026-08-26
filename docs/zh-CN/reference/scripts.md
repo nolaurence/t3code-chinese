@@ -18,7 +18,9 @@
 
 ## 桌面端 `.dmg` 打包说明
 
-- 默认构建未签名，也未经过公证，适合本地分发。
+- 默认 macOS 构建使用 ad-hoc 签名，确保应用包具有完整的资源签名，但不包含 Developer ID
+  签名且未经过公证。产物经浏览器或聊天工具传输并带上 quarantine 后，Gatekeeper 仍可能要求
+  首次启动时右键点击应用并选择**打开**。
 - DMG 构建使用 `assets/macos-icon-1024.png` 作为生产应用图标源。
 - 桌面生产窗口从 `t3code://app/index.html` 加载打包后的界面，而不是 `127.0.0.1` 文档 URL。
 - 桌面打包内容包含 `apps/server/dist`（`t3` 后端），并使用 WebSocket/API 流量的身份验证 Token 在 loopback 地址启动它。

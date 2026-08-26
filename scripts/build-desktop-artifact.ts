@@ -1310,6 +1310,19 @@ export function resolveMidsceneSharpRuntimeModules(
   ]);
 }
 
+export function resolveCopilotRuntimePackages(
+  platform: typeof BuildPlatform.Type,
+  arch: typeof BuildArch.Type,
+): ReadonlyArray<string> {
+  const architectures = arch === "universal" ? (["arm64", "x64"] as const) : [arch];
+  const platforms =
+    platform === "win" ? (["win32", "linux"] as const) : [platform === "mac" ? "darwin" : "linux"];
+
+  return architectures.flatMap((architecture) =>
+    platforms.map((runtimePlatform) => `@github/copilot-${runtimePlatform}-${architecture}`),
+  );
+}
+
 const resolveStageRuntimeModule = Effect.fn("resolveStageRuntimeModule")(function* (
   stageAppDir: string,
   loadedFrom: string,
@@ -1373,6 +1386,27 @@ export const validateDesktopStageRuntime = Effect.fn("validateDesktopStageRuntim
   );
   for (const specifier of resolveMidsceneSharpRuntimeModules(input.platform, input.arch)) {
     yield* resolveStageRuntimeModule(input.stageAppDir, sharpEntryPath, specifier);
+  }
+  const copilotSdkEntryPath = yield* resolveStageRuntimeModule(
+    input.stageAppDir,
+    stagePackageJsonPath,
+    "@github/copilot-sdk",
+  );
+  for (const packageName of resolveCopilotRuntimePackages(input.platform, input.arch)) {
+    const cliPath = yield* resolveStageRuntimeModule(
+      input.stageAppDir,
+      copilotSdkEntryPath,
+      packageName,
+    );
+    const packageDir = path.dirname(cliPath);
+    for (const entrypoint of ["index.js", "sdk/index.js"]) {
+      if (!(yield* fs.exists(path.join(packageDir, entrypoint)))) {
+        return yield* new DesktopStageRuntimeArtifactMissingError({
+          artifact: `module:${packageName}/${entrypoint}`,
+          stageAppDir: input.stageAppDir,
+        });
+      }
+    }
   }
 });
 
@@ -2314,6 +2348,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
           schemes: ["t3code", "t3code-dev"],
         },
       ],
+      ...(!signed
+        ? {
+            identity: "-",
+            hardenedRuntime: false,
+          }
+        : {}),
       ...(macPasskeySigning
         ? {
             entitlements: macPasskeySigning.entitlementsPath,

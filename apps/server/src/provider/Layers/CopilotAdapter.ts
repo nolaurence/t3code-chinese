@@ -952,6 +952,7 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
               const activeTurn = ctx.activeTurn;
               if (!activeTurn) return;
               activeTurn.errorMessage = error.message;
+              ctx.lastError = error.message;
               yield* publish(ctx, {
                 type: "runtime.error",
                 ...eventBase(ctx),
@@ -964,7 +965,19 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
                 turnId: activeTurn.id,
                 payload: { state: "failed", errorMessage: error.message },
               });
+              ctx.turns.push({ id: activeTurn.id, items: [...activeTurn.items] });
+              ctx.turnCount += 1;
               delete ctx.activeTurn;
+              yield* publish(ctx, {
+                type: "thread.state.changed",
+                ...eventBase(ctx),
+                payload: { state: "idle" },
+              });
+              yield* publish(ctx, {
+                type: "session.state.changed",
+                ...eventBase(ctx),
+                payload: { state: "error" },
+              });
             }),
           ),
         );

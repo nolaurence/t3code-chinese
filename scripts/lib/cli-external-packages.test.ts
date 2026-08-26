@@ -60,6 +60,11 @@ describe("shouldBundleCliDependency", () => {
     assert.strictEqual(shouldBundleCliDependency("@midscene/core/agent"), false);
   });
 
+  it("leaves the Copilot SDK and its dynamically resolved runtime on disk", () => {
+    assert.strictEqual(shouldBundleCliDependency("@github/copilot-sdk"), false);
+    assert.strictEqual(shouldBundleCliDependency("@github/copilot-sdk/extension"), false);
+  });
+
   it("leaves bun-only entry points external", () => {
     assert.strictEqual(shouldBundleCliDependency("@effect/platform-bun"), false);
     assert.strictEqual(shouldBundleCliDependency("@effect/sql-sqlite-bun"), false);
@@ -79,12 +84,14 @@ describe("selectCliRuntimeExternalDependencies", () => {
       selectCliRuntimeExternalDependencies({
         "@effect/platform-bun": "1.0.0",
         "@ff-labs/fff-node": "2.0.0",
+        "@github/copilot-sdk": "1.0.11",
         "@midscene/core": "1.10.3",
         effect: "3.0.0",
         "node-pty": "4.0.0",
       }),
       {
         "@ff-labs/fff-node": "2.0.0",
+        "@github/copilot-sdk": "1.0.11",
         "@midscene/core": "1.10.3",
         "node-pty": "4.0.0",
       },
@@ -94,7 +101,13 @@ describe("selectCliRuntimeExternalDependencies", () => {
   it("selects every external root declared by the server", () => {
     assert.deepStrictEqual(
       Object.keys(selectCliRuntimeExternalDependencies(serverPackageJson.dependencies)).sort(),
-      ["@ff-labs/fff-node", "@midscene/core", "msgpackr-extract", "node-pty"],
+      [
+        "@ff-labs/fff-node",
+        "@github/copilot-sdk",
+        "@midscene/core",
+        "msgpackr-extract",
+        "node-pty",
+      ],
     );
   });
 });

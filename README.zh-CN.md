@@ -59,7 +59,7 @@ yay -S t3code-bin
 
 - [快速开始](./docs/zh-CN/getting-started/quick-start.md)
 - [架构概览](./docs/zh-CN/architecture/overview.md)
-- 供应商指南：[Codex](./docs/zh-CN/providers/codex.md)、[Claude](./docs/zh-CN/providers/claude.md)、[Pi](./docs/zh-CN/providers/pi.md)
+- 供应商指南：[Codex](./docs/zh-CN/providers/codex.md)、[Claude](./docs/zh-CN/providers/claude.md)、[GitHub Copilot](./docs/zh-CN/providers/github-copilot.md)、[Pi](./docs/zh-CN/providers/pi.md)
 - [运维](./docs/zh-CN/operations/ci.md)
 - [参考手册](./docs/zh-CN/reference/encyclopedia.md)
 

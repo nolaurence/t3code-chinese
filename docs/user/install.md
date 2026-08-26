@@ -6,7 +6,8 @@ T3 Code is a web and desktop GUI for running coding agents on your machine.
 
 Node.js `^22.16 || ^23.11 || >=24.10` on the machine that runs the T3 Code server.
 
-At least one provider CLI, installed and authenticated. See [Providers](#providers) below.
+At least one provider configured and authenticated. Most providers use an installed CLI; GitHub
+Copilot uses the runtime bundled with T3 Code. See [Providers](#providers) below.
 
 ## Run Without Installing
 
@@ -51,26 +52,30 @@ yay -S t3code-nightly-bin
 
 ## Providers
 
-T3 Code drives provider CLIs; it does not ship them. Install the CLI for each provider you want
-to use, then authenticate it.
+T3 Code normally drives provider CLIs installed on the server machine. GitHub Copilot is the
+exception: T3 Code ships its SDK runtime, so it only needs provider credentials.
 
-| Provider   | CLI                                                   | Default binary | Log in with           |
-| ---------- | ----------------------------------------------------- | -------------- | --------------------- |
-| Codex      | [Codex CLI](https://developers.openai.com/codex/cli)  | `codex`        | `codex login`         |
-| Claude     | [Claude Code](https://claude.com/product/claude-code) | `claude`       | `claude auth login`   |
-| Cursor     | [Cursor CLI](https://cursor.com/cli)                  | `cursor-agent` | `agent login`         |
-| Grok Build | [Grok Build CLI](https://x.ai/cli)                    | `grok`         | `grok login`          |
-| OpenCode   | [OpenCode](https://opencode.ai)                       | `opencode`     | `opencode auth login` |
-| Oh My Pi   | [Oh My Pi](https://github.com/can1357/oh-my-pi)       | `omp`          | Configure in `omp`    |
+| Provider       | CLI                                                   | Default binary | Log in with           |
+| -------------- | ----------------------------------------------------- | -------------- | --------------------- |
+| Codex          | [Codex CLI](https://developers.openai.com/codex/cli)  | `codex`        | `codex login`         |
+| Claude         | [Claude Code](https://claude.com/product/claude-code) | `claude`       | `claude auth login`   |
+| GitHub Copilot | Bundled Copilot SDK                                   | None           | Provider token        |
+| Cursor         | [Cursor CLI](https://cursor.com/cli)                  | `cursor-agent` | `agent login`         |
+| Grok Build     | [Grok Build CLI](https://x.ai/cli)                    | `grok`         | `grok login`          |
+| OpenCode       | [OpenCode](https://opencode.ai)                       | `opencode`     | `opencode auth login` |
+| Oh My Pi       | [Oh My Pi](https://github.com/can1357/oh-my-pi)       | `omp`          | Configure in `omp`    |
 
-Codex and Claude are on by default. Cursor, Grok Build, and OpenCode are off by default; turn
-them on in **Settings** → the provider's card when you want to use them.
+Codex and Claude are on by default. GitHub Copilot, Cursor, Grok Build, and OpenCode are off by
+default; turn them on in **Settings** → the provider's card when you want to use them.
 
 Cursor is the one to watch: install Cursor CLI, which provides the `cursor-agent` binary that
 T3 Code looks for, but authenticate with `agent login`, not `cursor-agent login`.
 
 Run the login command on the machine running the T3 Code server, not on the device you browse
 from.
+
+For GitHub Copilot, add `COPILOT_GITHUB_TOKEN` (or `GH_TOKEN`/`GITHUB_TOKEN`) as a sensitive
+environment variable on the provider instance. See [GitHub Copilot](./providers-github-copilot.md).
 
 Oh My Pi is configured as its own provider in T3 Code. It does not reuse the Pi provider's binary
 path, configuration directory, sessions, or provider instances.
@@ -80,7 +85,7 @@ OMP Todo updates appear in the chat progress view and are restored when you reop
 
 ### Binary Discovery
 
-Each provider CLI must be on the server's `PATH`, or have an explicit binary path set in
+Each external provider CLI must be on the server's `PATH`, or have an explicit binary path set in
 **Settings** → the provider instance → **Binary path**. Use the explicit path when a version
 manager or a non-standard install location keeps the CLI off the `PATH` of the shell that
 started T3 Code.
@@ -92,7 +97,8 @@ T3 Code. You can install T3 Code, open it, and add providers afterwards. A provi
 authenticated shows its status in **Settings** and fails at session start with the login command
 to run.
 
-For multi-account setups, see [Codex](./providers-codex.md) and [Claude](./providers-claude.md).
+For provider-specific setup, see [Codex](./providers-codex.md),
+[Claude](./providers-claude.md), and [GitHub Copilot](./providers-github-copilot.md).
 
 ## Next Steps
 
