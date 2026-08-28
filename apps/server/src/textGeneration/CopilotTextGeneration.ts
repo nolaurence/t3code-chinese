@@ -50,15 +50,24 @@ export function makeCopilotTextGeneration(
   }) {
     const effortValue = getModelSelectionStringOptionValue(input.modelSelection, "reasoningEffort");
     const reasoningEffort = effortValue && isReasoningEffort(effortValue) ? effortValue : undefined;
+    const resolvedModel = yield* Effect.try({
+      try: () => runtime.resolveModel(input.modelSelection.model),
+      catch: (cause) =>
+        new TextGenerationError({
+          operation: input.operation,
+          detail: "GitHub Copilot could not resolve the selected model provider.",
+          cause,
+        }),
+    });
 
     const rawOutput = yield* Effect.acquireUseRelease(
       Effect.tryPromise({
         try: () =>
           runtime.createSession({
             workingDirectory: input.cwd,
-            model: input.modelSelection.model,
+            ...(resolvedModel.sdkModel ? { model: resolvedModel.sdkModel } : {}),
             ...(reasoningEffort ? { reasoningEffort } : {}),
-            ...(runtime.sessionProvider ? { provider: runtime.sessionProvider } : {}),
+            ...(resolvedModel.provider ? { provider: resolvedModel.provider } : {}),
             streaming: false,
             availableTools: [],
             clientName: "T3 Code Text Generation",

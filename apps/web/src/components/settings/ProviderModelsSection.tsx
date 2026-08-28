@@ -74,6 +74,7 @@ interface ProviderModelsSectionProps {
    * `providerInstances[id].config`).
    */
   readonly onChange: (next: ReadonlyArray<string>) => void;
+  readonly onCustomModelRename: (previousSlug: string, nextSlug: string) => void;
   readonly onHiddenModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onFavoriteModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
@@ -103,6 +104,7 @@ export function ProviderModelsSection({
   modelOrder,
   modelConfigurations,
   onChange,
+  onCustomModelRename,
   onHiddenModelsChange,
   onFavoriteModelsChange,
   onModelOrderChange,
@@ -166,6 +168,35 @@ export function ProviderModelsSection({
     onChange(customModels.filter((model) => model !== slug));
     onModelOrderChange(modelOrder.filter((model) => model !== slug));
     onFavoriteModelsChange(favoriteModels.filter((model) => model !== slug));
+    if (editingModel === slug) setEditingModel(null);
+    setError(null);
+  };
+
+  const handleCustomModelRename = (previousSlug: string, value: string) => {
+    const nextSlug = normalizeCustomModelSlug(value);
+    if (!nextSlug) {
+      setError(t("providers.modelEnter"));
+      return;
+    }
+    if (nextSlug.length > MAX_CUSTOM_MODEL_LENGTH) {
+      setError(t("providers.modelTooLong", { max: MAX_CUSTOM_MODEL_LENGTH }));
+      return;
+    }
+    if (nextSlug !== previousSlug && models.some((model) => model.slug === nextSlug)) {
+      setError(
+        customModels.includes(nextSlug) ? t("providers.modelSaved") : t("providers.modelBuiltIn"),
+      );
+      return;
+    }
+    if (nextSlug === previousSlug) {
+      setError(null);
+      return;
+    }
+
+    onCustomModelRename(previousSlug, nextSlug);
+    onModelOrderChange(modelOrder.map((slug) => (slug === previousSlug ? nextSlug : slug)));
+    onFavoriteModelsChange(favoriteModels.map((slug) => (slug === previousSlug ? nextSlug : slug)));
+    setEditingModel(nextSlug);
     setError(null);
   };
 
@@ -201,7 +232,8 @@ export function ProviderModelsSection({
     const configurations = { ...modelConfigurations };
     if (
       next &&
-      (next.contextWindowTokens !== undefined ||
+      (next.displayName !== undefined ||
+        next.contextWindowTokens !== undefined ||
         (next.reasoningEfforts?.length ?? 0) > 0 ||
         next.defaultReasoningEffort !== undefined)
     ) {
@@ -448,6 +480,44 @@ export function ProviderModelsSection({
               </div>
               {isEditing ? (
                 <div className="space-y-3 pb-3 pl-1 pr-1">
+                  {model.isCustom ? (
+                    <>
+                      <label className="block">
+                        <span className="text-[11px] font-medium text-foreground">
+                          {t("providers.modelId")}
+                        </span>
+                        <Input
+                          key={`id:${model.slug}`}
+                          className="mt-1 h-7 text-xs"
+                          defaultValue={model.slug}
+                          maxLength={MAX_CUSTOM_MODEL_LENGTH}
+                          onBlur={(event) =>
+                            handleCustomModelRename(model.slug, event.currentTarget.value)
+                          }
+                          spellCheck={false}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[11px] font-medium text-foreground">
+                          {t("providers.modelDisplayName")}
+                        </span>
+                        <Input
+                          key={`name:${model.slug}:${configuration.displayName ?? ""}`}
+                          className="mt-1 h-7 text-xs"
+                          defaultValue={configuration.displayName ?? ""}
+                          placeholder={model.slug}
+                          onBlur={(event) => {
+                            const displayName = event.currentTarget.value.trim() || undefined;
+                            updateModelConfiguration(model.slug, {
+                              ...configuration,
+                              displayName,
+                            });
+                            setError(null);
+                          }}
+                        />
+                      </label>
+                    </>
+                  ) : null}
                   <label className="block">
                     <span className="text-[11px] font-medium text-foreground">
                       {t("providers.modelContextWindow")}
@@ -464,14 +534,24 @@ export function ProviderModelsSection({
                       }
                       onBlur={(event) => {
                         const raw = event.currentTarget.value.trim();
+                        if (!raw) {
+                          updateModelConfiguration(model.slug, {
+                            ...configuration,
+                            contextWindowTokens: undefined,
+                          });
+                          setError(null);
+                          return;
+                        }
                         const parsed = Number(raw);
+                        if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 10_000_000) {
+                          setError(t("providers.modelContextInvalid"));
+                          return;
+                        }
                         updateModelConfiguration(model.slug, {
                           ...configuration,
-                          contextWindowTokens:
-                            raw && Number.isSafeInteger(parsed) && parsed > 0
-                              ? Math.min(parsed, 10_000_000)
-                              : undefined,
+                          contextWindowTokens: parsed,
                         });
+                        setError(null);
                       }}
                     />
                   </label>

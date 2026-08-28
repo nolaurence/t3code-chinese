@@ -21,27 +21,34 @@ them back to the client after saving.
 The token must belong to an account that can use GitHub Copilot. Refresh the provider after saving
 it; the provider is ready when Settings shows an authenticated account and a model list.
 
-## Custom Model Providers (BYOK)
+## Custom LLM Providers (BYOK)
 
-Instead of GitHub Copilot auth, a provider instance can point the bundled runtime at any
-OpenAI-, Azure-, or Anthropic-compatible endpoint. Configure these fields on the instance:
+A GitHub Copilot provider instance can use the official Copilot models and multiple custom LLM
+providers at the same time. In the instance settings, choose **Add LLM provider**, then configure:
 
 ```text
+Provider name      Work OpenAI
+Provider type      openai | azure | anthropic
 API base URL       https://your-gateway.example.com/v1
-Provider type      openai | azure | anthropic   (defaults to openai)
 API key            <provider-api-key>           (optional for local providers)
-Wire API           completions | responses      (openai/azure only, defaults to completions)
-Azure API version  2024-10-21                   (azure only; blank uses the GA v1 route)
+Wire API           completions | responses      (openai/azure only)
+Azure API version  2024-10-21                   (azure only)
 ```
 
-With an API base URL set, sessions bypass GitHub Copilot authentication entirely and the GitHub
-token is not required. T3 Code fetches the available models from the provider's `/models` endpoint.
-You can still add model slugs manually when an API does not list every supported model.
+Choose **Fetch from API** to import the models reported by the configured endpoint, or add model IDs
+manually. Existing model metadata overrides are preserved when models are fetched again. Each model
+can have its own display name, context window, supported reasoning efforts, and default reasoning
+effort. The API key is stored as plain text in the server's local settings file.
 
-Use the model settings action to override a model's context window, supported reasoning efforts,
-and default reasoning effort. These overrides apply to both fetched and manually added models.
-Changing models starts a new thread so the selected context-window limit is applied when the SDK
-session is created.
+Custom providers do not require GitHub authentication. When GitHub authentication is also
+available, the model picker includes both official Copilot models and models from every configured
+custom provider. The provider name distinguishes models with the same display name.
+
+Changing models within one custom LLM provider reuses the current session. Changing between custom
+providers, or between a custom provider and the official Copilot service, requires a new thread.
+
+Existing installations that used the earlier single-provider BYOK fields continue to work, but new
+custom provider configuration uses the LLM provider list.
 
 ## Reasoning and Autopilot
 
@@ -68,7 +75,7 @@ rejects write and command permissions.
 
 - **Provider is unauthenticated**: confirm the token is on the GitHub Copilot provider instance and
   refresh its status.
-- **No models appear**: for GitHub Copilot, confirm the token's account has Copilot access. For
-  BYOK, confirm the base URL exposes a compatible `/models` endpoint.
+- **No models appear**: for GitHub Copilot, confirm the token's account has Copilot access. For a
+  custom LLM provider, confirm that at least one model ID is configured.
 - **The SDK runtime cannot start**: reinstall or update T3 Code. The platform runtime is part of the
   T3 Code package, not a separately installed CLI.

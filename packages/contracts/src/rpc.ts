@@ -187,7 +187,14 @@ import {
   ResourceTelemetrySnapshot,
 } from "./resourceTelemetry.ts";
 import { UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
-import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
+import {
+  CopilotLlmProviderModel,
+  CopilotLlmProviderModelDiscoveryError,
+  CopilotLlmProviderModelDiscoveryRequest,
+  ServerSettings,
+  ServerSettingsError,
+  ServerSettingsPatch,
+} from "./settings.ts";
 import {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
@@ -219,6 +226,7 @@ export const WS_METHODS = {
   assetsCreateUrl: "assets.createUrl",
 
   // Provider methods
+  providerDiscoverCopilotLlmModels: "provider.discoverCopilotLlmModels",
   providerUploadFeedback: "provider.uploadFeedback",
 
   // VCS methods
@@ -681,6 +689,15 @@ export const WsProviderUploadFeedbackRpc = Rpc.make(WS_METHODS.providerUploadFee
   error: Schema.Union([ProviderUploadFeedbackError, EnvironmentAuthorizationError]),
 });
 
+export const WsProviderDiscoverCopilotLlmModelsRpc = Rpc.make(
+  WS_METHODS.providerDiscoverCopilotLlmModels,
+  {
+    payload: CopilotLlmProviderModelDiscoveryRequest,
+    success: Schema.Array(CopilotLlmProviderModel),
+    error: Schema.Union([CopilotLlmProviderModelDiscoveryError, EnvironmentAuthorizationError]),
+  },
+);
+
 export const WsSubscribeVcsStatusRpc = Rpc.make(WS_METHODS.subscribeVcsStatus, {
   payload: VcsStatusInput,
   success: VcsStatusStreamEvent,
@@ -1059,6 +1076,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAssetsCreateUrlRpc,
+  WsProviderDiscoverCopilotLlmModelsRpc,
   WsProviderUploadFeedbackRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,

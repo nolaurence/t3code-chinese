@@ -97,6 +97,26 @@ describe("projectActivityPayload", () => {
     expect(JSON.stringify(acp.payload).length).toBeLessThan(500);
   });
 
+  it("restores a bounded detail from legacy Copilot tool results", () => {
+    const projected = projectActivityPayload(
+      activity({
+        itemType: "dynamic_tool_call",
+        data: {
+          result: {
+            content: "short model-facing output",
+            detailedContent: `full timeline output\n${"x".repeat(5_000)}`,
+          },
+        },
+      }),
+    );
+
+    expect(projected.payload).toMatchObject({
+      detail: "full timeline output",
+      data: {},
+    });
+    expect(JSON.stringify(projected.payload).length).toBeLessThan(300);
+  });
+
   it("normalizes Claude and OpenCode command inputs before slimming provider data", () => {
     const claude = projectActivityPayload(
       activity({

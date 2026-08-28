@@ -9,6 +9,8 @@ import {
   defaultEnabledForDriver,
   OmpSettings,
   PiAgentSettings,
+  makeCopilotLlmModelSlug,
+  parseCopilotLlmModelSlug,
   resolveProviderInstanceEnabled,
   ServerSettings,
   ServerSettingsPatch,
@@ -193,6 +195,7 @@ describe("GitHub Copilot settings", () => {
       azureApiVersion: "",
       customModels: [],
       modelConfigurations: {},
+      llmProviders: [],
     });
   });
 
@@ -236,6 +239,7 @@ describe("GitHub Copilot settings", () => {
         githubCopilot: {
           modelConfigurations: {
             "gpt-custom": {
+              displayName: "Custom GPT",
               contextWindowTokens: 262_144,
               reasoningEfforts: ["low", "medium", "high"],
               defaultReasoningEffort: "medium",
@@ -246,11 +250,99 @@ describe("GitHub Copilot settings", () => {
     });
     expect(patch.providers?.githubCopilot?.modelConfigurations).toEqual({
       "gpt-custom": {
+        displayName: "Custom GPT",
         contextWindowTokens: 262_144,
         reasoningEfforts: ["low", "medium", "high"],
         defaultReasoningEffort: "medium",
       },
     });
+  });
+
+  it("accepts multiple custom LLM providers and their models", () => {
+    const patch = decodeServerSettingsPatch({
+      providers: {
+        githubCopilot: {
+          llmProviders: [
+            {
+              id: "openai-work",
+              name: "OpenAI Work",
+              type: "openai",
+              baseUrl: "https://api.openai.com/v1",
+              apiKey: "sk-test",
+              wireApi: "responses",
+              models: [
+                {
+                  id: "gpt-5.4",
+                  displayName: "GPT 5.4",
+                  contextWindowTokens: 262_144,
+                  reasoningEfforts: ["low", "high"],
+                  defaultReasoningEffort: "high",
+                },
+              ],
+            },
+            {
+              id: "anthropic-local",
+              name: "Anthropic Local",
+              type: "anthropic",
+              baseUrl: "http://127.0.0.1:8080",
+              models: [{ id: "claude-sonnet" }],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(patch.providers?.githubCopilot?.llmProviders).toEqual([
+      {
+        id: "openai-work",
+        name: "OpenAI Work",
+        type: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "sk-test",
+        wireApi: "responses",
+        azureApiVersion: "",
+        models: [
+          {
+            id: "gpt-5.4",
+            displayName: "GPT 5.4",
+            contextWindowTokens: 262_144,
+            reasoningEfforts: ["low", "high"],
+            defaultReasoningEffort: "high",
+          },
+        ],
+      },
+      {
+        id: "anthropic-local",
+        name: "Anthropic Local",
+        type: "anthropic",
+        baseUrl: "http://127.0.0.1:8080",
+        apiKey: "",
+        wireApi: "completions",
+        azureApiVersion: "",
+        models: [{ id: "claude-sonnet" }],
+      },
+    ]);
+  });
+
+  it("round-trips scoped Copilot model slugs", () => {
+    const slug = makeCopilotLlmModelSlug("gateway/work", "model name/2026");
+    expect(parseCopilotLlmModelSlug(slug)).toEqual({
+      providerId: "gateway/work",
+      modelId: "model name/2026",
+    });
+    expect(parseCopilotLlmModelSlug("gpt-5.4")).toBeUndefined();
+    expect(parseCopilotLlmModelSlug("t3-copilot-provider:bad/%E0%A4%A")).toBeUndefined();
+  });
+
+  it.each([
+    ["providerType", "bogus"],
+    ["wireApi", "bogus"],
+  ])("rejects unsupported Copilot %s values", (key, value) => {
+    expect(() =>
+      decodeServerSettingsPatch({
+        providers: { githubCopilot: { [key]: value } },
+      }),
+    ).toThrow();
   });
 });
 

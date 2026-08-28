@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off
 // @effect-diagnostics globalFetch:off - Copilot SDK model discovery requires a Promise-based callback.
-import * as NodeFs from "node:fs";
+import * as NodeFS from "node:fs";
 import * as NodeModule from "node:module";
 import * as NodePath from "node:path";
 
@@ -14,11 +14,14 @@ import {
   type SessionConfig,
 } from "@github/copilot-sdk";
 import type {
+  CopilotLlmProvider,
+  CopilotLlmProviderModel,
   CopilotModelConfiguration,
   CopilotModelConfigurations,
   CopilotSettings,
   ProviderInstanceId,
 } from "@t3tools/contracts";
+import { parseCopilotLlmModelSlug } from "@t3tools/contracts";
 
 const TOKEN_ENVIRONMENT_VARIABLES = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"] as const;
 const PROVIDER_TYPES = ["openai", "azure", "anthropic"] as const;
@@ -59,8 +62,9 @@ export function knownModelReasoningEfforts(
 }
 
 export interface CopilotRuntime {
-  /** BYOK provider applied to every session, or undefined for GitHub Copilot auth. */
+  /** Legacy BYOK provider applied to unscoped models, or undefined for GitHub Copilot auth. */
   readonly sessionProvider: ProviderConfig | undefined;
+  readonly resolveModel: (model: string | undefined) => CopilotResolvedModel;
   readonly ensureStarted: () => Promise<CopilotClient>;
   readonly ping: () => Promise<void>;
   readonly getAuthStatus: () => Promise<GetAuthStatusResponse>;
@@ -71,6 +75,14 @@ export interface CopilotRuntime {
     config: ResumeSessionConfig,
   ) => Promise<CopilotSession>;
   readonly close: () => Promise<void>;
+}
+
+export interface CopilotResolvedModel {
+  readonly selectionModel: string | undefined;
+  readonly sdkModel: string | undefined;
+  readonly provider: ProviderConfig | undefined;
+  readonly providerId: string | undefined;
+  readonly configuration: CopilotModelConfiguration | undefined;
 }
 
 function resolveGitHubToken(environment: NodeJS.ProcessEnv): string | undefined {
@@ -128,9 +140,27 @@ export function resolveCopilotSessionProvider(
   };
 }
 
+export function resolveCopilotLlmProvider(provider: CopilotLlmProvider): ProviderConfig {
+  const type = parseProviderType(provider.type);
+  const wireApi = parseWireApi(provider.wireApi);
+  const apiKey = provider.apiKey.trim() || undefined;
+  const azureApiVersion = provider.azureApiVersion.trim() || undefined;
+  return {
+    ...(type ? { type } : {}),
+    baseUrl: provider.baseUrl.trim(),
+    ...(apiKey ? { apiKey } : {}),
+    ...(type !== "anthropic" && wireApi ? { wireApi } : {}),
+    ...(type === "azure" && azureApiVersion ? { azure: { apiVersion: azureApiVersion } } : {}),
+    ...(type === "openai" ? { headers: { "User-Agent": "t3code" } } : {}),
+  };
+}
+
 function modelsEndpoint(provider: ProviderConfig): URL {
   const baseUrl = provider.baseUrl.replace(/\/+$/, "");
   const url = new URL(baseUrl.endsWith("/models") ? baseUrl : `${baseUrl}/models`);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Model provider URL must use HTTP or HTTPS.");
+  }
   if (provider.type === "azure" && provider.azure?.apiVersion) {
     url.searchParams.set("api-version", provider.azure.apiVersion);
   }
@@ -144,7 +174,11 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 function positiveInteger(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  const candidate =
+    typeof value === "string" && value.trim().length > 0 ? Number(value.trim()) : value;
+  return typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate > 0
+    ? candidate
+    : undefined;
 }
 
 function normalizeReasoningEffortList(value: unknown): CopilotEffort[] | undefined {
@@ -159,27 +193,51 @@ function normalizeReasoningEffortList(value: unknown): CopilotEffort[] | undefin
   ];
 }
 
-function apiModelToSdk(value: unknown, configurations: CopilotModelConfigurations): ModelInfo {
+function apiModelToSdk(
+  value: unknown,
+  configurations: CopilotModelConfigurations,
+): ModelInfo | undefined {
   const model = asRecord(value);
-  const id = typeof model?.id === "string" ? model.id.trim() : "";
+  const id =
+    typeof value === "string" ? value.trim() : typeof model?.id === "string" ? model.id.trim() : "";
   if (!id) {
-    throw new Error("Model list response contains an entry without a non-empty id.");
+    return undefined;
   }
   const configured: CopilotModelConfiguration | undefined = configurations[id];
+  const apiCapabilities = asRecord(model?.capabilities);
+  const apiSupports = asRecord(apiCapabilities?.supports);
+  const apiLimits = asRecord(apiCapabilities?.limits);
   const apiContextWindow =
+    positiveInteger(model?.contextWindowTokens) ??
     positiveInteger(model?.context_window) ??
+    positiveInteger(model?.contextWindow) ??
     positiveInteger(model?.context_length) ??
-    positiveInteger(model?.max_context_window_tokens);
+    positiveInteger(model?.contextLength) ??
+    positiveInteger(model?.max_context_window_tokens) ??
+    positiveInteger(model?.maxContextWindowTokens) ??
+    positiveInteger(apiCapabilities?.contextWindowTokens) ??
+    positiveInteger(apiCapabilities?.max_context_window_tokens) ??
+    positiveInteger(apiCapabilities?.maxContextWindowTokens) ??
+    positiveInteger(apiLimits?.contextWindowTokens) ??
+    positiveInteger(apiLimits?.context_window) ??
+    positiveInteger(apiLimits?.contextWindow) ??
+    positiveInteger(apiLimits?.context_length) ??
+    positiveInteger(apiLimits?.contextLength) ??
+    positiveInteger(apiLimits?.max_context_window_tokens) ??
+    positiveInteger(apiLimits?.maxContextWindowTokens);
   const contextWindow =
     configured?.contextWindowTokens ?? apiContextWindow ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
-  const apiCapabilities = asRecord(model?.capabilities);
   const apiEfforts = normalizeReasoningEffortList(
     model?.supportedReasoningEfforts ??
       model?.supported_reasoning_efforts ??
       model?.reasoningEfforts ??
       model?.reasoning_efforts ??
       apiCapabilities?.supportedReasoningEfforts ??
-      apiCapabilities?.supported_reasoning_efforts,
+      apiCapabilities?.supported_reasoning_efforts ??
+      apiCapabilities?.reasoningEffort ??
+      apiCapabilities?.reasoning_effort ??
+      apiSupports?.reasoningEffort ??
+      apiSupports?.reasoning_effort,
   );
   const reasoningEfforts =
     configured?.reasoningEfforts ??
@@ -198,11 +256,14 @@ function apiModelToSdk(value: unknown, configurations: CopilotModelConfiguration
       ? (apiDefaultEffort as CopilotEffort)
       : undefined);
   const nameValue =
-    typeof model?.name === "string"
+    configured?.displayName ??
+    (typeof model?.name === "string"
       ? model.name
       : typeof model?.display_name === "string"
         ? model.display_name
-        : id;
+        : typeof model?.displayName === "string"
+          ? model.displayName
+          : id);
   const name = nameValue.trim() || id;
   return {
     id,
@@ -245,24 +306,76 @@ export async function fetchCopilotProviderModels(
       `Model list request failed (${response.status} ${response.statusText})${detail ? `: ${detail}` : ""}`,
     );
   }
-  const payload = asRecord(await response.json());
-  if (!payload || !Array.isArray(payload.data)) {
-    throw new Error("Model list response must be an object with a data array.");
+  const payload: unknown = await response.json();
+  const payloadRecord = asRecord(payload);
+  const candidates = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payloadRecord?.data)
+      ? payloadRecord.data
+      : Array.isArray(payloadRecord?.models)
+        ? payloadRecord.models
+        : undefined;
+  if (!candidates) {
+    throw new Error("Model list response must be an array or an object with a data/models array.");
   }
-  return payload.data.map((model) => apiModelToSdk(model, configurations));
+  const models = new Map<string, ModelInfo>();
+  for (const candidate of candidates) {
+    const model = apiModelToSdk(candidate, configurations);
+    if (model && !models.has(model.id)) {
+      models.set(model.id, model);
+    }
+  }
+  return [...models.values()];
 }
 
-function copilotCliBinaryName(): string {
-  return process.platform === "win32" ? "copilot.exe" : "copilot";
+export async function discoverCopilotLlmProviderModels(
+  provider: Pick<CopilotLlmProvider, "type" | "baseUrl" | "apiKey" | "azureApiVersion">,
+  fetchImpl?: (input: URL, init?: RequestInit) => Promise<Response>,
+): Promise<CopilotLlmProviderModel[]> {
+  const models = await fetchCopilotProviderModels(
+    resolveCopilotLlmProvider({
+      id: "model-discovery",
+      name: "Model discovery",
+      wireApi: "completions",
+      models: [],
+      ...provider,
+    }),
+    {},
+    fetchImpl,
+  );
+  return models.map((model) => {
+    const contextWindowTokens = model.capabilities.limits.max_context_window_tokens;
+    return {
+      id: model.id,
+      ...(model.name !== model.id ? { displayName: model.name } : {}),
+      ...(contextWindowTokens <= 10_000_000 ? { contextWindowTokens } : {}),
+      ...(model.supportedReasoningEfforts?.length
+        ? { reasoningEfforts: model.supportedReasoningEfforts }
+        : {}),
+      ...(model.defaultReasoningEffort
+        ? { defaultReasoningEffort: model.defaultReasoningEffort }
+        : {}),
+    };
+  });
 }
 
-function copilotPlatformPackageNames(): ReadonlyArray<string> {
-  const platforms = process.platform === "linux" ? ["linux", "linuxmusl"] : [process.platform];
-  return platforms.map((platform) => `copilot-${platform}-${process.arch}`);
+function copilotCliBinaryName(platform: NodeJS.Platform): string {
+  return platform === "win32" ? "copilot.exe" : "copilot";
 }
 
-function* candidateCopilotCliPaths(): Generator<string> {
-  const binary = copilotCliBinaryName();
+function copilotPlatformPackageNames(
+  platform: NodeJS.Platform,
+  architecture: NodeJS.Architecture,
+): ReadonlyArray<string> {
+  const platforms = platform === "linux" ? ["linux", "linuxmusl"] : [platform];
+  return platforms.map((platformName) => `copilot-${platformName}-${architecture}`);
+}
+
+function* candidateCopilotCliPaths(
+  platform: NodeJS.Platform,
+  architecture: NodeJS.Architecture,
+): Generator<string> {
+  const binary = copilotCliBinaryName(platform);
   // Module resolution: @github/copilot's optional platform packages sit next
   // to it in node_modules, so anchor at the SDK and walk across.
   try {
@@ -271,7 +384,7 @@ function* candidateCopilotCliPaths(): Generator<string> {
     const sdkRequire = NodeModule.createRequire(sdkEntry);
     const copilotManifest = sdkRequire.resolve("@github/copilot/package.json");
     const copilotPackageDir = NodePath.dirname(copilotManifest);
-    for (const packageName of copilotPlatformPackageNames()) {
+    for (const packageName of copilotPlatformPackageNames(platform, architecture)) {
       yield NodePath.join(copilotPackageDir, "..", packageName, binary);
     }
   } catch {
@@ -283,7 +396,7 @@ function* candidateCopilotCliPaths(): Generator<string> {
   const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
   if (resourcesPath) {
     for (const sidecar of ["app.asar.unpacked", "server.asar.unpacked"]) {
-      for (const packageName of copilotPlatformPackageNames()) {
+      for (const packageName of copilotPlatformPackageNames(platform, architecture)) {
         yield NodePath.join(resourcesPath, sidecar, "node_modules", "@github", packageName, binary);
       }
     }
@@ -297,18 +410,21 @@ function* candidateCopilotCliPaths(): Generator<string> {
  * RPC fails with "Connection is closed". Spawning the native binary directly
  * avoids the JS loader entirely.
  */
-export function resolveBundledCopilotCliPath(): string | undefined {
-  for (const candidate of candidateCopilotCliPaths()) {
+export function resolveBundledCopilotCliPath(
+  platform: NodeJS.Platform,
+  architecture: NodeJS.Architecture,
+): string | undefined {
+  for (const candidate of candidateCopilotCliPaths(platform, architecture)) {
     // Files inside an asar archive are visible to fs but cannot be spawned;
     // only the unpacked sibling works.
     const unpacked = candidate.replace(/\.asar([\\/])/, ".asar.unpacked$1");
     if (unpacked !== candidate) {
-      if (NodeFs.existsSync(unpacked)) {
+      if (NodeFS.existsSync(unpacked)) {
         return unpacked;
       }
       continue;
     }
-    if (NodeFs.existsSync(candidate)) {
+    if (NodeFS.existsSync(candidate)) {
       return candidate;
     }
   }
@@ -319,12 +435,20 @@ export function makeCopilotRuntime(input: {
   readonly instanceId: ProviderInstanceId;
   readonly stateDir: string;
   readonly environment: NodeJS.ProcessEnv;
+  readonly platform: NodeJS.Platform;
+  readonly architecture: NodeJS.Architecture;
   readonly sessionProvider?: ProviderConfig | undefined;
   readonly modelConfigurations?: CopilotModelConfigurations | undefined;
+  readonly llmProviders?: ReadonlyArray<CopilotLlmProvider> | undefined;
 }): CopilotRuntime {
   const gitHubToken = resolveGitHubToken(input.environment);
-  const cliPath = input.environment.COPILOT_CLI_PATH?.trim() || resolveBundledCopilotCliPath();
+  const cliPath =
+    input.environment.COPILOT_CLI_PATH?.trim() ||
+    resolveBundledCopilotCliPath(input.platform, input.architecture);
   const sessionProvider = input.sessionProvider;
+  const llmProviders = new Map(
+    (input.llmProviders ?? []).map((provider) => [provider.id, provider]),
+  );
   const client = new CopilotClient({
     mode: "copilot-cli",
     baseDirectory: NodePath.join(input.stateDir, "copilot-sdk", input.instanceId),
@@ -382,8 +506,48 @@ export function makeCopilotRuntime(input: {
     }
   };
 
+  const resolveModel = (model: string | undefined): CopilotResolvedModel => {
+    if (!model) {
+      return {
+        selectionModel: undefined,
+        sdkModel: undefined,
+        provider: sessionProvider,
+        providerId: sessionProvider ? "legacy" : undefined,
+        configuration: undefined,
+      };
+    }
+    const scoped = parseCopilotLlmModelSlug(model);
+    if (!scoped) {
+      return {
+        selectionModel: model,
+        sdkModel: model,
+        provider: sessionProvider,
+        providerId: sessionProvider ? "legacy" : undefined,
+        configuration: input.modelConfigurations?.[model],
+      };
+    }
+    const provider = llmProviders.get(scoped.providerId);
+    if (!provider) {
+      throw new Error(`Copilot LLM provider '${scoped.providerId}' is no longer configured.`);
+    }
+    const configuredModel = provider.models.find((candidate) => candidate.id === scoped.modelId);
+    if (!configuredModel) {
+      throw new Error(
+        `Model '${scoped.modelId}' is no longer configured for Copilot LLM provider '${provider.name}'.`,
+      );
+    }
+    return {
+      selectionModel: model,
+      sdkModel: scoped.modelId,
+      provider: resolveCopilotLlmProvider(provider),
+      providerId: provider.id,
+      configuration: configuredModel,
+    };
+  };
+
   return {
     sessionProvider: input.sessionProvider,
+    resolveModel,
     ensureStarted,
     ping: async () => {
       await (await ensureStarted()).ping();

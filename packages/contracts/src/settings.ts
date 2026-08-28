@@ -278,10 +278,16 @@ const makeBinaryPathSetting = (fallback: string) =>
     Schema.withDecodingDefault(Effect.succeed(fallback)),
   );
 
-export type ProviderSettingsFormControl = "text" | "password" | "textarea" | "switch";
+export type ProviderSettingsFormControl = "text" | "password" | "textarea" | "switch" | "select";
+
+export interface ProviderSettingsFormOption {
+  readonly value: string;
+  readonly label: string;
+}
 
 export interface ProviderSettingsFormAnnotation {
   readonly control?: ProviderSettingsFormControl | undefined;
+  readonly options?: readonly ProviderSettingsFormOption[] | undefined;
   readonly placeholder?: string | undefined;
   readonly hidden?: boolean | undefined;
   readonly clearWhenEmpty?: "omit" | "persist" | undefined;
@@ -605,6 +611,7 @@ export const CopilotReasoningEffort = Schema.Literals(["low", "medium", "high", 
 export type CopilotReasoningEffort = typeof CopilotReasoningEffort.Type;
 
 export const CopilotModelConfiguration = Schema.Struct({
+  displayName: Schema.optional(TrimmedNonEmptyString),
   contextWindowTokens: Schema.optional(
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
   ),
@@ -619,6 +626,77 @@ export const CopilotModelConfigurations = Schema.Record(
 );
 export type CopilotModelConfigurations = typeof CopilotModelConfigurations.Type;
 
+export const CopilotLlmProviderType = Schema.Literals(["openai", "azure", "anthropic"]);
+export type CopilotLlmProviderType = typeof CopilotLlmProviderType.Type;
+
+export const CopilotLlmProviderWireApi = Schema.Literals(["completions", "responses"]);
+export type CopilotLlmProviderWireApi = typeof CopilotLlmProviderWireApi.Type;
+
+export const CopilotLlmProviderModel = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  displayName: Schema.optional(TrimmedNonEmptyString),
+  contextWindowTokens: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
+  ),
+  reasoningEfforts: Schema.optional(Schema.Array(CopilotReasoningEffort)),
+  defaultReasoningEffort: Schema.optional(CopilotReasoningEffort),
+});
+export type CopilotLlmProviderModel = typeof CopilotLlmProviderModel.Type;
+
+export const CopilotLlmProvider = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  type: CopilotLlmProviderType,
+  baseUrl: TrimmedNonEmptyString,
+  apiKey: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  wireApi: CopilotLlmProviderWireApi.pipe(
+    Schema.withDecodingDefault(Effect.succeed("completions" as const)),
+  ),
+  azureApiVersion: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  models: Schema.Array(CopilotLlmProviderModel).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+});
+export type CopilotLlmProvider = typeof CopilotLlmProvider.Type;
+
+export const CopilotLlmProviderModelDiscoveryRequest = Schema.Struct({
+  type: CopilotLlmProviderType,
+  baseUrl: TrimmedNonEmptyString,
+  apiKey: TrimmedString,
+  azureApiVersion: TrimmedString,
+});
+export type CopilotLlmProviderModelDiscoveryRequest =
+  typeof CopilotLlmProviderModelDiscoveryRequest.Type;
+
+export class CopilotLlmProviderModelDiscoveryError extends Schema.TaggedErrorClass<CopilotLlmProviderModelDiscoveryError>()(
+  "CopilotLlmProviderModelDiscoveryError",
+  {
+    message: TrimmedNonEmptyString,
+  },
+) {}
+
+const COPILOT_LLM_MODEL_SLUG_PREFIX = "t3-copilot-provider:";
+
+export function makeCopilotLlmModelSlug(providerId: string, modelId: string): string {
+  return `${COPILOT_LLM_MODEL_SLUG_PREFIX}${encodeURIComponent(providerId)}/${encodeURIComponent(modelId)}`;
+}
+
+export function parseCopilotLlmModelSlug(
+  slug: string,
+): { readonly providerId: string; readonly modelId: string } | undefined {
+  if (!slug.startsWith(COPILOT_LLM_MODEL_SLUG_PREFIX)) return undefined;
+  const encoded = slug.slice(COPILOT_LLM_MODEL_SLUG_PREFIX.length);
+  const separator = encoded.indexOf("/");
+  if (separator <= 0 || separator === encoded.length - 1) return undefined;
+  try {
+    const providerId = decodeURIComponent(encoded.slice(0, separator)).trim();
+    const modelId = decodeURIComponent(encoded.slice(separator + 1)).trim();
+    return providerId && modelId ? { providerId, modelId } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const CopilotSettings = makeProviderSettingsSchema(
   {
     enabled: Schema.Boolean.pipe(
@@ -631,22 +709,16 @@ export const CopilotSettings = makeProviderSettingsSchema(
         title: "API base URL",
         description:
           "Custom model provider endpoint (BYOK). Leave blank to use GitHub Copilot with a GitHub token.",
-        providerSettingsForm: {
-          placeholder: "https://api.openai.com/v1",
-          clearWhenEmpty: "omit",
-        },
+        providerSettingsForm: { hidden: true },
       }),
     ),
-    providerType: TrimmedString.pipe(
+    providerType: Schema.Literals(["", "openai", "azure", "anthropic"]).pipe(
       Schema.withDecodingDefault(Effect.succeed("")),
       Schema.annotateKey({
         title: "Provider type",
         description:
           "API shape of the custom provider: openai, azure, or anthropic. Defaults to openai.",
-        providerSettingsForm: {
-          placeholder: "openai",
-          clearWhenEmpty: "omit",
-        },
+        providerSettingsForm: { hidden: true },
       }),
     ),
     apiKey: TrimmedString.pipe(
@@ -655,23 +727,16 @@ export const CopilotSettings = makeProviderSettingsSchema(
         title: "API key",
         description:
           "API key for the custom provider. Stored in plain text on disk; not needed for GitHub Copilot auth.",
-        providerSettingsForm: {
-          control: "password",
-          placeholder: "Optional",
-          clearWhenEmpty: "omit",
-        },
+        providerSettingsForm: { hidden: true },
       }),
     ),
-    wireApi: TrimmedString.pipe(
+    wireApi: Schema.Literals(["", "completions", "responses"]).pipe(
       Schema.withDecodingDefault(Effect.succeed("")),
       Schema.annotateKey({
         title: "Wire API",
         description:
           "API format for openai/azure providers: completions or responses. Defaults to completions.",
-        providerSettingsForm: {
-          placeholder: "completions",
-          clearWhenEmpty: "omit",
-        },
+        providerSettingsForm: { hidden: true },
       }),
     ),
     azureApiVersion: TrimmedString.pipe(
@@ -679,10 +744,7 @@ export const CopilotSettings = makeProviderSettingsSchema(
       Schema.annotateKey({
         title: "Azure API version",
         description: "Only used by azure providers. Leave blank for the GA versionless v1 route.",
-        providerSettingsForm: {
-          placeholder: "2024-10-21",
-          clearWhenEmpty: "omit",
-        },
+        providerSettingsForm: { hidden: true },
       }),
     ),
     customModels: Schema.Array(Schema.String).pipe(
@@ -691,6 +753,10 @@ export const CopilotSettings = makeProviderSettingsSchema(
     ),
     modelConfigurations: CopilotModelConfigurations.pipe(
       Schema.withDecodingDefault(Effect.succeed({})),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    llmProviders: Schema.Array(CopilotLlmProvider).pipe(
+      Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
   },
@@ -997,12 +1063,13 @@ const GrokSettingsPatch = Schema.Struct({
 const CopilotSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   baseUrl: Schema.optionalKey(TrimmedString),
-  providerType: Schema.optionalKey(TrimmedString),
+  providerType: Schema.optionalKey(Schema.Literals(["", "openai", "azure", "anthropic"])),
   apiKey: Schema.optionalKey(TrimmedString),
-  wireApi: Schema.optionalKey(TrimmedString),
+  wireApi: Schema.optionalKey(Schema.Literals(["", "completions", "responses"])),
   azureApiVersion: Schema.optionalKey(TrimmedString),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
   modelConfigurations: Schema.optionalKey(CopilotModelConfigurations),
+  llmProviders: Schema.optionalKey(Schema.Array(CopilotLlmProvider)),
 });
 
 const OpenCodeSettingsPatch = Schema.Struct({

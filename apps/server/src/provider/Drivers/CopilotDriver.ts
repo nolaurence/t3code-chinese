@@ -1,7 +1,11 @@
 import type { ModelInfo } from "@github/copilot-sdk";
+import { HostProcessArchitecture, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import {
   CopilotSettings,
   ProviderDriverKind,
+  makeCopilotLlmModelSlug,
+  type CopilotLlmProvider,
+  type CopilotLlmProviderModel,
   type CopilotModelConfiguration,
   type CopilotModelConfigurations,
   type ServerProvider,
@@ -101,7 +105,7 @@ function modelFromCustom(
   const efforts = configuration?.reasoningEfforts ?? knownModelReasoningEfforts(model) ?? [];
   return {
     slug: model,
-    name: model,
+    name: configuration?.displayName ?? model,
     isCustom: true,
     ...(configuration?.contextWindowTokens
       ? { contextWindowTokens: configuration.contextWindowTokens }
@@ -125,10 +129,23 @@ function modelFromCustom(
   };
 }
 
+function modelFromLlmProvider(
+  provider: CopilotLlmProvider,
+  model: CopilotLlmProviderModel,
+): ServerProviderModel {
+  return {
+    ...modelFromCustom(model.id, model),
+    slug: makeCopilotLlmModelSlug(provider.id, model.id),
+    name: model.displayName ?? model.id,
+    subProvider: provider.name,
+  };
+}
+
 function mergeModels(
   models: ReadonlyArray<ModelInfo>,
   customModels: ReadonlyArray<string>,
   configurations: CopilotModelConfigurations,
+  llmProviders: ReadonlyArray<CopilotLlmProvider>,
 ) {
   const merged = new Map<string, ServerProviderModel>();
   for (const model of models) {
@@ -138,6 +155,12 @@ function mergeModels(
   }
   for (const model of customModels) {
     if (!merged.has(model)) merged.set(model, modelFromCustom(model, configurations[model]));
+  }
+  for (const provider of llmProviders) {
+    for (const model of provider.models) {
+      const scoped = modelFromLlmProvider(provider, model);
+      merged.set(scoped.slug, scoped);
+    }
   }
   return [...merged.values()];
 }
@@ -150,6 +173,7 @@ function baseSnapshot(input: {
   readonly enabled: boolean;
   readonly customModels: ReadonlyArray<string>;
   readonly modelConfigurations: CopilotModelConfigurations;
+  readonly llmProviders: ReadonlyArray<CopilotLlmProvider>;
 }): ServerProvider {
   return {
     instanceId: input.instanceId,
@@ -170,9 +194,14 @@ function baseSnapshot(input: {
       ? "Checking bundled GitHub Copilot SDK runtime..."
       : "GitHub Copilot is disabled.",
     availability: "available",
-    models: input.customModels.map((model) =>
-      modelFromCustom(model, input.modelConfigurations[model]),
-    ),
+    models: [
+      ...input.customModels.map((model) =>
+        modelFromCustom(model, input.modelConfigurations[model]),
+      ),
+      ...input.llmProviders.flatMap((provider) =>
+        provider.models.map((model) => modelFromLlmProvider(provider, model)),
+      ),
+    ],
     slashCommands: [],
     skills: [],
   };
@@ -189,6 +218,8 @@ export const CopilotDriver: ProviderDriver<CopilotSettings, CopilotDriverEnv> = 
   create: ({ instanceId, displayName, accentColor, environment, enabled, config }) =>
     Effect.gen(function* () {
       const serverConfig = yield* ServerConfig;
+      const platform = yield* HostProcessPlatform;
+      const architecture = yield* HostProcessArchitecture;
       const effectiveConfig = { ...config, enabled } satisfies CopilotSettings;
       const continuationIdentity = defaultProviderContinuationIdentity({
         driverKind: DRIVER_KIND,
@@ -202,13 +233,17 @@ export const CopilotDriver: ProviderDriver<CopilotSettings, CopilotDriverEnv> = 
         enabled,
         customModels: effectiveConfig.customModels,
         modelConfigurations: effectiveConfig.modelConfigurations,
+        llmProviders: effectiveConfig.llmProviders,
       });
       const runtime = makeCopilotRuntime({
         instanceId,
         stateDir: serverConfig.stateDir,
         environment: mergeProviderInstanceEnvironment(environment),
+        platform,
+        architecture,
         sessionProvider: resolveCopilotSessionProvider(effectiveConfig),
         modelConfigurations: effectiveConfig.modelConfigurations,
+        llmProviders: effectiveConfig.llmProviders,
       });
       const adapter = yield* makeCopilotAdapter(runtime, {
         instanceId,
@@ -231,11 +266,24 @@ export const CopilotDriver: ProviderDriver<CopilotSettings, CopilotDriverEnv> = 
                 models,
                 effectiveConfig.customModels,
                 effectiveConfig.modelConfigurations,
+                effectiveConfig.llmProviders,
               ),
             };
           }
           const auth = await runtime.getAuthStatus();
           if (!auth.isAuthenticated) {
+            if (effectiveConfig.llmProviders.length > 0) {
+              return {
+                ...initialSnapshot,
+                status: "ready" as const,
+                auth: {
+                  status: "unauthenticated" as const,
+                  ...(auth.authType ? { type: auth.authType } : {}),
+                },
+                checkedAt: nowIso(),
+                message: `${effectiveConfig.llmProviders.length} custom LLM provider${effectiveConfig.llmProviders.length === 1 ? "" : "s"} configured. GitHub Copilot authentication is unavailable.`,
+              };
+            }
             return {
               ...initialSnapshot,
               status: "warning" as const,
@@ -264,6 +312,7 @@ export const CopilotDriver: ProviderDriver<CopilotSettings, CopilotDriverEnv> = 
               models,
               effectiveConfig.customModels,
               effectiveConfig.modelConfigurations,
+              effectiveConfig.llmProviders,
             ),
           };
         },

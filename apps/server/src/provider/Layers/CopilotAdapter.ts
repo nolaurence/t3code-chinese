@@ -4,8 +4,10 @@ import * as NodePath from "node:path";
 
 import type {
   CopilotSession,
+  ModelCapabilitiesOverride,
   PermissionRequest,
   PermissionRequestResult,
+  ProviderConfig,
   SessionConfig,
   SessionEvent,
 } from "@github/copilot-sdk";
@@ -47,11 +49,42 @@ import type { ProviderAdapterShape, ProviderThreadSnapshot } from "../Services/P
 
 const PROVIDER = ProviderDriverKind.make("githubCopilot");
 const REASONING_EFFORTS: ReadonlySet<string> = new Set(["low", "medium", "high", "xhigh", "max"]);
+const MAX_CONTEXT_OUTPUT_RESERVE_TOKENS = 16_000;
 const nowIso = () => DateTime.formatIso(DateTime.nowUnsafe());
 type CopilotReasoningEffort = NonNullable<SessionConfig["reasoningEffort"]>;
 type CopilotUserInputHandler = NonNullable<SessionConfig["onUserInputRequest"]>;
 type UserInputRequest = Parameters<CopilotUserInputHandler>[0];
 type UserInputResponse = { readonly answer: string; readonly wasFreeform: boolean };
+
+function modelContextOverrides(contextWindowTokens: number | undefined):
+  | {
+      readonly modelCapabilities: ModelCapabilitiesOverride;
+      readonly maxPromptTokens: number;
+    }
+  | undefined {
+  if (!contextWindowTokens) return undefined;
+  const outputReserve = Math.min(
+    MAX_CONTEXT_OUTPUT_RESERVE_TOKENS,
+    Math.max(1, Math.floor(contextWindowTokens * 0.1)),
+  );
+  const maxPromptTokens = Math.max(1, contextWindowTokens - outputReserve);
+  return {
+    modelCapabilities: {
+      limits: {
+        max_context_window_tokens: contextWindowTokens,
+        max_prompt_tokens: maxPromptTokens,
+      },
+    },
+    maxPromptTokens,
+  };
+}
+
+function providerWithPromptLimit(
+  provider: ProviderConfig,
+  maxPromptTokens: number | undefined,
+): ProviderConfig {
+  return maxPromptTokens ? { ...provider, maxPromptTokens } : provider;
+}
 
 const PLAN_MODE_INSTRUCTION = [
   "You are in plan-only mode.",
@@ -66,13 +99,25 @@ interface TrackedTextItem {
   started: boolean;
 }
 
+interface TrackedToolItem {
+  readonly itemId: RuntimeItemId;
+  readonly toolName: string;
+  readonly itemType: CanonicalItemType;
+  readonly arguments: unknown;
+  readonly command: unknown;
+  readonly mcpServerName: string | undefined;
+  readonly mcpToolName: string | undefined;
+  partialOutput: string;
+  progressMessage: string;
+}
+
 interface ActiveCopilotTurn {
   readonly id: TurnId;
   readonly interactionMode: "default" | "plan";
   readonly items: Array<unknown>;
   readonly messages: Map<string, TrackedTextItem>;
   readonly reasoning: Map<string, TrackedTextItem>;
-  readonly tools: Map<string, { readonly itemId: RuntimeItemId; readonly toolName: string }>;
+  readonly tools: Map<string, TrackedToolItem>;
   providerTurnId?: string;
   planMarkdown: string;
   errorMessage?: string;
@@ -98,6 +143,7 @@ interface CopilotSessionContext {
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
   model?: string;
+  providerId?: string;
   reasoningEffort?: CopilotReasoningEffort;
   activeTurn?: ActiveCopilotTurn;
   turnCount: number;
@@ -206,7 +252,12 @@ export function isCopilotPermissionAllowedInPlanMode(request: PermissionRequest)
   return ["read", "url"].includes(getPermissionKind(request));
 }
 
-function toItemType(toolName: string): CanonicalItemType {
+function toItemType(
+  toolName: string,
+  mcpServerName?: string,
+  mcpToolName?: string,
+): CanonicalItemType {
+  if (mcpServerName || mcpToolName) return "mcp_tool_call";
   const normalized = toolName.toLowerCase();
   if (/shell|bash|command|terminal|execute/.test(normalized)) return "command_execution";
   if (/edit|write|patch|create|delete|move/.test(normalized)) return "file_change";
@@ -215,6 +266,82 @@ function toItemType(toolName: string): CanonicalItemType {
   if (/agent|task/.test(normalized)) return "collab_agent_tool_call";
   if (/mcp/.test(normalized)) return "mcp_tool_call";
   return "dynamic_tool_call";
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function copilotToolCommand(argumentsValue: unknown, displayCommand: string | undefined): unknown {
+  const normalizedDisplayCommand = displayCommand?.trim();
+  if (normalizedDisplayCommand) return normalizedDisplayCommand;
+  if (typeof argumentsValue === "string") return argumentsValue;
+  const argumentsRecord = asRecord(argumentsValue);
+  return argumentsRecord?.command ?? argumentsRecord?.cmd ?? argumentsRecord?.script;
+}
+
+function formatToolValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || undefined;
+  }
+  if (value === undefined || value === null) return undefined;
+  const serialized = JSON.stringify(value);
+  return typeof serialized === "string" ? serialized.trim() || undefined : undefined;
+}
+
+function truncateToolDetailValue(value: string, limit: number): string {
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  return normalized.length > limit ? `${normalized.slice(0, limit - 1).trimEnd()}…` : normalized;
+}
+
+function copilotToolDetail(
+  tool: TrackedToolItem,
+  output: string | undefined,
+  error: string | undefined,
+  progress?: string,
+): string | undefined {
+  if (tool.itemType === "mcp_tool_call") return error;
+  const input = tool.command === undefined ? formatToolValue(tool.arguments) : undefined;
+  const blocks = [
+    ...(input ? [`Input: ${truncateToolDetailValue(input, 80)}`] : []),
+    ...(progress ? [`Status: ${truncateToolDetailValue(progress, 120)}`] : []),
+    ...(output ? [`Output:\n${output.trim()}`] : []),
+    ...(error ? [`Error:\n${error.trim()}`] : []),
+  ];
+  return blocks.length > 0 ? blocks.join("\n\n") : undefined;
+}
+
+function copilotToolData(
+  toolCallId: string,
+  tool: TrackedToolItem,
+  status: "inProgress" | "completed" | "failed",
+  rawOutput: unknown,
+): Record<string, unknown> {
+  if (tool.itemType === "mcp_tool_call") {
+    return {
+      toolCallId,
+      toolName: tool.toolName,
+      item: {
+        type: "mcpToolCall",
+        id: toolCallId,
+        tool: tool.mcpToolName ?? tool.toolName,
+        ...(tool.mcpServerName ? { server: tool.mcpServerName } : {}),
+        status,
+        ...(tool.arguments !== undefined ? { arguments: tool.arguments } : {}),
+        ...(rawOutput !== undefined ? { result: rawOutput } : {}),
+      },
+    };
+  }
+  return {
+    toolCallId,
+    toolName: tool.toolName,
+    ...(tool.command !== undefined ? { command: tool.command } : {}),
+    ...(tool.arguments !== undefined ? { arguments: tool.arguments } : {}),
+    ...(rawOutput !== undefined ? { rawOutput } : {}),
+  };
 }
 
 function toApprovalResult(decision: ProviderApprovalDecision): PermissionRequestResult {
@@ -490,17 +617,38 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       case "tool.execution_start": {
         if (!turn) return;
         const itemId = RuntimeItemId.make(event.data.toolCallId);
-        turn.tools.set(event.data.toolCallId, { itemId, toolName: event.data.toolName });
+        const tool: TrackedToolItem = {
+          itemId,
+          toolName: event.data.toolName,
+          itemType: toItemType(
+            event.data.toolName,
+            event.data.mcpServerName,
+            event.data.mcpToolName,
+          ),
+          arguments: event.data.arguments,
+          command: copilotToolCommand(
+            event.data.arguments,
+            event.data.shellToolInfo?.displayCommand,
+          ),
+          mcpServerName: event.data.mcpServerName,
+          mcpToolName: event.data.mcpToolName,
+          partialOutput: "",
+          progressMessage: "",
+        };
+        turn.tools.set(event.data.toolCallId, tool);
         yield* publish(ctx, {
           type: "item.started",
           ...eventBase(ctx, event),
           turnId: turn.id,
           itemId,
           payload: {
-            itemType: toItemType(event.data.toolName),
+            itemType: tool.itemType,
             status: "inProgress",
             title: event.data.toolName,
-            data: { arguments: event.data.arguments },
+            ...(tool.itemType !== "mcp_tool_call" && tool.command === undefined
+              ? { detail: copilotToolDetail(tool, undefined, undefined) }
+              : {}),
+            data: copilotToolData(event.data.toolCallId, tool, "inProgress", undefined),
           },
         });
         return;
@@ -508,15 +656,20 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       case "tool.execution_progress": {
         if (!turn) return;
         const tool = turn.tools.get(event.data.toolCallId);
+        if (!tool) return;
+        tool.progressMessage = event.data.progressMessage;
+        const detail = copilotToolDetail(tool, undefined, undefined, tool.progressMessage);
         yield* publish(ctx, {
-          type: "tool.progress",
+          type: "item.updated",
           ...eventBase(ctx, event),
           turnId: turn.id,
-          ...(tool ? { itemId: tool.itemId } : {}),
+          itemId: tool.itemId,
           payload: {
-            toolUseId: event.data.toolCallId,
-            ...(tool ? { toolName: tool.toolName } : {}),
-            summary: event.data.progressMessage,
+            itemType: tool.itemType,
+            status: "inProgress",
+            title: tool.toolName,
+            ...(detail ? { detail } : {}),
+            data: copilotToolData(event.data.toolCallId, tool, "inProgress", undefined),
           },
         });
         return;
@@ -524,12 +677,21 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       case "tool.execution_partial_result": {
         if (!turn) return;
         const tool = turn.tools.get(event.data.toolCallId);
+        if (!tool) return;
+        tool.partialOutput += event.data.partialOutput;
+        const detail = copilotToolDetail(tool, tool.partialOutput, undefined);
         yield* publish(ctx, {
-          type: "content.delta",
+          type: "item.updated",
           ...eventBase(ctx, event),
           turnId: turn.id,
-          ...(tool ? { itemId: tool.itemId } : {}),
-          payload: { streamKind: "command_output", delta: event.data.partialOutput },
+          itemId: tool.itemId,
+          payload: {
+            itemType: tool.itemType,
+            status: "inProgress",
+            title: tool.toolName,
+            ...(detail ? { detail } : {}),
+            data: copilotToolData(event.data.toolCallId, tool, "inProgress", tool.partialOutput),
+          },
         });
         return;
       }
@@ -538,17 +700,47 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         const tool = turn.tools.get(event.data.toolCallId);
         const itemId = tool?.itemId ?? RuntimeItemId.make(event.data.toolCallId);
         const toolName = tool?.toolName ?? "Tool";
+        const trackedTool =
+          tool ??
+          ({
+            itemId,
+            toolName,
+            itemType: toItemType(toolName),
+            arguments: undefined,
+            command: undefined,
+            mcpServerName: undefined,
+            mcpToolName: undefined,
+            partialOutput: "",
+            progressMessage: "",
+          } satisfies TrackedToolItem);
+        const output =
+          event.data.result?.detailedContent ??
+          event.data.result?.content ??
+          (trackedTool.partialOutput.trim() || undefined);
+        const error = event.data.error?.message;
+        const detail = copilotToolDetail(
+          trackedTool,
+          output,
+          error,
+          output || error ? undefined : trackedTool.progressMessage || undefined,
+        );
+        turn.tools.delete(event.data.toolCallId);
         yield* publish(ctx, {
           type: "item.completed",
           ...eventBase(ctx, event),
           turnId: turn.id,
           itemId,
           payload: {
-            itemType: toItemType(toolName),
+            itemType: trackedTool.itemType,
             status: event.data.success ? "completed" : "failed",
             title: toolName,
-            ...(event.data.error?.message ? { detail: event.data.error.message } : {}),
-            data: { result: event.data.result, error: event.data.error },
+            ...(detail ? { detail } : {}),
+            data: copilotToolData(
+              event.data.toolCallId,
+              trackedTool,
+              event.data.success ? "completed" : "failed",
+              event.data.result ?? output,
+            ),
           },
         });
         return;
@@ -781,7 +973,12 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         const resume = parseResumeCursor(input.resumeCursor);
         const model = input.modelSelection?.model;
         const reasoningEffort = getReasoningEffort(input.modelSelection);
-        const modelConfiguration = model ? options.modelConfigurations?.[model] : undefined;
+        const resolvedModel = yield* Effect.try({
+          try: () => runtime.resolveModel(model),
+          catch: (cause) => makeRequestError("session.resolveModel", cause),
+        });
+        const modelConfiguration = resolvedModel.configuration;
+        const contextOverrides = modelContextOverrides(modelConfiguration?.contextWindowTokens);
         const earlyEvents: SessionEvent[] = [];
         let ctx: CopilotSessionContext | undefined;
         const onEvent = (event: SessionEvent) => {
@@ -793,20 +990,19 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
           try: () => {
             const config = {
               workingDirectory: cwd,
-              ...(model ? { model } : {}),
+              ...(resolvedModel.sdkModel ? { model: resolvedModel.sdkModel } : {}),
               ...(reasoningEffort ? { reasoningEffort } : {}),
-              ...(modelConfiguration?.contextWindowTokens
+              ...(contextOverrides
+                ? { modelCapabilities: contextOverrides.modelCapabilities }
+                : {}),
+              ...(resolvedModel.provider
                 ? {
-                    modelCapabilities: {
-                      limits: {
-                        max_context_window_tokens: modelConfiguration.contextWindowTokens,
-                      },
-                    },
+                    provider: providerWithPromptLimit(
+                      resolvedModel.provider,
+                      contextOverrides?.maxPromptTokens,
+                    ),
                   }
                 : {}),
-              // BYOK: a configured custom provider makes the whole session
-              // bypass GitHub Copilot auth and call the provider directly.
-              ...(runtime.sessionProvider ? { provider: runtime.sessionProvider } : {}),
               streaming: true,
               enableFileChangeTracking: true,
               clientName: "T3 Code",
@@ -840,6 +1036,7 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
           cwd,
           runtimeMode: input.runtimeMode,
           ...(model ? { model } : {}),
+          ...(resolvedModel.providerId ? { providerId: resolvedModel.providerId } : {}),
           ...(reasoningEffort ? { reasoningEffort } : {}),
           turns: [],
           pendingApprovals: new Map(),
@@ -897,9 +1094,28 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         const nextModel = input.modelSelection?.model;
         const nextEffort = getReasoningEffort(input.modelSelection);
         if (nextModel && (nextModel !== ctx.model || nextEffort !== ctx.reasoningEffort)) {
+          const resolvedNextModel = yield* Effect.try({
+            try: () => runtime.resolveModel(nextModel),
+            catch: (cause) => makeRequestError("session.resolveModel", cause),
+          });
+          if (resolvedNextModel.providerId !== ctx.providerId) {
+            return yield* new ProviderAdapterValidationError({
+              provider: PROVIDER,
+              operation: "sendTurn",
+              issue: "Changing the Copilot LLM provider requires a new thread.",
+            });
+          }
+          const nextContextOverrides = modelContextOverrides(
+            resolvedNextModel.configuration?.contextWindowTokens,
+          );
           yield* Effect.tryPromise({
             try: () =>
-              ctx.sdkSession.setModel(nextModel, nextEffort ? { reasoningEffort: nextEffort } : {}),
+              ctx.sdkSession.setModel(resolvedNextModel.sdkModel ?? nextModel, {
+                ...(nextEffort ? { reasoningEffort: nextEffort } : {}),
+                ...(nextContextOverrides
+                  ? { modelCapabilities: nextContextOverrides.modelCapabilities }
+                  : {}),
+              }),
             catch: (cause) => makeRequestError("session.setModel", cause),
           });
           ctx.model = nextModel;

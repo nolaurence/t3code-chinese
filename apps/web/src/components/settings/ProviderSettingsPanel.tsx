@@ -6,6 +6,8 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   defaultInstanceIdForDriver,
+  type CopilotLlmProviderModel,
+  type CopilotLlmProviderModelDiscoveryRequest,
   type EnvironmentId,
   PROVIDER_DISPLAY_NAMES,
   ProviderDriverKind,
@@ -481,6 +483,9 @@ export function EnvironmentProviderSettings({
   const updateProvider = useAtomCommand(serverEnvironment.updateProvider, {
     reportFailure: false,
   });
+  const discoverCopilotLlmModels = useAtomCommand(serverEnvironment.discoverCopilotLlmModels, {
+    reportFailure: false,
+  });
   const [providerRefreshTarget, setProviderRefreshTarget] = useState<ProviderRefreshTarget | null>(
     null,
   );
@@ -597,6 +602,18 @@ export function EnvironmentProviderSettings({
       });
     },
     [environmentId, t, updateProvider],
+  );
+  const discoverEnvironmentCopilotLlmModels = useCallback(
+    async (
+      input: CopilotLlmProviderModelDiscoveryRequest,
+    ): Promise<ReadonlyArray<CopilotLlmProviderModel>> => {
+      const result = await discoverCopilotLlmModels({ environmentId, input });
+      if (result._tag === "Success") {
+        return result.value;
+      }
+      throw squashAtomCommandFailure(result);
+    },
+    [discoverCopilotLlmModels, environmentId],
   );
 
   interface InstanceRow {
@@ -992,6 +1009,9 @@ export function EnvironmentProviderSettings({
                     ...modelPreferences,
                     modelOrder,
                   })
+                }
+                onDiscoverCopilotLlmModels={
+                  readOnly ? undefined : discoverEnvironmentCopilotLlmModels
                 }
                 onRunUpdate={
                   showInlineUpdateButton && updateCandidate

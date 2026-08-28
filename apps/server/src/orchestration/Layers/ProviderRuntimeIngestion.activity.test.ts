@@ -115,6 +115,7 @@ describe("runtimeEventToActivities tool streaming persistence", () => {
     const payload = activities[0]?.payload as Record<string, unknown>;
     const data = payload.data as Record<string, unknown>;
     expect(payload.status).toBe("inProgress");
+    expect(payload.title).toBe("Render");
     expect(data.toolCallId).toBe("tool-call-1");
     expect(data.command).toBe("blender --render");
     expect(data.rawOutput).toEqual({ content: "first line of output" });
@@ -139,6 +140,7 @@ describe("runtimeEventToActivities tool streaming persistence", () => {
 
     expect(activities).toHaveLength(1);
     const payload = activities[0]?.payload as Record<string, unknown>;
+    expect(payload.title).toBe("Render");
     expect(payload.data).toEqual(streamingData);
   });
 });
