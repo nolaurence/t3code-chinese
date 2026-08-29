@@ -35,7 +35,7 @@ describe("ChangedFilesCard", () => {
     expect(markup).toContain("size-3");
     expect(markup).toContain('aria-label="Collapse all folders"');
     expect(markup).toContain('aria-label="Open diff"');
-    expect(markup).toContain('role="group" aria-label="2 additions, 1 deletions"');
+    expect(markup).toContain('role="group" aria-label="2 additions, 1 deletion"');
     expect(markup).toContain("1 changed file");
     expect(markup).not.toContain("1 changed files");
   });
@@ -69,6 +69,8 @@ describe("ChangedFilesCard", () => {
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain("apps");
     expect(markup).toContain("2 files");
+    expect(markup).toContain("1 file");
+    expect(markup).not.toContain("1 files");
     expect(markup).toContain("packages");
     expect(markup).toContain("root");
     expect(markup).toContain("App.tsx");

@@ -1,8 +1,7 @@
 import type { EnvironmentId, ProjectId, PullRequestCheck } from "@t3tools/contracts";
-import { Children, isValidElement, type ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { PullRequestChecksPopover } from "./PullRequestChecksPopover";
 import type { EnvironmentPullRequestEntry } from "./pullRequestList.logic";
 import { PullRequestRow } from "./PullRequestRow";
 import { pullRequestChecksState } from "./pullRequestPresentation";
@@ -24,17 +23,6 @@ describe("pullRequestChecksState", () => {
     expect(pullRequestChecksState([])).toBe(null);
   });
 });
-
-/** Every element of the tree the row returned, so a nested indicator can be looked for. */
-function flatten(node: ReactNode): ReadonlyArray<ReturnType<typeof Object>> {
-  const found: unknown[] = [];
-  for (const child of Children.toArray(node)) {
-    if (!isValidElement(child)) continue;
-    found.push(child);
-    found.push(...flatten((child.props as { readonly children?: ReactNode }).children));
-  }
-  return found as ReadonlyArray<ReturnType<typeof Object>>;
-}
 
 function entry(overrides: Partial<EnvironmentPullRequestEntry>): EnvironmentPullRequestEntry {
   return {
@@ -61,25 +49,23 @@ function entry(overrides: Partial<EnvironmentPullRequestEntry>): EnvironmentPull
   } as EnvironmentPullRequestEntry;
 }
 
-function row(overrides: Partial<EnvironmentPullRequestEntry>): ReactNode {
-  return PullRequestRow.type({
-    entry: entry(overrides),
-    selected: false,
-    showProjectTitle: false,
-    showProvider: false,
-    onSelect: () => {},
-  });
+function row(overrides: Partial<EnvironmentPullRequestEntry>): string {
+  return renderToStaticMarkup(
+    <PullRequestRow
+      entry={entry(overrides)}
+      selected={false}
+      showProjectTitle={false}
+      showProvider={false}
+      onSelect={() => {}}
+    />,
+  );
 }
 
 describe("PullRequestRow checks indicator", () => {
-  function indicators(node: ReactNode): number {
-    return flatten(node).filter(
-      (element) => (element as { type?: unknown }).type === PullRequestChecksPopover,
-    ).length;
-  }
-
   it("shows the indicator only for a row the host reported a rollup for", () => {
-    expect(indicators(row({ checksState: "failing" }))).toBe(1);
-    expect(indicators(row({}))).toBe(0);
+    expect(row({ checksState: "failing" })).toContain(
+      'aria-label="Checks: Some checks were not successful"',
+    );
+    expect(row({})).not.toContain('aria-label="Checks:');
   });
 });

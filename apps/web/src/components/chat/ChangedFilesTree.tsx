@@ -87,7 +87,12 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
               )}
             />
             <span className="flex shrink-0 items-center gap-1 whitespace-nowrap font-medium text-foreground text-xs leading-4">
-              <span>{t("chat.changedFiles.count", { count: files.length })}</span>
+              <span>
+                {t(
+                  files.length === 1 ? "chat.changedFiles.countOne" : "chat.changedFiles.countMany",
+                  { count: files.length },
+                )}
+              </span>
               {hasNonZeroStat(summaryStat) && (
                 <DiffStatLabel
                   additions={summaryStat.additions}
@@ -172,7 +177,14 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
               <span key={scope.label} className="inline-flex items-center gap-1">
                 {index > 0 ? <span aria-hidden="true">·</span> : null}
                 <span className="font-mono text-foreground/75">{scope.label}</span>
-                <span>{t("common.files", { count: scope.fileCount })}</span>
+                <span>
+                  {t(
+                    scope.fileCount === 1
+                      ? "chat.changedFiles.scopeCountOne"
+                      : "chat.changedFiles.scopeCountMany",
+                    { count: scope.fileCount },
+                  )}
+                </span>
               </span>
             ))}
           </p>

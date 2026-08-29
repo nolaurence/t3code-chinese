@@ -17,16 +17,16 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
   const { t } = useI18n();
   const fallbackLabel =
     approval.requestKind === "command"
-      ? t("chat.approval.command")
+      ? t("chat.approval.commandCompact")
       : approval.requestKind === "file-read"
-        ? t("chat.approval.fileRead")
-        : t("chat.approval.fileChange");
+        ? t("chat.approval.fileReadCompact")
+        : t("chat.approval.fileChangeCompact");
   const detailAriaLabel =
     approval.requestKind === "command"
-      ? t("chat.toolActivity.runCommand")
+      ? t("chat.approval.commandDetail")
       : approval.requestKind === "file-read"
-        ? t("chat.toolActivity.readFile")
-        : t("chat.toolActivity.editFile");
+        ? t("chat.approval.fileReadDetail")
+        : t("chat.approval.fileChangeDetail");
 
   return (
     <div

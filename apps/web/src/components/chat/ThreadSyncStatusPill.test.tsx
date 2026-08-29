@@ -5,8 +5,8 @@ import { ThreadSyncStatusPill } from "./ThreadSyncStatusPill";
 
 describe("ThreadSyncStatusPill", () => {
   it.each([
-    ["loading", "Loading messages..."],
-    ["syncing", "Syncing messages..."],
+    ["loading", "Loading messages\u2026"],
+    ["syncing", "Syncing messages\u2026"],
   ] as const)("renders the %s message sync phase", (phase, label) => {
     const markup = renderToStaticMarkup(<ThreadSyncStatusPill phase={phase} />);
 

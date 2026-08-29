@@ -14,7 +14,7 @@ describe("ComposerPendingApprovalActions", () => {
       />,
     );
 
-    expect(markup).toContain(">Cancel<");
+    expect(markup).toContain(">Cancel turn<");
     expect(markup).toContain("Always allow this session");
     expect(markup).not.toContain(">Always allow<");
     expect(markup).toContain("h-5");
