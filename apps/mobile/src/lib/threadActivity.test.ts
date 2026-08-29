@@ -342,6 +342,33 @@ describe("buildThreadFeed", () => {
     );
   });
 
+  it("uses the activity summary when a redundant tool title is projected away", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-summary-fallback"),
+      projectId: ProjectId.make("project-1"),
+      title: "Projected tool title",
+      activities: [
+        makeActivity({
+          id: EventId.make("tool-completed"),
+          kind: "tool.completed",
+          tone: "tool",
+          summary: "Run tests",
+          payload: {
+            itemType: "command_execution",
+            detail: "/bin/zsh -lc 'bun run test'",
+          },
+        }),
+      ],
+    });
+
+    const [group] = buildThreadFeed(thread);
+
+    expect(group).toMatchObject({
+      type: "activity-group",
+      activities: [{ summary: "Run tests" }],
+    });
+  });
+
   it("keeps MCP inputs available to expanded mobile work rows", () => {
     const turnId = TurnId.make("turn-mcp");
     const thread = makeThread({

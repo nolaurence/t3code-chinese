@@ -1,13 +1,25 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { OrchestrationThreadActivity } from "@t3tools/contracts";
-import { projectActivityPayload } from "./ActivityPayloadProjection.ts";
+import type {
+  OrchestrationEvent,
+  OrchestrationThreadActivity,
+  OrchestrationThreadDetailSnapshot,
+} from "@t3tools/contracts";
+import {
+  projectActivityEvent,
+  projectActivityPayload,
+  projectThreadDetailSnapshot,
+} from "./ActivityPayloadProjection.ts";
 
-function activity(payload: Record<string, unknown>): OrchestrationThreadActivity {
+function activity(
+  payload: Record<string, unknown>,
+  summary = "Tool",
+  kind: OrchestrationThreadActivity["kind"] = "tool.completed",
+): OrchestrationThreadActivity {
   return {
     id: "activity-1",
     tone: "tool",
-    kind: "tool.completed",
-    summary: "Tool",
+    kind,
+    summary,
     payload,
     turnId: null,
     createdAt: "2026-08-01T10:00:00.000Z",
@@ -21,6 +33,52 @@ function activity(payload: Record<string, unknown>): OrchestrationThreadActivity
  * assertions are the tripwire.
  */
 describe("projectActivityPayload", () => {
+  it("omits only lifecycle titles already carried by the activity summary", () => {
+    const updated = projectActivityPayload(
+      activity(
+        { title: " Render ", itemType: "command_execution", data: {} },
+        "Render",
+        "tool.updated",
+      ),
+    );
+    const completed = projectActivityPayload(activity({ title: "Render" }, " Render "));
+    const distinct = projectActivityPayload(activity({ title: "Render" }, "Tool completed"));
+    const started = projectActivityPayload(
+      activity({ title: "Render" }, "Render started", "tool.started"),
+    );
+
+    expect(updated.payload).not.toHaveProperty("title");
+    expect(completed.payload).not.toHaveProperty("title");
+    expect(distinct.payload).toMatchObject({ title: "Render" });
+    expect(started.payload).toMatchObject({ title: "Render" });
+  });
+
+  it("omits unrendered tool.started rows from snapshots", () => {
+    const started = {
+      ...activity({ title: "Render" }, "Render started", "tool.started"),
+      id: "tool-started",
+    };
+    const completed = {
+      ...activity({ title: "Render" }, "Render", "tool.completed"),
+      id: "tool-completed",
+    };
+    const snapshot = {
+      thread: { activities: [started, completed] },
+    } as unknown as OrchestrationThreadDetailSnapshot;
+
+    const projected = projectThreadDetailSnapshot(snapshot);
+    const liveEvent = projectActivityEvent({
+      type: "thread.activity-appended",
+      payload: { activity: started },
+    } as unknown as OrchestrationEvent);
+
+    expect(projected.thread.activities.map((entry) => entry.id)).toEqual(["tool-completed"]);
+    expect(liveEvent.type).toBe("thread.activity-appended");
+    if (liveEvent.type === "thread.activity-appended") {
+      expect(liveEvent.payload.activity.id).toBe("tool-started");
+    }
+  });
+
   it("preserves tool attribution (agentId/parentToolUseId) through data slimming", () => {
     const projected = projectActivityPayload(
       activity({

@@ -115,7 +115,8 @@ describe("runtimeEventToActivities tool streaming persistence", () => {
     const payload = activities[0]?.payload as Record<string, unknown>;
     const data = payload.data as Record<string, unknown>;
     expect(payload.status).toBe("inProgress");
-    expect(payload.title).toBe("Render");
+    expect(activities[0]?.summary).toBe("Render");
+    expect(payload.title).toBeUndefined();
     expect(data.toolCallId).toBe("tool-call-1");
     expect(data.command).toBe("blender --render");
     expect(data.rawOutput).toEqual({ content: "first line of output" });

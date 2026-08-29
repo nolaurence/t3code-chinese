@@ -18,6 +18,21 @@ function asTrimmedString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function omitRedundantToolLifecycleTitle(
+  activity: OrchestrationThreadActivity,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (activity.kind !== "tool.updated" && activity.kind !== "tool.completed") {
+    return payload;
+  }
+  const title = asTrimmedString(payload.title);
+  if (!title || title !== asTrimmedString(activity.summary)) {
+    return payload;
+  }
+  const { title: _title, ...payloadWithoutTitle } = payload;
+  return payloadWithoutTitle;
+}
+
 function pushChangedFile(target: string[], seen: Set<string>, value: unknown): void {
   const normalized = asTrimmedString(value);
   if (!normalized || seen.has(normalized)) {
@@ -337,16 +352,21 @@ export function projectActivityPayload(
   activity: OrchestrationThreadActivity,
 ): OrchestrationThreadActivity {
   const payload = asRecord(activity.payload);
-  const data = asRecord(payload?.data);
-  if (!payload || !data) {
+  if (!payload) {
     return activity;
+  }
+
+  const wirePayload = omitRedundantToolLifecycleTitle(activity, payload);
+  const data = asRecord(payload.data);
+  if (!data) {
+    return wirePayload === payload ? activity : { ...activity, payload: wirePayload };
   }
 
   const itemStatus = asRecord(data.item)?.status;
   const projectedPayload =
-    payload.status === "completed" && (itemStatus === "failed" || itemStatus === "declined")
-      ? { ...payload, status: itemStatus }
-      : payload;
+    wirePayload.status === "completed" && (itemStatus === "failed" || itemStatus === "declined")
+      ? { ...wirePayload, status: itemStatus }
+      : wirePayload;
 
   if (payload.itemType === "mcp_tool_call") {
     return {
@@ -562,6 +582,17 @@ function dropSupersededToolUpdatedActivities(
   });
 }
 
+/**
+ * Both clients discard tool.started rows before deriving the work log. A
+ * snapshot can omit them because its sequence already covers every persisted
+ * event; live rows remain present so resumed stream sequencing is stable.
+ */
+function dropUnrenderedToolStartedActivities(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+): ReadonlyArray<OrchestrationThreadActivity> {
+  return activities.filter((activity) => activity.kind !== "tool.started");
+}
+
 export function projectThreadDetailSnapshot(
   snapshot: OrchestrationThreadDetailSnapshot,
 ): OrchestrationThreadDetailSnapshot {
@@ -569,8 +600,10 @@ export function projectThreadDetailSnapshot(
     ...snapshot,
     thread: {
       ...snapshot.thread,
-      activities: dropSupersededToolUpdatedActivities(
-        dropStaleContextWindowActivities(snapshot.thread.activities),
+      activities: dropUnrenderedToolStartedActivities(
+        dropSupersededToolUpdatedActivities(
+          dropStaleContextWindowActivities(snapshot.thread.activities),
+        ),
       ).map(projectActivityPayload),
     },
   };

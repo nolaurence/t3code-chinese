@@ -26,7 +26,7 @@ interface ProviderTransferBudget {
   readonly measuredTurnWebSocketMessages: number;
 }
 
-// These caps leave roughly 30% headroom above the client projection of the
+// These caps leave roughly 20% headroom above the client projection of the
 // deterministic 9 MB retained-result fixture. Full MCP results stay in
 // persistence, so accidentally shipping them again exceeds these caps by
 // orders of magnitude. The CI report preserves exact values for review.

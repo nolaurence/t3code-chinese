@@ -1266,6 +1266,8 @@ describe("deriveWorkLogEntries", () => {
     ];
 
     const [entry] = deriveWorkLogEntries(activities);
+    expect(entry?.label).toBe("t3-code · preview_snapshot");
+    expect(entry).not.toHaveProperty("toolTitle");
     expect(entry?.toolData).toEqual(item);
     expect(entry?.toolCallId).toBe("call-1");
   });
