@@ -4,6 +4,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -19,6 +20,7 @@ import {
 } from "./PiProvider.ts";
 
 const decodePiSettings = Schema.decodeSync(PiAgentSettings);
+const encodeUnknownJsonString = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
 describe("buildInitialPiProviderSnapshot", () => {
   it.effect("returns a disabled snapshot when Pi is disabled", () =>
@@ -194,6 +196,100 @@ it.layer(NodeServices.layer)("checkPiProviderStatus", (it) => {
       expect(snapshot.version).toBe("0.80.7");
       expect(snapshot.models.map((model) => model.slug)).toContain("openai/gpt-5.4");
     }).pipe(Effect.provide(Layer.merge(NodeServices.layer, TestClock.layer()))),
+  );
+
+  it.effect("reports an RPC startup with no configured models as unauthenticated", () =>
+    Effect.gen(function* () {
+      let spawnCount = 0;
+      const rpcOutput = yield* Queue.unbounded<Uint8Array>();
+      const rpcExit = yield* Deferred.make<ChildProcessSpawner.ExitCode>();
+      const rpcCommands: string[] = [];
+      yield* Queue.offer(
+        rpcOutput,
+        new TextEncoder().encode(
+          `${encodeUnknownJsonString({
+            type: "ready",
+            protocolVersion: 1,
+            supportedProtocolVersions: [1, 2],
+            maxFrameBytes: 1024 * 1024,
+            maxReassembledFrameBytes: 64 * 1024 * 1024,
+          })}\n`,
+        ),
+      );
+      const spawner = ChildProcessSpawner.make(() => {
+        spawnCount += 1;
+        if (spawnCount === 1) {
+          return Effect.succeed(
+            ChildProcessSpawner.makeHandle({
+              pid: ChildProcessSpawner.ProcessId(3),
+              exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+              isRunning: Effect.succeed(false),
+              kill: () => Effect.void,
+              unref: Effect.succeed(Effect.void),
+              stdin: Sink.drain,
+              stdout: Stream.encodeText(Stream.make("18.0.4\n")),
+              stderr: Stream.empty,
+              all: Stream.empty,
+              getInputFd: () => Sink.drain,
+              getOutputFd: () => Stream.empty,
+            }),
+          );
+        }
+
+        return Effect.succeed(
+          ChildProcessSpawner.makeHandle({
+            pid: ChildProcessSpawner.ProcessId(4),
+            exitCode: Deferred.await(rpcExit),
+            isRunning: Effect.succeed(false),
+            kill: () => Effect.void,
+            unref: Effect.succeed(Effect.void),
+            stdin: Sink.forEach((bytes: Uint8Array) => {
+              const request = JSON.parse(new TextDecoder().decode(bytes)) as {
+                readonly id: string;
+                readonly type: string;
+              };
+              rpcCommands.push(request.type);
+              return request.type === "negotiate_protocol"
+                ? Queue.offer(
+                    rpcOutput,
+                    new TextEncoder().encode(
+                      `${JSON.stringify({
+                        type: "response",
+                        id: request.id,
+                        command: request.type,
+                        success: true,
+                        data: { protocolVersion: 2 },
+                      })}\n`,
+                    ),
+                  ).pipe(Effect.asVoid)
+                : Deferred.succeed(rpcExit, ChildProcessSpawner.ExitCode(1)).pipe(Effect.asVoid);
+            }),
+            stdout: Stream.fromQueue(rpcOutput),
+            stderr: Stream.encodeText(
+              Stream.make(
+                "No models available. Use /login or set an API key environment variable.\n",
+              ),
+            ),
+            all: Stream.empty,
+            getInputFd: () => Sink.drain,
+            getOutputFd: () => Stream.empty,
+          }),
+        );
+      });
+
+      const snapshot = yield* checkPiProviderStatus(
+        decodePiSettings({ binaryPath: "/test/omp" }),
+        process.cwd(),
+        process.env,
+        { providerName: "Oh My Pi", defaultBinaryPath: "omp", negotiateProtocolV2: true },
+      ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+
+      expect(snapshot.installed).toBe(true);
+      expect(snapshot.status).toBe("error");
+      expect(snapshot.auth.status).toBe("unauthenticated");
+      expect(snapshot.message).toContain("no models with configured credentials");
+      expect(rpcCommands).toEqual(["negotiate_protocol", "get_available_models"]);
+    }),
   );
 });
 

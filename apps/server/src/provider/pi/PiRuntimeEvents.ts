@@ -239,28 +239,39 @@ function todoPlanStatus(value: unknown): "pending" | "inProgress" | "completed" 
   }
 }
 
-function todoPlanSnapshot(value: unknown):
-  | ReadonlyArray<{
-      readonly step: string;
-      readonly status: "pending" | "inProgress" | "completed";
-    }>
-  | undefined {
-  const phases = asRecord(asRecord(value)?.details)?.phases;
+type TodoPlan = ReadonlyArray<{
+  readonly step: string;
+  readonly status: "pending" | "inProgress" | "completed";
+}>;
+
+function todoPlanFromTasks(value: unknown): TodoPlan | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const plan: Array<{ step: string; status: "pending" | "inProgress" | "completed" }> = [];
+  for (const taskValue of value) {
+    const task = asRecord(taskValue);
+    const step = nonEmptyString(task?.content);
+    if (!task || !step) return undefined;
+    const status = todoPlanStatus(task.status);
+    if (!status) return undefined;
+    plan.push({ step, status });
+  }
+  return plan;
+}
+
+function todoPlanFromPhases(phases: unknown): TodoPlan | undefined {
   if (!Array.isArray(phases)) return undefined;
   const plan: Array<{ step: string; status: "pending" | "inProgress" | "completed" }> = [];
   for (const phaseValue of phases) {
     const tasks = asRecord(phaseValue)?.tasks;
-    if (!Array.isArray(tasks)) return undefined;
-    for (const taskValue of tasks) {
-      const task = asRecord(taskValue);
-      const step = nonEmptyString(task?.content);
-      if (!task || !step) return undefined;
-      const status = todoPlanStatus(task.status);
-      if (!status) return undefined;
-      plan.push({ step, status });
-    }
+    const phasePlan = todoPlanFromTasks(tasks);
+    if (!phasePlan) return undefined;
+    plan.push(...phasePlan);
   }
   return plan;
+}
+
+function todoPlanSnapshot(value: unknown): TodoPlan | undefined {
+  return todoPlanFromPhases(asRecord(asRecord(value)?.details)?.phases);
 }
 
 function missingSnapshotSuffix(emittedText: string, snapshot: string): string | undefined {
@@ -385,6 +396,12 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
       event("thread.started", { providerThreadId: input.sessionId }),
       event("thread.state.changed", { state: "idle" }),
     ];
+  };
+
+  const syncTodoPlan = (phases: unknown) => {
+    if (!isOmp) return [];
+    const plan = todoPlanFromPhases(phases);
+    return plan === undefined ? [] : [event("turn.plan.updated", { plan })];
   };
 
   const startTurn = (input: {
@@ -817,6 +834,11 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
       case "tool_execution_update":
       case "tool_execution_end":
         return mapTool(raw, record);
+      case "todo_reminder": {
+        if (!isOmp) return [];
+        const plan = todoPlanFromTasks(record.todos);
+        return plan === undefined ? [] : [event("turn.plan.updated", { plan }, { raw })];
+      }
       case "todo_auto_clear":
         return isOmp ? [event("turn.plan.updated", { plan: [] }, { raw })] : [];
       case "agent_end": {
@@ -996,6 +1018,7 @@ export function makePiRuntimeEventMapper(options: PiRuntimeEventMapperOptions) {
 
   return {
     startSession,
+    syncTodoPlan,
     startTurn,
     map,
     completeTurn,

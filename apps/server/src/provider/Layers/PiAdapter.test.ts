@@ -45,12 +45,20 @@ const INSTANCE_ID = ProviderInstanceId.make("piAgent");
 const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
   readonly resumeSessionFile?: string;
   readonly messages?: ReadonlyArray<unknown>;
+  readonly messagePages?: ReadonlyArray<{
+    readonly messages: ReadonlyArray<unknown>;
+    readonly totalMessages: number;
+    readonly nextCursor?: string;
+  }>;
+  readonly messagePageFailure?: { readonly index: number; readonly code: string };
+  readonly todoPhases?: unknown;
   readonly provider?: ProviderDriverKind;
   readonly providerName?: string;
   readonly instanceId?: ProviderInstanceId;
   readonly binaryPath?: string;
   readonly skillFlag?: "--skill" | "--skills";
   readonly promptResponseData?: unknown;
+  readonly negotiateProtocolV2?: boolean;
   readonly useDefaultIds?: boolean;
 }) {
   const provider = options?.provider ?? ProviderDriverKind.make("piAgent");
@@ -63,6 +71,7 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
   const nativeLogs = yield* Queue.unbounded<{ event: unknown; threadId: ThreadId | null }>();
   let closeCalls = 0;
   let turnSequence = 0;
+  let messagePageSequence = 0;
 
   const success = (command: PiRpcCommand, data?: unknown): PiRpcResponse => ({
     type: "response",
@@ -71,8 +80,23 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
     ...(data === undefined ? {} : { data }),
   });
   const client: PiRpcClient = {
-    request: (command) =>
-      Effect.sync(() => {
+    request: (command) => {
+      const pageIndex = command.type === "get_messages_page" ? messagePageSequence++ : undefined;
+      const pageFailure = options?.messagePageFailure;
+      if (pageIndex !== undefined && pageFailure && pageIndex === pageFailure.index) {
+        return Effect.sync(() => void commands.push(command)).pipe(
+          Effect.andThen(
+            Effect.fail(
+              new PiRpcClientError({
+                operation: "request",
+                detail: `Pi RPC get_messages_page failed: ${pageFailure.code}`,
+                rpcCode: pageFailure.code,
+              }),
+            ),
+          ),
+        );
+      }
+      return Effect.sync(() => {
         commands.push(command);
         switch (command.type) {
           case "get_state":
@@ -81,6 +105,7 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
               sessionFile: options?.resumeSessionFile ?? "/tmp/pi-session-1.jsonl",
               model: { provider: "openai", id: "gpt-5.5" },
               thinkingLevel: "medium",
+              ...(options?.todoPhases === undefined ? {} : { todoPhases: options.todoPhases }),
             });
           case "get_session_stats":
             return success(command, {
@@ -90,14 +115,25 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
             });
           case "get_messages":
             return success(command, { messages: options?.messages ?? [] });
+          case "get_messages_page":
+            return success(
+              command,
+              options?.messagePages?.[pageIndex ?? 0] ?? {
+                messages: options?.messages ?? [],
+                totalMessages: options?.messages?.length ?? 0,
+              },
+            );
           case "prompt":
             return success(command, options?.promptResponseData);
           default:
             return success(command);
         }
-      }),
+      });
+    },
     send: (command) => Effect.sync(() => void commands.push(command)),
     events: Stream.fromQueue(nativeEvents),
+    ready: Effect.succeed({ type: "ready" as const }),
+    protocolVersion: options?.negotiateProtocolV2 ? 2 : 1,
     terminated: Deferred.await(terminated),
     close: Effect.sync(() => {
       closeCalls += 1;
@@ -118,6 +154,7 @@ const makeHarness = Effect.fn("makePiAdapterTestHarness")(function* (options?: {
       provider,
       ...(options?.providerName ? { providerName: options.providerName } : {}),
       ...(options?.skillFlag ? { skillFlag: options.skillFlag } : {}),
+      ...(options?.negotiateProtocolV2 ? { negotiateProtocolV2: true } : {}),
       instanceId,
       createClient: (input) =>
         Effect.sync(() => {
@@ -204,6 +241,7 @@ describe("PiAdapter", () => {
           providerName: "Oh My Pi",
           instanceId: ompInstance,
           binaryPath: "fake-omp",
+          negotiateProtocolV2: true,
         });
         const session = yield* harness.adapter.startSession({
           threadId: THREAD_ID,
@@ -218,7 +256,56 @@ describe("PiAdapter", () => {
           providerInstanceId: "omp",
           status: "ready",
         });
-        expect(harness.factoryInputs[0]).toMatchObject({ binaryPath: "fake-omp" });
+        expect(harness.factoryInputs[0]).toMatchObject({
+          binaryPath: "fake-omp",
+          negotiateProtocolV2: true,
+        });
+      }),
+    ),
+  );
+
+  it.effect("restores an OMP todo plan from get_state", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const omp = ProviderDriverKind.make("omp");
+        const ompInstance = ProviderInstanceId.make("omp");
+        const harness = yield* makeHarness({
+          provider: omp,
+          providerName: "Oh My Pi",
+          instanceId: ompInstance,
+          todoPhases: [
+            {
+              name: "Implementation",
+              tasks: [
+                { content: "Restore saved todos", status: "completed" },
+                { content: "Continue active work", status: "in_progress" },
+              ],
+            },
+          ],
+        });
+
+        yield* harness.adapter.startSession({
+          threadId: THREAD_ID,
+          provider: omp,
+          providerInstanceId: ompInstance,
+          cwd: "/tmp/project",
+          runtimeMode: "full-access",
+        });
+        const events = [
+          ...(yield* harness.adapter.streamEvents.pipe(Stream.take(6), Stream.runCollect)),
+        ];
+
+        expect(events.at(-1)).toMatchObject({
+          type: "turn.plan.updated",
+          provider: "omp",
+          payload: {
+            plan: [
+              { step: "Restore saved todos", status: "completed" },
+              { step: "Continue active work", status: "inProgress" },
+            ],
+          },
+        });
+        expect(events.at(-1)?.turnId).toBeUndefined();
       }),
     ),
   );
@@ -493,6 +580,94 @@ describe("PiAdapter", () => {
             id: "assistant-2",
             items: [expect.objectContaining({ role: "assistant" })],
           }),
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("reads OMP history through stable RPC v2 pages", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const omp = ProviderDriverKind.make("omp");
+        const ompInstance = ProviderInstanceId.make("omp");
+        const harness = yield* makeHarness({
+          provider: omp,
+          providerName: "Oh My Pi",
+          instanceId: ompInstance,
+          negotiateProtocolV2: true,
+          messagePages: [
+            {
+              messages: [
+                { role: "user", content: "Hello" },
+                { id: "assistant-1", role: "assistant", content: "First" },
+              ],
+              totalMessages: 3,
+              nextCursor: "page-2",
+            },
+            {
+              messages: [{ id: "assistant-2", role: "assistant", content: "Second" }],
+              totalMessages: 3,
+            },
+          ],
+        });
+        yield* harness.adapter.startSession({
+          threadId: THREAD_ID,
+          provider: omp,
+          providerInstanceId: ompInstance,
+          cwd: "/tmp/project",
+          runtimeMode: "full-access",
+        });
+
+        const snapshot = yield* harness.adapter.readThread(THREAD_ID);
+
+        expect(snapshot.turns.map((turn) => turn.id)).toEqual(["assistant-1", "assistant-2"]);
+        expect(
+          harness.commands.filter((command) => command.type.startsWith("get_messages")),
+        ).toEqual([
+          { type: "get_messages_page", limit: 256 },
+          { type: "get_messages_page", cursor: "page-2", limit: 256 },
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("falls back to a legacy OMP snapshot when a page cursor becomes stale", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const omp = ProviderDriverKind.make("omp");
+        const ompInstance = ProviderInstanceId.make("omp");
+        const harness = yield* makeHarness({
+          provider: omp,
+          providerName: "Oh My Pi",
+          instanceId: ompInstance,
+          negotiateProtocolV2: true,
+          messages: [{ id: "fallback", role: "assistant", content: "Stable snapshot" }],
+          messagePages: [
+            {
+              messages: [{ id: "partial", role: "assistant", content: "Discard me" }],
+              totalMessages: 2,
+              nextCursor: "stale-page",
+            },
+          ],
+          messagePageFailure: { index: 1, code: "stale_cursor" },
+        });
+        yield* harness.adapter.startSession({
+          threadId: THREAD_ID,
+          provider: omp,
+          providerInstanceId: ompInstance,
+          cwd: "/tmp/project",
+          runtimeMode: "full-access",
+        });
+
+        const snapshot = yield* harness.adapter.readThread(THREAD_ID);
+
+        expect(snapshot.turns.map((turn) => turn.id)).toEqual(["fallback"]);
+        expect(
+          harness.commands.filter((command) => command.type.startsWith("get_messages")),
+        ).toEqual([
+          { type: "get_messages_page", limit: 256 },
+          { type: "get_messages_page", cursor: "stale-page", limit: 256 },
+          { type: "get_messages" },
         ]);
       }),
     ),

@@ -44,6 +44,7 @@ import {
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   ProviderUploadFeedbackError,
+  CopilotLlmProviderModelDiscoveryError,
   RelayClientInstallFailedError,
   type RelayClientInstallProgressEvent,
   type ServerSelfUpdateError,
@@ -85,6 +86,7 @@ import {
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
 import * as ProviderService from "./provider/Services/ProviderService.ts";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
+import { discoverCopilotLlmProviderModels } from "./provider/copilotRuntime.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as ServerLifecycleEvents from "./serverLifecycleEvents.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
@@ -1551,6 +1553,26 @@ const makeWsRpcLayer = (
               : providerRegistry.refresh()
             ).pipe(Effect.map((providers) => ({ providers }))),
             { "rpc.aggregate": "server" },
+          ),
+        [WS_METHODS.providerDiscoverCopilotLlmModels]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.providerDiscoverCopilotLlmModels,
+            Effect.tryPromise(() => discoverCopilotLlmProviderModels(input)).pipe(
+              Effect.tapError((cause) =>
+                Effect.logWarning("Failed to discover Copilot LLM provider models", {
+                  cause,
+                  providerType: input.type,
+                  baseUrl: input.baseUrl,
+                }),
+              ),
+              Effect.mapError(
+                () =>
+                  new CopilotLlmProviderModelDiscoveryError({
+                    message: "Failed to fetch models from the configured LLM provider.",
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "provider" },
           ),
         [WS_METHODS.providerUploadFeedback]: (input) =>
           observeRpcEffect(

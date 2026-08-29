@@ -2,16 +2,18 @@
 
 [简体中文](./README.md) | [English](./README.en.md)
 
-T3 Code is a minimal web GUI for coding agents (currently Codex, Claude, Cursor, and OpenCode, more coming soon).
+T3 Code is a minimal web GUI for coding agents, including Codex, Claude, GitHub Copilot, Cursor,
+OpenCode, and Pi.
 
 ## Installation
 
 > [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, and OpenCode.
+> T3 Code currently supports Codex, Claude, GitHub Copilot, Cursor, OpenCode, and Pi.
 > Install and authenticate at least one provider before use:
 >
 > - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
 > - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
+> - GitHub Copilot: no external CLI is required. Add `COPILOT_GITHUB_TOKEN` (or `GH_TOKEN`/`GITHUB_TOKEN`) as a sensitive environment variable on the provider instance.
 > - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `cursor-agent login`
 > - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
 
@@ -57,7 +59,7 @@ There's no public docs site yet, checkout the miscellaneous markdown files in [d
 
 - [Getting started](./docs/getting-started/quick-start.md)
 - [Architecture overview](./docs/architecture/overview.md)
-- [Provider guides](./docs/providers/codex.md)
+- Provider guides: [Codex](./docs/user/providers-codex.md), [Claude](./docs/user/providers-claude.md), [GitHub Copilot](./docs/user/providers-github-copilot.md)
 - [Operations](./docs/operations/ci.md)
 - [Reference](./docs/reference/encyclopedia.md)
 

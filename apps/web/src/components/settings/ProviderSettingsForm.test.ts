@@ -39,6 +39,14 @@ describe("ProviderSettingsForm helpers", () => {
     });
   });
 
+  it("hides legacy single-provider Copilot fields from the generic form", () => {
+    const copilot = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("githubCopilot")];
+    expect(copilot).toBeDefined();
+
+    const fields = deriveProviderSettingsFields(copilot!);
+    expect(fields).toEqual([]);
+  });
+
   it("registers localized Pi binary and home directory settings", () => {
     const pi = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("piAgent")];
     expect(pi).toBeDefined();

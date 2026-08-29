@@ -13,6 +13,7 @@ import { cn } from "../../lib/utils";
 import { useI18n, type Translate } from "../../i18n";
 import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import type { ProviderClientDefinition } from "./providerDriverMeta";
@@ -23,6 +24,7 @@ export interface ProviderSettingsFieldModel {
   readonly label: string;
   readonly description?: string | undefined;
   readonly placeholder?: string | undefined;
+  readonly options?: ReadonlyArray<{ readonly value: string; readonly label: string }> | undefined;
   readonly clearWhenEmpty: "omit" | "persist";
   readonly defaultBooleanValue?: boolean | undefined;
 }
@@ -103,6 +105,7 @@ export function deriveProviderSettingsFields(
           ...(formAnnotation.placeholder !== undefined
             ? { placeholder: formAnnotation.placeholder }
             : {}),
+          ...(formAnnotation.options !== undefined ? { options: formAnnotation.options } : {}),
           clearWhenEmpty: formAnnotation.clearWhenEmpty ?? "omit",
           ...(formAnnotation.control === "switch"
             ? { defaultBooleanValue: readFieldBooleanDefault(fieldSchema) }
@@ -250,6 +253,49 @@ function ProviderSettingsFieldRow({
             placeholder={field.placeholder}
             spellCheck={false}
           />
+          {description}
+        </label>
+      </FieldFrame>
+    );
+  }
+
+  if (field.control === "select") {
+    const emptyValue = `${inputId}-default`;
+    const currentValue = readProviderConfigString(value, field.key);
+    const selectedValue = currentValue || emptyValue;
+    const selectedLabel =
+      field.options?.find((option) => option.value === currentValue)?.label ?? field.placeholder;
+    return (
+      <FieldFrame variant={variant}>
+        <label htmlFor={inputId} className={cn(variant === "card" && "block")}>
+          {label}
+          <Select
+            value={selectedValue}
+            onValueChange={(next) => {
+              if (next === null) return;
+              onChange(
+                nextProviderConfigWithFieldValue(
+                  value,
+                  field,
+                  next === emptyValue ? "" : String(next),
+                ),
+              );
+            }}
+          >
+            <SelectTrigger
+              id={inputId}
+              className={cn(variant === "card" ? "mt-1.5" : "bg-background")}
+            >
+              <SelectValue>{selectedLabel}</SelectValue>
+            </SelectTrigger>
+            <SelectPopup>
+              {field.options?.map((option) => (
+                <SelectItem key={option.value || emptyValue} value={option.value || emptyValue}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
           {description}
         </label>
       </FieldFrame>

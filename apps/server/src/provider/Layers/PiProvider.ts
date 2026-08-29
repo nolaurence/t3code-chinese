@@ -9,10 +9,11 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 
-import { spawnPiRpcClient } from "../pi/PiRpcClient.ts";
+import { PiRpcClientError, spawnPiRpcClient } from "../pi/PiRpcClient.ts";
 import {
   buildServerProvider,
   isCommandMissingCause,
@@ -32,12 +33,14 @@ const MODEL_DISCOVERY_TIMEOUT_MS = 30_000;
 export interface PiProviderOptions {
   readonly providerName?: string;
   readonly defaultBinaryPath?: string;
+  readonly negotiateProtocolV2?: boolean;
 }
 
 function resolvePiProviderOptions(options: PiProviderOptions) {
   return {
     providerName: options.providerName ?? "Pi",
     defaultBinaryPath: options.defaultBinaryPath ?? "pi",
+    negotiateProtocolV2: options.negotiateProtocolV2 ?? false,
   };
 }
 
@@ -111,6 +114,19 @@ function fallbackModels(settings: PiAgentSettings): ReadonlyArray<ServerProvider
   return providerModelsFromSettings([], settings.customModels, EMPTY_CAPABILITIES);
 }
 
+const isPiRpcClientError = Schema.is(PiRpcClientError);
+
+function isMissingPiModelCredentials(error: unknown): boolean {
+  return (
+    isPiRpcClientError(error) &&
+    error.stderr?.toLowerCase().includes("no models available") === true
+  );
+}
+
+function missingPiModelCredentialsMessage(providerName: string, binaryPath: string): string {
+  return `${providerName} has no models with configured credentials. Run \`${binaryPath}\` on the T3 Code server machine, configure a model provider, and try again.`;
+}
+
 export function buildInitialPiProviderSnapshot(
   settings: PiAgentSettings,
   options: PiProviderOptions = {},
@@ -167,6 +183,7 @@ const discoverPiModels = (
   cwd: string,
   environment: NodeJS.ProcessEnv,
   defaultBinaryPath: string,
+  negotiateProtocolV2: boolean,
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -174,6 +191,8 @@ const discoverPiModels = (
         binaryPath: settings.binaryPath || defaultBinaryPath,
         cwd,
         env: environment,
+        captureStderrOnExit: true,
+        negotiateProtocolV2,
       });
       const response = yield* client.request({ type: "get_available_models" });
       if (!response.success) return { models: fallbackModels(settings), hasConfiguredAuth: false };
@@ -199,7 +218,8 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
   processEnvironment: NodeJS.ProcessEnv = process.env,
   options: PiProviderOptions = {},
 ): Effect.fn.Return<ServerProviderDraft, never, ChildProcessSpawner.ChildProcessSpawner> {
-  const { providerName, defaultBinaryPath } = resolvePiProviderOptions(options);
+  const { providerName, defaultBinaryPath, negotiateProtocolV2 } =
+    resolvePiProviderOptions(options);
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   const models = fallbackModels(settings);
   if (!settings.enabled) return yield* buildInitialPiProviderSnapshot(settings, options);
@@ -264,11 +284,40 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
     });
   }
 
-  const discovered = yield* discoverPiModels(settings, cwd, environment, defaultBinaryPath).pipe(
-    Effect.timeoutOption(MODEL_DISCOVERY_TIMEOUT_MS),
-    Effect.result,
-  );
+  const discovered = yield* discoverPiModels(
+    settings,
+    cwd,
+    environment,
+    defaultBinaryPath,
+    negotiateProtocolV2,
+  ).pipe(Effect.timeoutOption(MODEL_DISCOVERY_TIMEOUT_MS), Effect.result);
   if (Result.isFailure(discovered) || Option.isNone(discovered.success)) {
+    if (Result.isFailure(discovered) && isMissingPiModelCredentials(discovered.failure)) {
+      return buildServerProvider({
+        presentation: providerPresentation(providerName),
+        enabled: true,
+        checkedAt,
+        models,
+        probe: {
+          installed: true,
+          version,
+          status: "error",
+          auth: { status: "unauthenticated" },
+          message: missingPiModelCredentialsMessage(
+            providerName,
+            settings.binaryPath || defaultBinaryPath,
+          ),
+        },
+      });
+    }
+    if (Result.isFailure(discovered)) {
+      const error = discovered.failure;
+      yield* Effect.logWarning(`${providerName} RPC model discovery failed.`, {
+        operation: error.operation,
+        detail: error.detail,
+        ...(error.exitCode === undefined ? {} : { exitCode: error.exitCode }),
+      });
+    }
     return buildServerProvider({
       presentation: providerPresentation(providerName),
       enabled: true,
@@ -301,7 +350,10 @@ export const checkPiProviderStatus = Effect.fn("checkPiProviderStatus")(function
       ...(discovered.success.value.hasConfiguredAuth
         ? {}
         : {
-            message: `${providerName} has no models with configured credentials. Configure a model provider in ${providerName} and try again.`,
+            message: missingPiModelCredentialsMessage(
+              providerName,
+              settings.binaryPath || defaultBinaryPath,
+            ),
           }),
     },
   });

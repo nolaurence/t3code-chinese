@@ -13,7 +13,7 @@ Web 应用通过 WebSocket，使用简单的 JSON-RPC 风格协议与服务端�
 - `providers.respondToRequest`、`providers.stopSession`
 - `shell.openInEditor`、`server.getConfig`
 
-当前已实现 Codex、Claude、Cursor、Grok、OpenCode 和 Pi。每个供应商通过同一套适配器与运行时事件合约接入；Pi 使用外部 `pi --mode rpc` 子进程，并将原生 JSONL 事件转换为统一的供应商运行时事件。
+当前已实现 Codex、Claude、GitHub Copilot、Cursor、Grok、OpenCode、Pi 和 Oh My Pi。每个供应商通过同一套适配器与运行时事件合约接入；GitHub Copilot 使用随包提供的 SDK 运行时，Pi 和 Oh My Pi 使用外部 RPC 子进程，并将原生事件转换为统一的供应商运行时事件。
 
 ## 客户端传输
 

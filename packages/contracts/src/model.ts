@@ -131,6 +131,7 @@ const CODEX_DRIVER_KIND = ProviderDriverKind.make("codex");
 const CLAUDE_DRIVER_KIND = ProviderDriverKind.make("claudeAgent");
 const CURSOR_DRIVER_KIND = ProviderDriverKind.make("cursor");
 const GROK_DRIVER_KIND = ProviderDriverKind.make("grok");
+const GITHUB_COPILOT_DRIVER_KIND = ProviderDriverKind.make("githubCopilot");
 const OPENCODE_DRIVER_KIND = ProviderDriverKind.make("opencode");
 const PI_AGENT_DRIVER_KIND = ProviderDriverKind.make("piAgent");
 const OMP_DRIVER_KIND = ProviderDriverKind.make("omp");
@@ -154,6 +155,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Partial<Record<ProviderDriverKind, strin
   [CLAUDE_DRIVER_KIND]: "claude-sonnet-5",
   [CURSOR_DRIVER_KIND]: "auto",
   [GROK_DRIVER_KIND]: "grok-build",
+  [GITHUB_COPILOT_DRIVER_KIND]: "gpt-5.4",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
 };
 
@@ -164,6 +166,7 @@ export const DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER: Partial<
   [CODEX_DRIVER_KIND]: DEFAULT_TEXT_GENERATION_MODEL,
   [CLAUDE_DRIVER_KIND]: "claude-haiku-4-5",
   [CURSOR_DRIVER_KIND]: "composer-2",
+  [GITHUB_COPILOT_DRIVER_KIND]: "gpt-5.4-mini",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
 };
 
@@ -223,6 +226,7 @@ export const PROVIDER_DISPLAY_NAMES: Partial<Record<ProviderDriverKind, string>>
   [CLAUDE_DRIVER_KIND]: "Claude",
   [CURSOR_DRIVER_KIND]: "Cursor",
   [GROK_DRIVER_KIND]: "Grok",
+  [GITHUB_COPILOT_DRIVER_KIND]: "GitHub Copilot",
   [OPENCODE_DRIVER_KIND]: "OpenCode",
   [PI_AGENT_DRIVER_KIND]: "Pi",
   [OMP_DRIVER_KIND]: "Oh My Pi",

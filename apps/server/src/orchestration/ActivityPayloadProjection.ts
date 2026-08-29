@@ -289,7 +289,7 @@ function projectRawOutput(value: unknown): Record<string, unknown> | undefined {
     };
   }
 
-  const content = asTrimmedString(rawOutput.content);
+  const content = asTrimmedString(rawOutput.detailedContent) ?? asTrimmedString(rawOutput.content);
   if (content) {
     const summary = summarizeToolTextOutput(content);
     return summary ? { content: summary } : undefined;
@@ -382,8 +382,27 @@ export function projectActivityPayload(
     projectedData.kind = data.kind;
   }
 
-  const rawOutput = projectRawOutput(data.rawOutput) ?? projectAcpContent(data.content);
-  if (rawOutput) {
+  const rawOutput =
+    projectRawOutput(data.rawOutput) ??
+    projectAcpContent(data.content) ??
+    (item === undefined && command === undefined ? projectRawOutput(data.result) : undefined);
+  const outputDetail =
+    rawOutput &&
+    (asTrimmedString(rawOutput.content) ??
+      asTrimmedString(rawOutput.stdout) ??
+      asTrimmedString(rawOutput.stderr) ??
+      asTrimmedString(rawOutput.output));
+  const synthesizedLegacyDetail =
+    asTrimmedString(projectedPayload.detail) === null &&
+    outputDetail &&
+    data.result !== undefined &&
+    data.rawOutput === undefined &&
+    data.content === undefined &&
+    item === undefined &&
+    command === undefined
+      ? outputDetail
+      : null;
+  if (rawOutput && !synthesizedLegacyDetail) {
     projectedData.rawOutput = rawOutput;
   }
 
@@ -391,6 +410,7 @@ export function projectActivityPayload(
     ...activity,
     payload: {
       ...projectedPayload,
+      ...(synthesizedLegacyDetail ? { detail: synthesizedLegacyDetail } : {}),
       data: projectedData,
     },
   };

@@ -829,27 +829,57 @@ describe("PiRuntimeEvents", () => {
     expectValid([...firstUpdate, ...secondUpdate]);
   });
 
-  it("clears an OMP todo plan from an empty snapshot", () => {
+  it("clears an OMP todo plan from a valid remove snapshot", () => {
     const mapper = makeOmpMapper();
     mapper.startTurn({ turnId: TurnId.make("turn-omp-todo-clear") });
     mapper.map({
       type: "tool_execution_start",
       toolCallId: "todo-clear",
       toolName: "todo",
-      args: { op: "clear" },
+      args: { op: "rm" },
     });
 
     const events = mapper.map({
       type: "tool_execution_end",
       toolCallId: "todo-clear",
       toolName: "todo",
-      result: { details: { op: "clear", phases: [] } },
+      result: { details: { op: "rm", phases: [] } },
       isError: false,
     });
 
     expect(events[1]).toMatchObject({
       type: "turn.plan.updated",
       payload: { plan: [] },
+    });
+    expectValid(events);
+  });
+
+  it("maps OMP todo reminders to complete plan snapshots", () => {
+    const mapper = makeOmpMapper();
+    mapper.startTurn({ turnId: TurnId.make("turn-omp-todo-reminder") });
+
+    const events = mapper.map({
+      type: "todo_reminder",
+      todos: [
+        { content: "Completed item", status: "completed" },
+        { content: "Active item", status: "in_progress" },
+        { content: "Blocked item", status: "blocked", blocker: "Waiting for input" },
+      ],
+      attempt: 1,
+      maxAttempts: 3,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "turn.plan.updated",
+      provider: "omp",
+      payload: {
+        plan: [
+          { step: "Completed item", status: "completed" },
+          { step: "Active item", status: "inProgress" },
+          { step: "Blocked item", status: "pending" },
+        ],
+      },
     });
     expectValid(events);
   });

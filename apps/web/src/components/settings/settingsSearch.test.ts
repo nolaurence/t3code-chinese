@@ -106,4 +106,11 @@ describe("searchSettings", () => {
       targetId: "appearance",
     });
   });
+
+  it("routes the Copilot SDK entry to its dedicated settings page", () => {
+    expect(searchSettings("GitHub Copilot SDK")[0]).toMatchObject({
+      id: "copilot-sdk",
+      to: "/settings/copilot-sdk",
+    });
+  });
 });

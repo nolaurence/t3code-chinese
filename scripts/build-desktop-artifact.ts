@@ -868,7 +868,7 @@ export const WINDOWS_SERVER_ASAR_RESOURCE = "server.asar";
 // helper executables live in the server.asar.unpacked sibling (the standard
 // asar redirect convention). Everything else stays packed.
 export const WINDOWS_SERVER_ASAR_UNPACK_GLOB =
-  "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib}";
+  "{**/*.node,**/*.dll,**/*.exe,**/*.so,**/*.so.*,**/*.dylib,**/node_modules/@github/copilot-*/**}";
 // Mirrors DESKTOP_FILE_EXCLUSIONS for the hand-packed sidecar: the Claude SDK
 // platform packages are dead weight (see above), and node_modules/.bin shims
 // are never spawned at runtime (and are symlinks on POSIX build hosts, which
@@ -1310,6 +1310,19 @@ export function resolveMidsceneSharpRuntimeModules(
   ]);
 }
 
+export function resolveCopilotRuntimePackages(
+  platform: typeof BuildPlatform.Type,
+  arch: typeof BuildArch.Type,
+): ReadonlyArray<string> {
+  const architectures = arch === "universal" ? (["arm64", "x64"] as const) : [arch];
+  const platforms =
+    platform === "win" ? (["win32", "linux"] as const) : [platform === "mac" ? "darwin" : "linux"];
+
+  return architectures.flatMap((architecture) =>
+    platforms.map((runtimePlatform) => `@github/copilot-${runtimePlatform}-${architecture}`),
+  );
+}
+
 const resolveStageRuntimeModule = Effect.fn("resolveStageRuntimeModule")(function* (
   stageAppDir: string,
   loadedFrom: string,
@@ -1373,6 +1386,31 @@ export const validateDesktopStageRuntime = Effect.fn("validateDesktopStageRuntim
   );
   for (const specifier of resolveMidsceneSharpRuntimeModules(input.platform, input.arch)) {
     yield* resolveStageRuntimeModule(input.stageAppDir, sharpEntryPath, specifier);
+  }
+  const copilotSdkEntryPath = yield* resolveStageRuntimeModule(
+    input.stageAppDir,
+    stagePackageJsonPath,
+    "@github/copilot-sdk",
+  );
+  for (const packageName of resolveCopilotRuntimePackages(input.platform, input.arch)) {
+    const cliPath = yield* resolveStageRuntimeModule(
+      input.stageAppDir,
+      copilotSdkEntryPath,
+      packageName,
+    );
+    const packageDir = path.dirname(cliPath);
+    // The server spawns the native CLI binary directly (the JS loader cannot
+    // run from an Electron-as-Node child), so it must exist alongside the
+    // SDK entrypoints.
+    const cliBinary = packageName.startsWith("@github/copilot-win32") ? "copilot.exe" : "copilot";
+    for (const entrypoint of ["index.js", "sdk/index.js", cliBinary]) {
+      if (!(yield* fs.exists(path.join(packageDir, entrypoint)))) {
+        return yield* new DesktopStageRuntimeArtifactMissingError({
+          artifact: `module:${packageName}/${entrypoint}`,
+          stageAppDir: input.stageAppDir,
+        });
+      }
+    }
   }
 });
 
@@ -2283,8 +2321,13 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     },
     // All platforms keep app.asar fully packed; electron-builder's default
     // smart unpack extracts native libraries, which loaders find in
-    // app.asar.unpacked. Windows additionally ships the server tree as the
-    // hand-packed server.asar sidecar (see WINDOWS_SERVER_ASAR_RESOURCE).
+    // app.asar.unpacked. The Copilot CLI ships as an extensionless SEA binary
+    // (plus spawnable helpers like ripgrep) inside its platform packages, so
+    // those packages must be unpacked explicitly — processes cannot be
+    // spawned out of an asar archive. Windows additionally ships the server
+    // tree as the hand-packed server.asar sidecar (see
+    // WINDOWS_SERVER_ASAR_RESOURCE).
+    asarUnpack: ["**/node_modules/@github/copilot-*/**"],
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
@@ -2314,6 +2357,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
           schemes: ["t3code", "t3code-dev"],
         },
       ],
+      ...(!signed
+        ? {
+            identity: "-",
+            hardenedRuntime: false,
+          }
+        : {}),
       ...(macPasskeySigning
         ? {
             entitlements: macPasskeySigning.entitlementsPath,

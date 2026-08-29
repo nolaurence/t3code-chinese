@@ -17,6 +17,10 @@ import { useState, type ReactNode } from "react";
 import {
   isProviderDriverKind,
   resolveProviderInstanceEnabled,
+  type CopilotLlmProvider,
+  type CopilotLlmProviderModel,
+  type CopilotLlmProviderModelDiscoveryRequest,
+  type CopilotModelConfigurations,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
   type ProviderInstanceId,
@@ -41,6 +45,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { DriverOption } from "./providerDriverMeta";
+import { CopilotLlmProvidersSection } from "./CopilotLlmProvidersSection";
 import { ProviderSettingsForm } from "./ProviderSettingsForm";
 import { ProviderModelsSection } from "./ProviderModelsSection";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
@@ -94,6 +99,19 @@ function readConfigStringArray(config: unknown, key: string): ReadonlyArray<stri
   return value.filter((entry): entry is string => typeof entry === "string");
 }
 
+function readCopilotModelConfigurations(config: unknown): CopilotModelConfigurations {
+  if (config === null || typeof config !== "object") return {};
+  const value = (config as Record<string, unknown>).modelConfigurations;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as CopilotModelConfigurations;
+}
+
+function readCopilotLlmProviders(config: unknown): ReadonlyArray<CopilotLlmProvider> {
+  if (config === null || typeof config !== "object") return [];
+  const value = (config as Record<string, unknown>).llmProviders;
+  return Array.isArray(value) ? (value as ReadonlyArray<CopilotLlmProvider>) : [];
+}
+
 /**
  * Set `key` to an arbitrary value on the opaque config blob. Unlike
  * provider settings field updates, does not drop empty-looking values — the
@@ -113,9 +131,35 @@ function nextConfigBlobWithValue(
   return base;
 }
 
+export function retainCopilotModelConfigurations(
+  previousCustomModels: ReadonlyArray<string>,
+  nextCustomModels: ReadonlyArray<string>,
+  configurations: CopilotModelConfigurations,
+): CopilotModelConfigurations {
+  const nextModelSet = new Set(nextCustomModels);
+  return Object.fromEntries(
+    Object.entries(configurations).filter(
+      ([slug]) => !previousCustomModels.includes(slug) || nextModelSet.has(slug),
+    ),
+  );
+}
+
+export function renameCopilotModelConfiguration(
+  configurations: CopilotModelConfigurations,
+  previousSlug: string,
+  nextSlug: string,
+): CopilotModelConfigurations {
+  const next = { ...configurations };
+  const previous = next[previousSlug];
+  delete next[previousSlug];
+  if (previous) next[nextSlug] = previous;
+  return next;
+}
+
 export function deriveProviderModelsForDisplay(input: {
   readonly liveModels: ReadonlyArray<ServerProviderModel> | undefined;
   readonly customModels: ReadonlyArray<string>;
+  readonly modelConfigurations?: CopilotModelConfigurations;
 }): ReadonlyArray<ServerProviderModel> {
   const liveCustomModelsBySlug = new Map(
     Arr.filterMap(input.liveModels ?? [], (model) =>
@@ -123,15 +167,18 @@ export function deriveProviderModelsForDisplay(input: {
     ),
   );
   const serverModels = input.liveModels?.filter((model) => !model.isCustom) ?? [];
-  const customModels = input.customModels.map(
-    (slug) =>
-      liveCustomModelsBySlug.get(slug) ?? {
-        slug,
-        name: slug,
-        isCustom: true,
-        capabilities: null,
-      },
-  );
+  const customModels = input.customModels.map((slug) => {
+    const liveModel = liveCustomModelsBySlug.get(slug);
+    const displayName = input.modelConfigurations?.[slug]?.displayName;
+    return liveModel
+      ? { ...liveModel, ...(displayName ? { name: displayName } : {}) }
+      : {
+          slug,
+          name: displayName ?? slug,
+          isCustom: true,
+          capabilities: null,
+        };
+  });
   return [...serverModels, ...customModels];
 }
 
@@ -161,6 +208,7 @@ function ProviderAuthEmail(props: {
 function ProviderEnvironmentSection(props: {
   readonly environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>;
   readonly onChange: (environment: ReadonlyArray<ProviderInstanceEnvironmentVariable>) => void;
+  readonly description?: string | undefined;
 }) {
   const { t } = useI18n();
   const [rows, setRows] = useState<ReadonlyArray<EnvironmentDraftRow>>(() =>
@@ -233,9 +281,12 @@ function ProviderEnvironmentSection(props: {
           {t("common.add")}
         </Button>
       </div>
-      {rows.length === 0 ? (
+      {props.description ? (
+        <p className="text-xs text-muted-foreground">{props.description}</p>
+      ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">{t("providers.environmentDescription")}</p>
-      ) : (
+      ) : null}
+      {rows.length > 0 ? (
         <div className="overflow-hidden rounded-md border border-border/70">
           <Table>
             <TableHeader className="bg-muted/25 text-[11px] text-muted-foreground">
@@ -318,7 +369,7 @@ function ProviderEnvironmentSection(props: {
             </TableBody>
           </Table>
         </div>
-      )}
+      ) : null}
       <span className="text-xs text-muted-foreground">
         {t("providers.environmentSensitiveDescription")}
       </span>
@@ -355,6 +406,11 @@ interface ProviderInstanceCardProps {
   readonly onHiddenModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onFavoriteModelsChange: (next: ReadonlyArray<string>) => void;
   readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
+  readonly onDiscoverCopilotLlmModels?:
+    | ((
+        input: CopilotLlmProviderModelDiscoveryRequest,
+      ) => Promise<ReadonlyArray<CopilotLlmProviderModel>>)
+    | undefined;
   readonly onRunUpdate?: (() => void) | undefined;
   readonly isUpdating?: boolean | undefined;
   readonly onRetryStatusCheck?: (() => void) | undefined;
@@ -400,6 +456,7 @@ export function ProviderInstanceCard({
   onHiddenModelsChange,
   onFavoriteModelsChange,
   onModelOrderChange,
+  onDiscoverCopilotLlmModels,
   onRunUpdate,
   isUpdating = false,
   onRetryStatusCheck,
@@ -463,12 +520,17 @@ export function ProviderInstanceCard({
     : null;
 
   const customModels = readConfigStringArray(instance.config, "customModels");
+  const copilotModelConfigurations =
+    driverKind === "githubCopilot" ? readCopilotModelConfigurations(instance.config) : {};
+  const copilotLlmProviders =
+    driverKind === "githubCopilot" ? readCopilotLlmProviders(instance.config) : [];
   // Server-returned models may lag behind settings writes. Treat probe
   // models as the source for built-ins only; custom rows come directly
   // from the current instance config so add/remove reflects immediately.
   const modelsForDisplay = deriveProviderModelsForDisplay({
     liveModels: liveProvider?.models,
     customModels,
+    modelConfigurations: copilotModelConfigurations,
   });
 
   const updateDisplayName = (value: string) => {
@@ -505,7 +567,42 @@ export function ProviderInstanceCard({
   };
 
   const updateCustomModels = (next: ReadonlyArray<string>) => {
-    const nextConfig = nextConfigBlobWithValue(instance.config, "customModels", [...next]);
+    const nextModelConfigurations = retainCopilotModelConfigurations(
+      customModels,
+      next,
+      copilotModelConfigurations,
+    );
+    const nextConfig = {
+      ...nextConfigBlobWithValue(instance.config, "customModels", [...next]),
+      modelConfigurations: nextModelConfigurations,
+    };
+    const { config: _omit, ...rest } = instance;
+    onUpdate({ ...rest, config: nextConfig } as ProviderInstanceConfig);
+  };
+
+  const renameCustomModel = (previousSlug: string, nextSlug: string) => {
+    const nextCustomModels = customModels.map((slug) => (slug === previousSlug ? nextSlug : slug));
+    const nextModelConfigurations = renameCopilotModelConfiguration(
+      copilotModelConfigurations,
+      previousSlug,
+      nextSlug,
+    );
+    const nextConfig = {
+      ...nextConfigBlobWithValue(instance.config, "customModels", nextCustomModels),
+      modelConfigurations: nextModelConfigurations,
+    };
+    const { config: _omit, ...rest } = instance;
+    onUpdate({ ...rest, config: nextConfig } as ProviderInstanceConfig);
+  };
+
+  const updateCopilotModelConfigurations = (next: CopilotModelConfigurations) => {
+    const nextConfig = nextConfigBlobWithValue(instance.config, "modelConfigurations", next);
+    const { config: _omit, ...rest } = instance;
+    onUpdate({ ...rest, config: nextConfig } as ProviderInstanceConfig);
+  };
+
+  const updateCopilotLlmProviders = (next: ReadonlyArray<CopilotLlmProvider>) => {
+    const nextConfig = nextConfigBlobWithValue(instance.config, "llmProviders", [...next]);
     const { config: _omit, ...rest } = instance;
     onUpdate({ ...rest, config: nextConfig } as ProviderInstanceConfig);
   };
@@ -807,6 +904,7 @@ export function ProviderInstanceCard({
               <ProviderEnvironmentSection
                 environment={instance.environment ?? []}
                 onChange={updateEnvironment}
+                description={driverOption?.environmentHint}
               />
             </div>
 
@@ -820,21 +918,15 @@ export function ProviderInstanceCard({
               />
             ) : null}
 
-            {driverOption !== undefined ? (
-              <ProviderModelsSection
-                instanceId={instanceId}
-                driverKind={driverKind}
-                models={modelsForDisplay}
-                customModels={customModels}
-                hiddenModels={hiddenModels}
-                favoriteModels={favoriteModels}
-                modelOrder={modelOrder}
-                onChange={updateCustomModels}
-                onHiddenModelsChange={onHiddenModelsChange}
-                onFavoriteModelsChange={onFavoriteModelsChange}
-                onModelOrderChange={onModelOrderChange}
+            {driverKind === "githubCopilot" ? (
+              <CopilotLlmProvidersSection
+                providers={copilotLlmProviders}
+                onChange={updateCopilotLlmProviders}
+                onDiscoverModels={onDiscoverCopilotLlmModels}
               />
-            ) : (
+            ) : null}
+
+            {driverOption === undefined ? (
               <div>
                 <p className="text-xs text-muted-foreground">
                   This instance uses a driver (
@@ -843,7 +935,24 @@ export function ProviderInstanceCard({
                   edited from this surface.
                 </p>
               </div>
-            )}
+            ) : driverKind !== "githubCopilot" ? (
+              <ProviderModelsSection
+                instanceId={instanceId}
+                driverKind={driverKind}
+                models={modelsForDisplay}
+                customModels={customModels}
+                hiddenModels={hiddenModels}
+                favoriteModels={favoriteModels}
+                modelOrder={modelOrder}
+                modelConfigurations={copilotModelConfigurations}
+                onChange={updateCustomModels}
+                onCustomModelRename={renameCustomModel}
+                onHiddenModelsChange={onHiddenModelsChange}
+                onFavoriteModelsChange={onFavoriteModelsChange}
+                onModelOrderChange={onModelOrderChange}
+                onModelConfigurationsChange={updateCopilotModelConfigurations}
+              />
+            ) : null}
           </div>
         </CollapsibleContent>
       </Collapsible>

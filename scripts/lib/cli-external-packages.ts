@@ -57,8 +57,13 @@ export const CLI_RUNTIME_EXTERNAL_PREFIXES = [
  * the production install carries their complete dependency tree. Midscene's
  * image pipeline needs both sharp's platform package and Photon's adjacent
  * WASM file, neither of which survives being folded into the server ESM bundle.
+ * The Copilot SDK dynamically resolves its bundled CLI platform package at
+ * runtime, so its package tree also has to remain intact on disk.
  */
-export const CLI_RUNTIME_EXTERNAL_ROOT_PREFIXES = ["@midscene/core"] as const;
+export const CLI_RUNTIME_EXTERNAL_ROOT_PREFIXES = [
+  "@midscene/core",
+  "@github/copilot-sdk",
+] as const;
 
 /**
  * External only so the bundler never has to resolve them.

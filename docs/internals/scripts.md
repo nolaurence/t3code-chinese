@@ -76,7 +76,9 @@ authenticated.
 
 ### Desktop `.dmg` packaging notes
 
-- Default build is unsigned/not notarized for local sharing.
+- Default macOS builds use an ad-hoc signature so the app bundle has a complete resource seal, but
+  they are not Developer ID signed or notarized. Gatekeeper may still require **Open** from the
+  context menu after the artifact crosses a quarantine boundary such as a browser or chat app.
 - The DMG build uses `assets/prod/black-macos-1024.png` as the production app icon source.
 - The DMG chrome follows the release channel: neutral for Latest and the Nightly sky artwork for
   Nightly. Blueprint artwork remains exclusive to Dev builds. Packaging rasterizes the selected

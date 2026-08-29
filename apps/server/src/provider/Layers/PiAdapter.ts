@@ -1,6 +1,7 @@
 // @effect-diagnostics globalDate:off
 import {
   IsoDateTime,
+  NonNegativeInt,
   type PiAgentSettings,
   type ProviderRuntimeEvent,
   type ProviderSendTurnInput,
@@ -16,6 +17,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
@@ -49,6 +52,7 @@ export interface PiClientFactoryInput {
   readonly cwd: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly args?: ReadonlyArray<string>;
+  readonly negotiateProtocolV2?: boolean;
 }
 
 export type PiClientFactory = (
@@ -67,6 +71,7 @@ export interface PiAdapterOptions {
   readonly environment?: NodeJS.ProcessEnv;
   readonly createClient?: PiClientFactory;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  readonly negotiateProtocolV2?: boolean;
   readonly now?: () => string;
   readonly nextTurnId?: () => string;
 }
@@ -106,6 +111,7 @@ function readState(response: PiRpcResponse, providerName: string) {
     sessionId,
     ...(sessionFile ? { sessionFile } : {}),
     ...(modelProvider && modelId ? { model: `${modelProvider}/${modelId}` } : {}),
+    ...(data.todoPhases === undefined ? {} : { todoPhases: data.todoPhases }),
   };
 }
 
@@ -124,10 +130,14 @@ function readResumeSessionFile(value: unknown): string | undefined {
     : undefined;
 }
 
-function readMessageTurns(response: PiRpcResponse, sessionId: string) {
-  if (!response.success) return [];
-  const data = asRecord(response.data);
-  const messages = Array.isArray(data?.messages) ? data.messages : [];
+const PiMessagesPageData = Schema.Struct({
+  messages: Schema.Array(Schema.Unknown),
+  totalMessages: NonNegativeInt,
+  nextCursor: Schema.optional(Schema.String),
+});
+const decodePiMessagesPageData = Schema.decodeUnknownSync(PiMessagesPageData);
+
+function readMessageTurns(messages: ReadonlyArray<unknown>, sessionId: string) {
   return messages.flatMap((value, index) => {
     const message = asRecord(value);
     if (message?.role !== "assistant") return [];
@@ -139,9 +149,7 @@ function readMessageTurns(response: PiRpcResponse, sessionId: string) {
   });
 }
 
-function readContextMessages(response: PiRpcResponse, sessionId: string) {
-  const data = asRecord(response.success ? response.data : undefined);
-  const messages = Array.isArray(data?.messages) ? data.messages : [];
+function readContextMessages(messages: ReadonlyArray<unknown>, sessionId: string) {
   return messages.flatMap((value, index) => {
     const message = asRecord(value);
     if (!message) return [];
@@ -200,6 +208,7 @@ const defaultCreateClient: PiClientFactory = (input) =>
     cwd: input.cwd,
     ...(input.env ? { env: input.env } : {}),
     ...(input.args ? { args: input.args } : {}),
+    ...(input.negotiateProtocolV2 ? { negotiateProtocolV2: true } : {}),
   });
 
 export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
@@ -256,6 +265,81 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
         }),
       ),
     );
+
+  const readLegacyMessages = Effect.fn("PiAdapter.readLegacyMessages")(function* (
+    context: PiSessionContext,
+  ) {
+    const response = yield* context.client
+      .request({ type: "get_messages" })
+      .pipe(
+        Effect.mapError((cause) => clientFailure(provider, providerName, "get_messages", cause)),
+      );
+    const data = asRecord(response.success ? response.data : undefined);
+    return Array.isArray(data?.messages) ? data.messages : [];
+  });
+
+  const readMessages = Effect.fn("PiAdapter.readMessages")(function* (context: PiSessionContext) {
+    if (context.client.protocolVersion !== 2) return yield* readLegacyMessages(context);
+
+    const messages: unknown[] = [];
+    const seenCursors = new Set<string>();
+    let totalMessages: number | undefined;
+    let cursor: string | undefined;
+    do {
+      const result = yield* context.client
+        .request({ type: "get_messages_page", ...(cursor ? { cursor } : {}), limit: 256 })
+        .pipe(Effect.result);
+      if (Result.isFailure(result)) {
+        if (
+          result.failure.rpcCode === "session_busy" ||
+          result.failure.rpcCode === "stale_cursor"
+        ) {
+          return yield* readLegacyMessages(context);
+        }
+        return yield* clientFailure(provider, providerName, "get_messages_page", result.failure);
+      }
+
+      const page = yield* Effect.try({
+        try: () => {
+          if (!result.success.success || result.success.command !== "get_messages_page") {
+            throw new Error(`${providerName} get_messages_page returned an invalid response.`);
+          }
+          return decodePiMessagesPageData(result.success.data);
+        },
+        catch: (cause) => clientFailure(provider, providerName, "get_messages_page", cause),
+      });
+      if (totalMessages !== undefined && page.totalMessages !== totalMessages) {
+        return yield* clientFailure(
+          provider,
+          providerName,
+          "get_messages_page",
+          new Error(`${providerName} message pagination changed its total during traversal.`),
+        );
+      }
+      totalMessages = page.totalMessages;
+      messages.push(...page.messages);
+      cursor = page.nextCursor;
+      if (cursor && seenCursors.has(cursor)) {
+        return yield* clientFailure(
+          provider,
+          providerName,
+          "get_messages_page",
+          new Error(`${providerName} message pagination repeated a cursor.`),
+        );
+      }
+      if (cursor) seenCursors.add(cursor);
+    } while (cursor);
+
+    if (messages.length !== totalMessages) {
+      return yield* clientFailure(
+        provider,
+        providerName,
+        "get_messages_page",
+        new Error(`${providerName} message pagination ended before the advertised total.`),
+      );
+    }
+    return messages;
+  });
 
   const updateSession = (
     context: PiSessionContext,
@@ -404,20 +488,21 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
         cwd,
         ...(Object.keys(environment).length > 0 ? { env: environment } : {}),
         ...(piArgs.length > 0 ? { args: piArgs } : {}),
+        ...(options.negotiateProtocolV2 ? { negotiateProtocolV2: true } : {}),
       }).pipe(
         Effect.provideService(Scope.Scope, sessionScope),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
         Effect.mapError((cause) => clientFailure(provider, providerName, "spawn", cause)),
       );
-      const state = yield* client.request({ type: "get_state" }).pipe(
-        Effect.mapError((cause) => clientFailure(provider, providerName, "get_state", cause)),
-        Effect.flatMap((response) =>
-          Effect.try({
-            try: () => readState(response, providerName),
-            catch: (cause) => clientFailure(provider, providerName, "get_state", cause),
-          }),
-        ),
-      );
+      const stateResponse = yield* client
+        .request({ type: "get_state" })
+        .pipe(
+          Effect.mapError((cause) => clientFailure(provider, providerName, "get_state", cause)),
+        );
+      const state = yield* Effect.try({
+        try: () => readState(stateResponse, providerName),
+        catch: (cause) => clientFailure(provider, providerName, "get_state", cause),
+      });
       const timestamp = IsoDateTime.make(now());
       const resumeCursor = {
         sessionId: state.sessionId,
@@ -457,7 +542,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
         stopped: false,
       };
       sessions.set(input.threadId, context);
-      yield* emit(mapper.startSession(resumeCursor));
+      yield* emit([...mapper.startSession(resumeCursor), ...mapper.syncTodoPlan(state.todoPhases)]);
 
       const handleNativeEvent = Effect.fn("PiAdapter.handleNativeEvent")(function* (
         raw: PiRpcOutput,
@@ -625,12 +710,8 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
   const readThread: PiAdapterShape["readThread"] = Effect.fn("PiAdapter.readThread")(
     function* (threadId) {
       const context = yield* getContext(threadId);
-      const response = yield* context.client
-        .request({ type: "get_messages" })
-        .pipe(
-          Effect.mapError((cause) => clientFailure(provider, providerName, "get_messages", cause)),
-        );
-      return { threadId, turns: readMessageTurns(response, context.sessionId) };
+      const messages = yield* readMessages(context);
+      return { threadId, turns: readMessageTurns(messages, context.sessionId) };
     },
   );
 
@@ -638,15 +719,11 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (
     "PiAdapter.readThreadContext",
   )(function* (threadId) {
     const context = yield* getContext(threadId);
-    const response = yield* context.client
-      .request({ type: "get_messages" })
-      .pipe(
-        Effect.mapError((cause) => clientFailure(provider, providerName, "get_messages", cause)),
-      );
+    const messages = yield* readMessages(context);
     return {
       threadId,
       provider,
-      messages: readContextMessages(response, context.sessionId),
+      messages: readContextMessages(messages, context.sessionId),
     };
   });
 

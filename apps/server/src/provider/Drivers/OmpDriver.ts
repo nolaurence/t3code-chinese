@@ -40,6 +40,7 @@ const PROVIDER_NAME = "Oh My Pi";
 const PROVIDER_OPTIONS = {
   providerName: PROVIDER_NAME,
   defaultBinaryPath: "omp",
+  negotiateProtocolV2: true,
 } as const;
 const TEXT_GENERATION_ARGS = [
   "--no-tools",
@@ -118,12 +119,14 @@ export const OmpDriver: ProviderDriver<OmpSettings, OmpDriverEnv> = {
         skillFlag: "--skills",
         instanceId,
         environment: processEnv,
+        negotiateProtocolV2: true,
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),
       });
       const textGeneration = yield* makePiTextGeneration(effectiveConfig, processEnv, {
         providerName: PROVIDER_NAME,
         defaultBinaryPath: "omp",
         args: TEXT_GENERATION_ARGS,
+        negotiateProtocolV2: true,
       });
       const checkProvider = checkPiProviderStatus(
         effectiveConfig,

@@ -6,6 +6,8 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   defaultInstanceIdForDriver,
+  type CopilotLlmProviderModel,
+  type CopilotLlmProviderModelDiscoveryRequest,
   type EnvironmentId,
   PROVIDER_DISPLAY_NAMES,
   ProviderDriverKind,
@@ -74,7 +76,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
 import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
-import { searchableSetting } from "./settingsSearch";
+import { searchableSetting, type SettingsSearchItemId } from "./settingsSearch";
 import {
   backgroundActivityOverrideSettings,
   buildProviderInstanceUpdatePatch,
@@ -177,13 +179,15 @@ function providerEnvironmentDetail(environment: EnvironmentPresentation, t: Tran
 function EnvironmentUnavailableRow({
   environment,
   access,
+  panelTitle,
 }: {
   readonly environment: EnvironmentPresentation;
   readonly access: Exclude<ProviderEnvironmentAccess, { kind: "editable" | "read-only" }>;
+  readonly panelTitle?: string | undefined;
 }) {
   const { t } = useI18n();
   const isLoading = access.kind === "loading";
-  const title = isLoading
+  const statusTitle = isLoading
     ? t("providers.loadingSettings")
     : access.kind === "error"
       ? t("providers.deviceConnectFailed")
@@ -196,13 +200,23 @@ function EnvironmentUnavailableRow({
   // No spinner: this state can persist indefinitely for a wedged device, and a
   // continuously repainting animation would run the whole time.
   return (
-    <SettingsSection title={t("providers.title")}>
-      <SettingsRow title={title} description={description} />
+    <SettingsSection title={panelTitle ?? t("providers.title")}>
+      <SettingsRow title={statusTitle} description={description} />
     </SettingsSection>
   );
 }
 
-export function ProviderSettingsPanel() {
+interface ProviderSettingsPanelProps {
+  readonly driverFilter?: ((driver: ProviderDriverKind) => boolean) | undefined;
+  readonly title?: string | undefined;
+  readonly searchId?: SettingsSearchItemId;
+}
+
+export function ProviderSettingsPanel({
+  driverFilter,
+  title,
+  searchId = "providers",
+}: ProviderSettingsPanelProps = {}) {
   const { t } = useI18n();
   const { environments, isReady } = useEnvironments();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -290,6 +304,9 @@ export function ProviderSettingsPanel() {
         <SelectedEnvironmentProviderSettings
           key={selectedEnvironment.environmentId}
           environment={selectedEnvironment}
+          driverFilter={driverFilter}
+          title={title}
+          searchId={searchId}
         />
       ) : null}
     </SettingsPageContainer>
@@ -298,25 +315,59 @@ export function ProviderSettingsPanel() {
 
 function SelectedEnvironmentProviderSettings({
   environment,
+  driverFilter,
+  title,
+  searchId,
 }: {
   readonly environment: EnvironmentPresentation;
+  readonly driverFilter?: ((driver: ProviderDriverKind) => boolean) | undefined;
+  readonly title?: string | undefined;
+  readonly searchId: SettingsSearchItemId;
 }) {
   const isPrimary = environment.entry.target._tag === "PrimaryConnectionTarget";
   if (isPrimary) {
     // The desktop app owns its primary server outright; a browser session
     // checks the scopes its cookie session was granted.
     if (isElectron) {
-      return <AccessGatedProviderSettings environment={environment} operateAccess="granted" />;
+      return (
+        <AccessGatedProviderSettings
+          environment={environment}
+          operateAccess="granted"
+          driverFilter={driverFilter}
+          title={title}
+          searchId={searchId}
+        />
+      );
     }
-    return <PrimarySessionGatedProviderSettings environment={environment} />;
+    return (
+      <PrimarySessionGatedProviderSettings
+        environment={environment}
+        driverFilter={driverFilter}
+        title={title}
+        searchId={searchId}
+      />
+    );
   }
-  return <RemoteSessionGatedProviderSettings environment={environment} />;
+  return (
+    <RemoteSessionGatedProviderSettings
+      environment={environment}
+      driverFilter={driverFilter}
+      title={title}
+      searchId={searchId}
+    />
+  );
 }
 
 function PrimarySessionGatedProviderSettings({
   environment,
+  driverFilter,
+  title,
+  searchId,
 }: {
   readonly environment: EnvironmentPresentation;
+  readonly driverFilter?: ((driver: ProviderDriverKind) => boolean) | undefined;
+  readonly title?: string | undefined;
+  readonly searchId: SettingsSearchItemId;
 }) {
   const primarySessionState = usePrimarySessionState();
   const operateAccess = resolvePrimaryOperateAccess({
@@ -326,13 +377,27 @@ function PrimarySessionGatedProviderSettings({
     isPending: primarySessionState.isPending,
     hasError: primarySessionState.error !== null,
   });
-  return <AccessGatedProviderSettings environment={environment} operateAccess={operateAccess} />;
+  return (
+    <AccessGatedProviderSettings
+      environment={environment}
+      operateAccess={operateAccess}
+      driverFilter={driverFilter}
+      title={title}
+      searchId={searchId}
+    />
+  );
 }
 
 function RemoteSessionGatedProviderSettings({
   environment,
+  driverFilter,
+  title,
+  searchId,
 }: {
   readonly environment: EnvironmentPresentation;
+  readonly driverFilter?: ((driver: ProviderDriverKind) => boolean) | undefined;
+  readonly title?: string | undefined;
+  readonly searchId: SettingsSearchItemId;
 }) {
   const sessionState = useEnvironmentSessionState(environment.environmentId);
   const operateAccess = resolveRemoteOperateAccess({
@@ -340,15 +405,29 @@ function RemoteSessionGatedProviderSettings({
     isPending: sessionState.isPending,
     hasError: sessionState.hasError,
   });
-  return <AccessGatedProviderSettings environment={environment} operateAccess={operateAccess} />;
+  return (
+    <AccessGatedProviderSettings
+      environment={environment}
+      operateAccess={operateAccess}
+      driverFilter={driverFilter}
+      title={title}
+      searchId={searchId}
+    />
+  );
 }
 
 function AccessGatedProviderSettings({
   environment,
   operateAccess,
+  driverFilter,
+  title,
+  searchId,
 }: {
   readonly environment: EnvironmentPresentation;
   readonly operateAccess: ProviderOperateAccess;
+  readonly driverFilter?: ((driver: ProviderDriverKind) => boolean) | undefined;
+  readonly title?: string | undefined;
+  readonly searchId: SettingsSearchItemId;
 }) {
   const access = classifyProviderEnvironmentAccess({
     connectionPhase: environment.connection.phase,
@@ -356,13 +435,18 @@ function AccessGatedProviderSettings({
     operateAccess,
   });
   if (access.kind !== "editable" && access.kind !== "read-only") {
-    return <EnvironmentUnavailableRow environment={environment} access={access} />;
+    return (
+      <EnvironmentUnavailableRow environment={environment} access={access} panelTitle={title} />
+    );
   }
   return (
     <EnvironmentProviderSettings
       environmentId={environment.environmentId}
       environmentLabel={environment.label}
       readOnly={access.kind === "read-only"}
+      driverFilter={driverFilter}
+      title={title}
+      searchId={searchId}
     />
   );
 }
@@ -371,6 +455,9 @@ export function EnvironmentProviderSettings({
   environmentId,
   environmentLabel,
   readOnly = false,
+  driverFilter,
+  title,
+  searchId = "providers",
 }: {
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;
@@ -381,6 +468,9 @@ export function EnvironmentProviderSettings({
    * every one of its writes from being offered and then rejected.
    */
   readonly readOnly?: boolean;
+  readonly driverFilter?: ((driver: ProviderDriverKind) => boolean) | undefined;
+  readonly title?: string | undefined;
+  readonly searchId?: SettingsSearchItemId;
 }) {
   const { t } = useI18n();
   const settings = useEnvironmentSettings(environmentId);
@@ -391,6 +481,9 @@ export function EnvironmentProviderSettings({
     reportFailure: false,
   });
   const updateProvider = useAtomCommand(serverEnvironment.updateProvider, {
+    reportFailure: false,
+  });
+  const discoverCopilotLlmModels = useAtomCommand(serverEnvironment.discoverCopilotLlmModels, {
     reportFailure: false,
   });
   const [providerRefreshTarget, setProviderRefreshTarget] = useState<ProviderRefreshTarget | null>(
@@ -414,11 +507,12 @@ export function EnvironmentProviderSettings({
   );
   const visibleProviderSettings = PROVIDER_SETTINGS.filter(
     (providerSettings) =>
-      providerSettings.provider !== "cursor" ||
-      serverProviders.some(
-        (provider) =>
-          provider.instanceId === defaultInstanceIdForDriver(ProviderDriverKind.make("cursor")),
-      ),
+      (driverFilter?.(providerSettings.provider) ?? true) &&
+      (providerSettings.provider !== "cursor" ||
+        serverProviders.some(
+          (provider) =>
+            provider.instanceId === defaultInstanceIdForDriver(ProviderDriverKind.make("cursor")),
+        )),
   );
   const textGenerationModelSelection = resolveAppModelSelectionState(settings, serverProviders);
   const textGenInstanceId = textGenerationModelSelection.instanceId;
@@ -509,6 +603,18 @@ export function EnvironmentProviderSettings({
     },
     [environmentId, t, updateProvider],
   );
+  const discoverEnvironmentCopilotLlmModels = useCallback(
+    async (
+      input: CopilotLlmProviderModelDiscoveryRequest,
+    ): Promise<ReadonlyArray<CopilotLlmProviderModel>> => {
+      const result = await discoverCopilotLlmModels({ environmentId, input });
+      if (result._tag === "Success") {
+        return result.value;
+      }
+      throw squashAtomCommandFailure(result);
+    },
+    [discoverCopilotLlmModels, environmentId],
+  );
 
   interface InstanceRow {
     readonly instanceId: ProviderInstanceId;
@@ -592,6 +698,7 @@ export function EnvironmentProviderSettings({
   }
   for (const [driver, list] of instancesByDriver) {
     if (visibleDriverKinds.has(driver)) continue;
+    if (driverFilter && !driverFilter(driver)) continue;
     for (const [id, instance] of list) {
       rows.push({
         instanceId: id,
@@ -694,8 +801,8 @@ export function EnvironmentProviderSettings({
   return (
     <>
       <SettingsSection
-        {...searchableSetting("providers", t)}
-        title={t("providers.title")}
+        {...searchableSetting(searchId, t)}
+        title={title ?? t("providers.title")}
         headerAction={
           <div className="flex items-center gap-1.5">
             <ProviderLastChecked lastCheckedAt={lastCheckedAt} />
@@ -903,6 +1010,9 @@ export function EnvironmentProviderSettings({
                     modelOrder,
                   })
                 }
+                onDiscoverCopilotLlmModels={
+                  readOnly ? undefined : discoverEnvironmentCopilotLlmModels
+                }
                 onRunUpdate={
                   showInlineUpdateButton && updateCandidate
                     ? () => {
@@ -932,6 +1042,7 @@ export function EnvironmentProviderSettings({
           environmentId={environmentId}
           environmentLabel={environmentLabel}
           onOpenChange={setIsAddInstanceDialogOpen}
+          driverFilter={driverFilter}
         />
       ) : null}
     </>

@@ -263,6 +263,7 @@ import { useI18n, type Translate } from "../../i18n";
 
 function getRuntimeModeConfig(
   t: Translate,
+  isCopilot: boolean,
 ): Record<RuntimeMode, { label: string; description: string; icon: LucideIcon }> {
   return {
     "approval-required": {
@@ -276,8 +277,10 @@ function getRuntimeModeConfig(
       icon: PenLineIcon,
     },
     auto: {
-      label: t("chat.access.auto"),
-      description: t("chat.runtime.autoDescription"),
+      label: isCopilot ? t("chat.access.autopilot") : t("chat.access.auto"),
+      description: isCopilot
+        ? t("chat.runtime.autopilotDescription")
+        : t("chat.runtime.autoDescription"),
       icon: SparklesIcon,
     },
     "full-access": {
@@ -339,11 +342,12 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
   showInteractionModeToggle: boolean;
   interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
+  isCopilot: boolean;
   onToggleInteractionMode: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
   const { t } = useI18n();
-  const runtimeModeConfig = getRuntimeModeConfig(t);
+  const runtimeModeConfig = getRuntimeModeConfig(t, props.isCopilot);
   const runtimeModeOption = runtimeModeConfig[props.runtimeMode];
   const RuntimeModeIcon = runtimeModeOption.icon;
   const interactionModeTooltip =
@@ -3398,6 +3402,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
                   {isComposerFooterCompact ? (
                     <CompactComposerControlsMenu
+                      isCopilot={selectedProvider === "githubCopilot"}
                       interactionMode={interactionMode}
                       runtimeMode={runtimeMode}
                       showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
@@ -3417,6 +3422,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         </>
                       ) : null}
                       <ComposerFooterModeControls
+                        isCopilot={selectedProvider === "githubCopilot"}
                         showInteractionModeToggle={
                           composerProviderControls.showInteractionModeToggle
                         }
