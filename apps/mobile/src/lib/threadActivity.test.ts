@@ -353,6 +353,7 @@ describe("buildThreadFeed", () => {
           kind: "tool.completed",
           tone: "tool",
           summary: "Run tests",
+          createdAt: "2026-04-01T00:00:02.000Z",
           payload: {
             itemType: "command_execution",
             detail: "/bin/zsh -lc 'bun run test'",
