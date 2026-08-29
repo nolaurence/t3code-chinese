@@ -36,6 +36,10 @@ Nightly tags use `vX.Y.Z-nightly.YYYYMMDD.<run_number>`. The base is the next pa
 in `apps/desktop/package.json`. Package versions are changed only inside the release runners.
 Stable tags and package versions use exact `X.Y.Z` versions.
 
+Stable release notes leave the comparison base to GitHub, which compares against the last published
+release. This keeps a failed tag from hiding unreleased changes in the next stable release. Nightly
+release notes use the previous nightly tag so prerelease history stays within its own channel.
+
 ## Optional public configuration
 
 Desktop artifacts work without T3 Connect. Define these repository variables only when the fork has

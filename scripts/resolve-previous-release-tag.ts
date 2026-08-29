@@ -84,13 +84,6 @@ export class PreviousReleaseTagGitHubOutputAppendError extends Schema.TaggedErro
   }
 }
 
-interface StableVersion {
-  readonly major: number;
-  readonly minor: number;
-  readonly patch: number;
-  readonly prerelease: ReadonlyArray<string>;
-}
-
 interface NightlyVersion {
   readonly major: number;
   readonly minor: number;
@@ -99,70 +92,7 @@ interface NightlyVersion {
   readonly runNumber: number;
 }
 
-const parseNumericIdentifier = (identifier: string): number | undefined =>
-  /^\d+$/.test(identifier) ? Number(identifier) : undefined;
-
-const comparePrereleaseIdentifiers = (left: string, right: string): number => {
-  const leftNumeric = parseNumericIdentifier(left);
-  const rightNumeric = parseNumericIdentifier(right);
-
-  if (leftNumeric !== undefined && rightNumeric !== undefined) {
-    return leftNumeric - rightNumeric;
-  }
-  if (leftNumeric !== undefined) {
-    return -1;
-  }
-  if (rightNumeric !== undefined) {
-    return 1;
-  }
-  return left.localeCompare(right);
-};
-
-const compareStableVersions = (left: StableVersion, right: StableVersion): number => {
-  if (left.major !== right.major) return left.major - right.major;
-  if (left.minor !== right.minor) return left.minor - right.minor;
-  if (left.patch !== right.patch) return left.patch - right.patch;
-
-  const leftHasPrerelease = left.prerelease.length > 0;
-  const rightHasPrerelease = right.prerelease.length > 0;
-  if (!leftHasPrerelease && !rightHasPrerelease) return 0;
-  if (!leftHasPrerelease) return 1;
-  if (!rightHasPrerelease) return -1;
-
-  const maxLength = Math.max(left.prerelease.length, right.prerelease.length);
-  for (let index = 0; index < maxLength; index += 1) {
-    const leftIdentifier = left.prerelease[index];
-    const rightIdentifier = right.prerelease[index];
-    if (leftIdentifier === undefined) return -1;
-    if (rightIdentifier === undefined) return 1;
-
-    const comparison = comparePrereleaseIdentifiers(leftIdentifier, rightIdentifier);
-    if (comparison !== 0) return comparison;
-  }
-
-  return 0;
-};
-
-const parseStableTag = (tag: string): StableVersion | undefined => {
-  const match = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(tag);
-  if (!match) return undefined;
-
-  const [, major, minor, patch, prerelease] = match;
-  if (!major || !minor || !patch) return undefined;
-
-  const prereleaseIdentifiers = prerelease ? prerelease.split(".") : [];
-  // Nightly tags also start with `v` and carry a `nightly.*` prerelease
-  // identifier. They must not be considered stable candidates when resolving
-  // the previous stable tag.
-  if (prereleaseIdentifiers[0] === "nightly") return undefined;
-
-  return {
-    major: Number(major),
-    minor: Number(minor),
-    patch: Number(patch),
-    prerelease: prereleaseIdentifiers,
-  };
-};
+const isStableTag = (tag: string): boolean => /^v\d+\.\d+\.\d+$/.test(tag);
 
 const compareNightlyVersions = (left: NightlyVersion, right: NightlyVersion): number => {
   if (left.major !== right.major) return left.major - right.major;
@@ -197,20 +127,14 @@ export const resolvePreviousReleaseTag = (
 ) =>
   Effect.gen(function* () {
     if (channel === "stable") {
-      const current = parseStableTag(currentTag);
-      if (!current) {
+      if (!isStableTag(currentTag)) {
         return yield* new InvalidReleaseTagError({ channel, currentTag });
       }
 
-      const candidates = tags
-        .map((tag) => ({ tag, parsed: parseStableTag(tag) }))
-        .filter(
-          (entry): entry is { tag: string; parsed: StableVersion } => entry.parsed !== undefined,
-        )
-        .filter((entry) => compareStableVersions(entry.parsed, current) < 0)
-        .toSorted((left, right) => compareStableVersions(right.parsed, left.parsed));
-
-      return candidates[0]?.tag;
+      // GitHub's automatic comparison base follows published releases. A git
+      // tag can exist after a failed release run, so pinning the nearest tag
+      // would omit all changes since the last release that users could install.
+      return undefined;
     }
 
     const current = parseNightlyTag(currentTag);

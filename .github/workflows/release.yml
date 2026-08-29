@@ -578,7 +578,7 @@ jobs:
           fail_on_unmatched_files: true
           token: ${{ github.token }}
 
-      - name: Publish first GitHub release
+      - name: Publish GitHub release with automatic comparison base
         if: needs.preflight.outputs.previous_tag == ''
         uses: softprops/action-gh-release@v3
         with:

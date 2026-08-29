@@ -41,16 +41,17 @@ function mockHandle(options: {
   });
 }
 
-it.effect("selects the latest earlier stable tag and ignores nightlies", () =>
+it.effect("lets GitHub select the previous published stable release", () =>
   Effect.gen(function* () {
-    const previous = yield* resolvePreviousReleaseTag("stable", "v1.2.0", [
-      "v1.1.0",
-      "v1.1.1-nightly.20260619.1",
-      "v1.1.2",
-      "v1.2.0",
+    const previous = yield* resolvePreviousReleaseTag("stable", "v0.1.4", [
+      "v0.1.1",
+      "v0.1.2",
+      "v0.1.3",
+      "v0.1.4",
+      "v0.1.4-nightly.20260619.1",
     ]);
 
-    assert.equal(previous, "v1.1.2");
+    assert.isUndefined(previous);
   }),
 );
 
@@ -73,6 +74,18 @@ it.effect("reports the invalid tag with its release channel", () =>
     assert.equal(error.channel, "nightly");
     assert.equal(error.currentTag, "v1.2.0");
     assert.equal(error.message, "Invalid nightly release tag 'v1.2.0'.");
+  }),
+);
+
+it.effect("rejects a nightly tag on the stable channel", () =>
+  Effect.gen(function* () {
+    const error = yield* resolvePreviousReleaseTag("stable", "v1.2.0-nightly.20260620.2", []).pipe(
+      Effect.flip,
+    );
+
+    assert.equal(error._tag, "InvalidReleaseTagError");
+    assert.equal(error.channel, "stable");
+    assert.equal(error.currentTag, "v1.2.0-nightly.20260620.2");
   }),
 );
 
