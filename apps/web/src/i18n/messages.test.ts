@@ -87,5 +87,10 @@ describe("translated messages", () => {
     expect(t("settings.search.snapShots")).toBe("截图");
     expect(t("settings.nav.projects")).toBe("项目");
     expect(t("commandPalette.settingsItem", { section: "常规" })).toBe("设置 · 常规");
+    expect(t("settings.streaming.turn")).toBe("等待完整回复");
+    expect(t("settings.section.behavior")).toBe("行为");
+    expect(t("settings.followUp.queue")).toBe("排队");
+    expect(t("settings.diffLayout.split")).toBe("并排");
+    expect(t("settings.restore.deviceDefaults")).toBe("恢复此设备的默认设置");
   });
 });
