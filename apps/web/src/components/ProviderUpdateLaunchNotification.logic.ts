@@ -11,6 +11,8 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
+import { DEFAULT_LOCALE } from "../i18n/locale";
+import { createTranslator, type MessageKey, type Translate } from "../i18n/messages";
 
 export type ProviderUpdateCandidate = ServerProvider & {
   readonly versionAdvisory: NonNullable<ServerProvider["versionAdvisory"]> & {
@@ -29,12 +31,67 @@ export type ProviderSettingsUpdateCandidate = ServerProvider & {
 export type ProviderUpdateToastType = "warning" | "loading" | "error" | "success";
 export type ProviderUpdateToastPhase = "initial" | "running" | "failed" | "unchanged" | "succeeded";
 
+/**
+ * A message key plus interpolation values, so toast text can be re-rendered
+ * under the active locale via `resolveProviderUpdateToastText` instead of the
+ * locale that happened to be active when the view was created. Nested values
+ * (e.g. a localized provider list) are resolved recursively.
+ */
+interface ProviderUpdateLocalizableText {
+  readonly key: MessageKey;
+  readonly values?: Readonly<Record<string, string | number | ProviderUpdateLocalizableText>>;
+}
+
+const defaultProviderUpdateTranslator = createTranslator(DEFAULT_LOCALE);
+
+function resolveLocalizableText(text: ProviderUpdateLocalizableText, t: Translate): string {
+  if (!text.values) {
+    return t(text.key);
+  }
+  const values: Record<string, string | number> = {};
+  for (const [name, value] of Object.entries(text.values)) {
+    values[name] = typeof value === "object" ? resolveLocalizableText(value, t) : value;
+  }
+  return t(text.key, values);
+}
+
+/** Bake view text in the caller's locale, or English for translator-less callers. */
+function bakeProviderUpdateText(
+  text: ProviderUpdateLocalizableText,
+  t: Translate | undefined,
+): string {
+  return resolveLocalizableText(text, t ?? defaultProviderUpdateTranslator);
+}
+
 export interface ProviderUpdateToastView {
   readonly phase: ProviderUpdateToastPhase;
   readonly type: ProviderUpdateToastType;
   readonly title: string;
   readonly description: string;
   readonly dismissAfterVisibleMs?: number;
+  /** Localized title; `title` is the same text baked in the creating locale. */
+  readonly titleText?: ProviderUpdateLocalizableText;
+  /** Localized description; `description` is the same text baked in the creating locale. */
+  readonly descriptionText?: ProviderUpdateLocalizableText;
+}
+
+/** Toast text resolved under a translator, for rendering through `I18nText`. */
+export interface ProviderUpdateToastText {
+  readonly title: string;
+  readonly description: string;
+}
+
+/** Resolve a view's text under the active locale, falling back to the baked strings. */
+export function resolveProviderUpdateToastText(
+  view: ProviderUpdateToastView,
+  t: Translate,
+): ProviderUpdateToastText {
+  return {
+    title: view.titleText ? resolveLocalizableText(view.titleText, t) : view.title,
+    description: view.descriptionText
+      ? resolveLocalizableText(view.descriptionText, t)
+      : view.description,
+  };
 }
 
 /**
@@ -230,18 +287,73 @@ function formatProviderList(providers: ReadonlyArray<Pick<ServerProvider, "drive
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
 
-export function getProviderUpdateInitialToastView(input: {
-  readonly updateProviders: ReadonlyArray<ProviderUpdateCandidate>;
-  readonly oneClickProviders: ReadonlyArray<ProviderUpdateCandidate>;
-}): ProviderUpdateToastView {
+/** Compose a provider list whose separators localize ("A and B", "A, B, and C"). */
+function localizableProviderList(
+  providers: ReadonlyArray<Pick<ServerProvider, "driver">>,
+): string | number | ProviderUpdateLocalizableText {
+  return localizableProviderNames(
+    providers.map((provider) => PROVIDER_DISPLAY_NAMES[provider.driver] ?? provider.driver),
+  );
+}
+
+function localizableProviderNames(
+  names: readonly string[],
+): string | number | ProviderUpdateLocalizableText {
+  if (names.length === 0) {
+    return "";
+  }
+  if (names.length === 1) {
+    return names[0]!;
+  }
+  if (names.length === 2) {
+    return {
+      key: "providerUpdate.list.two",
+      values: { first: names[0]!, second: names[1]! },
+    };
+  }
+  return {
+    key: "providerUpdate.list.many",
+    values: {
+      prefix: localizableProviderNames(names.slice(0, -1)),
+      last: names[names.length - 1]!,
+    },
+  };
+}
+
+export function getProviderUpdateInitialToastView(
+  input: {
+    readonly updateProviders: ReadonlyArray<ProviderUpdateCandidate>;
+    readonly oneClickProviders: ReadonlyArray<ProviderUpdateCandidate>;
+  },
+  t?: Translate,
+): ProviderUpdateToastView {
+  const singleProvider = input.updateProviders.length === 1 ? input.updateProviders[0]! : undefined;
+  const titleText: ProviderUpdateLocalizableText = singleProvider
+    ? {
+        key: "providerUpdate.initial.title",
+        values: {
+          provider: PROVIDER_DISPLAY_NAMES[singleProvider.driver] ?? singleProvider.driver,
+          version: formatVersion(singleProvider.versionAdvisory.latestVersion),
+        },
+      }
+    : {
+        key: "providerUpdate.initial.titleMany",
+        values: { count: input.updateProviders.length },
+      };
+  const descriptionText: ProviderUpdateLocalizableText =
+    input.oneClickProviders.length > 0
+      ? { key: "providerUpdate.initial.description" }
+      : {
+          key: "providerUpdate.initial.manualDescription",
+          values: { providers: localizableProviderList(input.updateProviders) },
+        };
   return {
     phase: "initial",
     type: "warning",
-    title: getProviderUpdateInitialToastTitle(input.updateProviders),
-    description:
-      input.oneClickProviders.length > 0
-        ? "Install the update now or review provider settings."
-        : `${formatProviderList(input.updateProviders)} can be updated from provider settings.`,
+    title: bakeProviderUpdateText(titleText, t),
+    description: bakeProviderUpdateText(descriptionText, t),
+    titleText,
+    descriptionText,
   };
 }
 
@@ -249,39 +361,74 @@ export function shouldShowPrimaryProviderUpdateToast(view: ProviderUpdateToastVi
   return view.phase !== "running";
 }
 
-function getProviderUpdateRunningToastView(providerCount: number): ProviderUpdateToastView {
+export function getProviderUpdateRunningToastView(
+  providerCount: number,
+  t?: Translate,
+): ProviderUpdateToastView {
+  const titleText: ProviderUpdateLocalizableText =
+    providerCount === 1
+      ? { key: "providerUpdate.running.title" }
+      : { key: "providerUpdate.running.titleMany" };
+  const descriptionText: ProviderUpdateLocalizableText = {
+    key: "providerUpdate.running.description",
+  };
   return {
     phase: "running",
     type: "loading",
-    title: providerCount === 1 ? "Updating provider" : "Updating providers",
-    description: "Running provider update command.",
+    title: bakeProviderUpdateText(titleText, t),
+    description: bakeProviderUpdateText(descriptionText, t),
+    titleText,
+    descriptionText,
   };
 }
 
 export function getProviderUpdateRejectedToastView(
   providerCount: number,
   message: string,
+  t?: Translate,
 ): ProviderUpdateToastView {
+  const titleText: ProviderUpdateLocalizableText =
+    providerCount === 1
+      ? { key: "providerUpdate.failed.title" }
+      : { key: "providerUpdate.failed.titleMany" };
   return {
     phase: "failed",
     type: "error",
-    title: providerCount === 1 ? "Provider update failed" : "Provider updates failed",
+    title: bakeProviderUpdateText(titleText, t),
     description: message,
+    titleText,
   };
 }
 
-export function getProviderUpdateProgressToastView(input: {
-  readonly providers: ReadonlyArray<ServerProvider>;
-  readonly providerCount: number;
-}): ProviderUpdateToastView {
+export function getProviderUpdateProgressToastView(
+  input: {
+    readonly providers: ReadonlyArray<ServerProvider>;
+    readonly providerCount: number;
+  },
+  t?: Translate,
+): ProviderUpdateToastView {
   const providers = dedupeProvidersByDriver(input.providers);
   const failedProviders = providers.filter((provider) => provider.updateState?.status === "failed");
   if (failedProviders.length > 0) {
+    const titleText: ProviderUpdateLocalizableText =
+      failedProviders.length === 1
+        ? { key: "providerUpdate.failed.title" }
+        : { key: "providerUpdate.failed.titleMany" };
+    // A single failure surfaces the backend's raw message; otherwise fall back
+    // to a localized provider list.
+    const singleMessage =
+      failedProviders.length === 1 ? failedProviders[0]!.updateState?.message : undefined;
+    const descriptionText: ProviderUpdateLocalizableText = {
+      key: "providerUpdate.failed.description",
+      values: { providers: localizableProviderList(failedProviders) },
+    };
     return {
       phase: "failed",
       type: "error",
-      title: failedProviders.length === 1 ? "Provider update failed" : "Provider updates failed",
-      description: getFailedProviderUpdateDescription(failedProviders),
+      title: bakeProviderUpdateText(titleText, t),
+      description: singleMessage ? singleMessage : bakeProviderUpdateText(descriptionText, t),
+      titleText,
+      ...(singleMessage ? {} : { descriptionText }),
     };
   }
 
@@ -289,21 +436,29 @@ export function getProviderUpdateProgressToastView(input: {
     (provider) => provider.updateState?.status === "unchanged",
   );
   if (unchangedProviders.length > 0) {
+    const titleText: ProviderUpdateLocalizableText =
+      unchangedProviders.length === 1
+        ? { key: "providerUpdate.unchanged.title" }
+        : { key: "providerUpdate.unchanged.titleMany" };
+    const descriptionText: ProviderUpdateLocalizableText = {
+      key:
+        unchangedProviders.length === 1
+          ? "providerUpdate.unchanged.description"
+          : "providerUpdate.unchanged.descriptionMany",
+      values: { providers: localizableProviderList(unchangedProviders) },
+    };
     return {
       phase: "unchanged",
       type: "warning",
-      title:
-        unchangedProviders.length === 1
-          ? "Provider still needs an update"
-          : "Providers still need updates",
-      description: `${formatProviderList(unchangedProviders)} ${
-        unchangedProviders.length === 1 ? "still appears" : "still appear"
-      } outdated. Check provider settings for details.`,
+      title: bakeProviderUpdateText(titleText, t),
+      description: bakeProviderUpdateText(descriptionText, t),
+      titleText,
+      descriptionText,
     };
   }
 
   if (providers.some(isProviderUpdateActive)) {
-    return getProviderUpdateRunningToastView(input.providerCount);
+    return getProviderUpdateRunningToastView(input.providerCount, t);
   }
 
   const hasCompleteProviderSnapshots = providers.length >= input.providerCount;
@@ -314,16 +469,26 @@ export function getProviderUpdateProgressToastView(input: {
         provider.updateState?.status === "succeeded" || !isProviderUpdateCandidate(provider),
     );
   if (allProvidersUpdated) {
+    const titleText: ProviderUpdateLocalizableText =
+      input.providerCount === 1
+        ? { key: "providerUpdate.success.title" }
+        : { key: "providerUpdate.success.titleMany" };
+    const descriptionText: ProviderUpdateLocalizableText =
+      input.providerCount === 1
+        ? { key: "providerUpdate.success.description" }
+        : { key: "providerUpdate.success.descriptionMany" };
     return {
       phase: "succeeded",
       type: "success",
-      title: input.providerCount === 1 ? "Provider updated" : "Provider updates finished",
-      description: getProviderUpdatedDescription(input.providerCount),
+      title: bakeProviderUpdateText(titleText, t),
+      description: bakeProviderUpdateText(descriptionText, t),
       dismissAfterVisibleMs: PROVIDER_UPDATE_SUCCESS_VISIBLE_MS,
+      titleText,
+      descriptionText,
     };
   }
 
-  return getProviderUpdateRunningToastView(input.providerCount);
+  return getProviderUpdateRunningToastView(input.providerCount, t);
 }
 
 export function collectUpdatedProviderSnapshots(input: {
