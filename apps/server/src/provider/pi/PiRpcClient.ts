@@ -21,7 +21,7 @@ import {
   type PiRpcResponse,
 } from "./PiRpcProtocol.ts";
 
-export class PiRpcClientError extends Schema.TaggedErrorClass<PiRpcClientError>()(
+export class PiRpcClientError extends Schema.TaggedError<PiRpcClientError>()(
   "PiRpcClientError",
   {
     operation: Schema.String,

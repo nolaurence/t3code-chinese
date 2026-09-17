@@ -1,6 +1,6 @@
 "use client";
 
-import type { DesktopPreviewColorScheme } from "@t3tools/contracts";
+import type { DesktopPreviewColorScheme, EnvironmentId } from "@t3tools/contracts";
 import { Minus, MoreVertical, Plus as PlusIcon, RotateCcw } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
@@ -10,6 +10,8 @@ import {
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
+  MenuGroup,
+  MenuGroupLabel,
   MenuSeparator,
   MenuSub,
   MenuSubPopup,
@@ -17,9 +19,17 @@ import {
   MenuTrigger,
 } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useI18n } from "~/i18n";
 
 import { previewBridge } from "./previewBridge";
+
+const COLOR_SCHEME_OPTIONS: ReadonlyArray<{
+  value: DesktopPreviewColorScheme;
+  label: string;
+}> = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
 
 interface Props {
   /** Active preview tab id. Tab-targeting actions are disabled without it. */
@@ -42,6 +52,17 @@ interface Props {
   nativePictureInPicture: boolean;
   /** Toggles the optional native always-on-top preview window. */
   onNativePictureInPicture: () => void;
+  /** Environment the tab belongs to; scopes storage clearing to its partitions. */
+  environmentId: EnvironmentId;
+  /** Profile the tab was opened under, if the server recorded one. */
+  /**
+   * Required: the IPC layer reads an absent profile as "every profile", so a
+   * tab whose own profile is unknown must resolve the default before it gets
+   * here rather than passing the gap along.
+   */
+  profileId: string;
+  /** Profile display name, shown so the menu says which data is being cleared. */
+  profileName: string | undefined;
 }
 
 /**
@@ -58,8 +79,10 @@ export function PreviewMoreMenu({
   onToggleDeviceToolbar,
   nativePictureInPicture,
   onNativePictureInPicture,
+  environmentId,
+  profileId,
+  profileName,
 }: Props) {
-  const { t } = useI18n();
   if (!previewBridge) return null;
   const bridge = previewBridge;
   const tabDisabled = !tabId || !hasWebContents;
@@ -76,37 +99,32 @@ export function PreviewMoreMenu({
           render={
             <MenuTrigger
               render={
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  type="button"
-                  aria-label={t("preview.menu")}
-                />
+                <Button variant="ghost" size="icon-xs" type="button" aria-label="Preview menu" />
               }
             />
           }
         >
           <MoreVertical />
         </TooltipTrigger>
-        <TooltipPopup>{t("preview.more")}</TooltipPopup>
+        <TooltipPopup>More</TooltipPopup>
       </Tooltip>
       <MenuPopup align="end" sideOffset={6} className="min-w-56">
         <MenuItem onClick={callTab(bridge.hardReload)} disabled={tabDisabled}>
-          {t("preview.hardReload")}
+          Hard reload
         </MenuItem>
         <MenuItem onClick={callTab(bridge.openDevTools)} disabled={tabDisabled}>
-          {t("preview.openDevTools")}
+          Open DevTools
         </MenuItem>
         <MenuItem onClick={onNativePictureInPicture} disabled={tabDisabled}>
           {nativePictureInPicture
-            ? t("preview.closeSeparateWindow")
-            : t("preview.openSeparateWindow")}
+            ? "Close separate preview window"
+            : "Open separate preview window"}
         </MenuItem>
         <MenuItem onClick={onToggleDeviceToolbar} disabled={tabDisabled}>
-          {deviceToolbarVisible ? t("preview.hideDeviceToolbar") : t("preview.showDeviceToolbar")}
+          {deviceToolbarVisible ? "Hide device toolbar" : "Show device toolbar"}
         </MenuItem>
         <MenuSub>
-          <MenuSubTrigger disabled={tabDisabled}>{t("settings.nav.appearance")}</MenuSubTrigger>
+          <MenuSubTrigger disabled={tabDisabled}>Appearance</MenuSubTrigger>
           <MenuSubPopup className="min-w-32">
             <MenuRadioGroup
               value={colorScheme}
@@ -117,16 +135,7 @@ export function PreviewMoreMenu({
                   .catch(() => undefined);
               }}
             >
-              {(
-                [
-                  { value: "system", label: t("settings.theme.system") },
-                  { value: "light", label: t("settings.theme.light") },
-                  { value: "dark", label: t("settings.theme.dark") },
-                ] satisfies ReadonlyArray<{
-                  value: DesktopPreviewColorScheme;
-                  label: string;
-                }>
-              ).map((option) => (
+              {COLOR_SCHEME_OPTIONS.map((option) => (
                 <MenuRadioItem key={option.value} value={option.value}>
                   {option.label}
                 </MenuRadioItem>
@@ -145,14 +154,14 @@ export function PreviewMoreMenu({
           className="justify-between"
           disabled={tabDisabled}
         >
-          <span>{t("preview.zoom")}</span>
+          <span>Zoom</span>
           <span className="flex items-center gap-1">
             <Button
               variant="outline"
               size="icon-xs"
               type="button"
               onClick={callTab(bridge.zoomOut)}
-              aria-label={t("preview.zoomOut")}
+              aria-label="Zoom out"
               disabled={tabDisabled}
             >
               <Minus />
@@ -165,7 +174,7 @@ export function PreviewMoreMenu({
               size="icon-xs"
               type="button"
               onClick={callTab(bridge.zoomIn)}
-              aria-label={t("preview.zoomIn")}
+              aria-label="Zoom in"
               disabled={tabDisabled}
             >
               <PlusIcon />
@@ -175,7 +184,7 @@ export function PreviewMoreMenu({
               size="icon-xs"
               type="button"
               onClick={callTab(bridge.resetZoom)}
-              aria-label={t("preview.resetZoom")}
+              aria-label="Reset zoom"
               className="[:hover,[data-pressed]]:bg-foreground/10"
               disabled={tabDisabled}
             >
@@ -184,12 +193,37 @@ export function PreviewMoreMenu({
           </span>
         </MenuItem>
         <MenuSeparator />
-        <MenuItem onClick={() => void bridge.clearCookies().catch(() => undefined)}>
-          {t("preview.clearCookies")}
-        </MenuItem>
-        <MenuItem onClick={() => void bridge.clearCache().catch(() => undefined)}>
-          {t("preview.clearCache")}
-        </MenuItem>
+        {/*
+          Grouped so the heading has a `MenuGroup` ancestor — `MenuGroupLabel`
+          reads its context and throws without one. The heading also answers
+          which profile the tab is in, which is otherwise invisible: it is fixed
+          at open and nothing else in the chrome shows it.
+        */}
+        <MenuGroup>
+          {/*
+            The heading carries the profile so the actions below can keep
+            fixed-length labels: repeating a name of up to 48 characters in
+            each one drove the popup far past its width.
+          */}
+          {profileName ? (
+            // Truncation sits on the label itself: it renders a block box, so
+            // `text-overflow` on an inline child inside it never applies and a
+            // long name would push the popup past its width instead.
+            <MenuGroupLabel className="max-w-64 truncate">Profile: {profileName}</MenuGroupLabel>
+          ) : null}
+          <MenuItem
+            onClick={() =>
+              void bridge.clearCookies(environmentId, profileId).catch(() => undefined)
+            }
+          >
+            Clear cookies
+          </MenuItem>
+          <MenuItem
+            onClick={() => void bridge.clearCache(environmentId, profileId).catch(() => undefined)}
+          >
+            Clear cache
+          </MenuItem>
+        </MenuGroup>
       </MenuPopup>
     </Menu>
   );

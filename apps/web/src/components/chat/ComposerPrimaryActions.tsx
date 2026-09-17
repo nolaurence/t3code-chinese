@@ -6,7 +6,7 @@ import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../Sideb
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
-import { createTranslator, useI18n, type Translate } from "~/i18n";
+import { composerFloatingLayerProps } from "./composerEventScope";
 
 interface PendingActionState {
   questionIndex: number;
@@ -29,33 +29,27 @@ interface ComposerPrimaryActionsProps {
   isPreparingWorktree: boolean;
   hasSendableContent: boolean;
   preserveComposerFocusOnPointerDown?: boolean;
-  /** Enter-to-send is disabled on mobile viewports, where stop would otherwise
-   * be the only primary action and a running turn could not be steered. */
-  showSendWhileRunning?: boolean;
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
   onImplementPlanInNewThread: () => void;
 }
 
-export const formatPendingPrimaryActionLabel = (
-  input: {
-    compact: boolean;
-    isLastQuestion: boolean;
-    isResponding: boolean;
-    questionIndex: number;
-  },
-  t: Translate = createTranslator("en"),
-) => {
+const formatPendingPrimaryActionLabel = (input: {
+  compact: boolean;
+  isLastQuestion: boolean;
+  isResponding: boolean;
+  questionIndex: number;
+}) => {
   if (input.isResponding) {
-    return t("chat.action.submitting");
+    return "Submitting...";
   }
   if (input.compact) {
-    return input.isLastQuestion ? t("chat.action.submit") : t("chat.action.next");
+    return input.isLastQuestion ? "Submit" : "Next";
   }
   if (!input.isLastQuestion) {
-    return t("chat.action.nextQuestion");
+    return "Next question";
   }
-  return input.questionIndex > 0 ? t("chat.action.submitAnswers") : t("chat.action.submitAnswer");
+  return input.questionIndex > 0 ? "Submit answers" : "Submit answer";
 };
 
 const preventPointerFocus: PointerEventHandler<HTMLElement> = (event) => {
@@ -75,12 +69,10 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   isPreparingWorktree,
   hasSendableContent,
   preserveComposerFocusOnPointerDown = false,
-  showSendWhileRunning = false,
   onPreviousPendingQuestion,
   onInterrupt,
   onImplementPlanInNewThread,
 }: ComposerPrimaryActionsProps) {
-  const { t } = useI18n();
   const pointerFocusProps = preserveComposerFocusOnPointerDown
     ? { onPointerDown: preventPointerFocus }
     : undefined;
@@ -97,13 +89,13 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         "flex cursor-pointer items-center justify-center rounded-full bg-destructive/90 text-white shadow-xs shadow-destructive/24 inset-shadow-[0_1px_--theme(--color-white/16%)] transition-all duration-150 hover:bg-destructive hover:scale-105 active:inset-shadow-[0_1px_--theme(--color-black/8%)] active:shadow-none",
         insidePendingAction
           ? "size-8 sm:size-7"
-          : showSendWhileRunning && hasSendableContent
+          : hasSendableContent
             ? "size-9 sm:size-8"
             : "size-8 sm:h-8 sm:w-8",
       )}
       {...pointerFocusProps}
       onClick={onInterrupt}
-      aria-label={t("chat.action.stop")}
+      aria-label="Stop generation"
     >
       <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
         <rect x="2" y="2" width="8" height="8" rx="1.5" />
@@ -124,7 +116,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
               {...pointerFocusProps}
               onClick={onPreviousPendingQuestion}
               disabled={pendingAction.isResponding}
-              aria-label={t("chat.action.previousQuestion")}
+              aria-label="Previous question"
             >
               <ChevronLeftIcon className="size-3.5" />
             </Button>
@@ -137,7 +129,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
               onClick={onPreviousPendingQuestion}
               disabled={pendingAction.isResponding}
             >
-              {t("chat.action.previous")}
+              Previous
             </Button>
           )
         ) : null}
@@ -155,15 +147,12 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             (pendingAction.isLastQuestion ? !pendingAction.isComplete : !pendingAction.canAdvance)
           }
         >
-          {formatPendingPrimaryActionLabel(
-            {
-              compact,
-              isLastQuestion: pendingAction.isLastQuestion,
-              isResponding: pendingAction.isResponding,
-              questionIndex: pendingAction.questionIndex,
-            },
-            t,
-          )}
+          {formatPendingPrimaryActionLabel({
+            compact,
+            isLastQuestion: pendingAction.isLastQuestion,
+            isResponding: pendingAction.isResponding,
+            questionIndex: pendingAction.questionIndex,
+          })}
         </Button>
       </div>
     );
@@ -182,7 +171,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           {...pointerFocusProps}
           disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
         >
-          {isConnecting || isSendBusy ? t("chat.action.sending") : t("chat.action.refine")}
+          {isConnecting || isSendBusy ? "Sending..." : "Refine"}
         </Button>
       );
     }
@@ -196,7 +185,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           {...pointerFocusProps}
           disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
         >
-          {isConnecting || isSendBusy ? t("chat.action.sending") : t("chat.action.implement")}
+          {isConnecting || isSendBusy ? "Sending..." : "Implement"}
         </Button>
         <Menu>
           <MenuTrigger
@@ -205,7 +194,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
                 size="sm"
                 variant="default"
                 className="h-9 rounded-l-none rounded-r-full border-l-message-action-foreground/20 bg-message-action px-2 text-message-action-foreground hover:bg-message-action-hover sm:h-8"
-                aria-label={t("chat.action.implementationActions")}
+                aria-label="Implementation actions"
                 {...pointerFocusProps}
                 disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
               />
@@ -213,12 +202,12 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           >
             <ChevronDownIcon className="size-3.5" />
           </MenuTrigger>
-          <MenuPopup align="end" side="top">
+          <MenuPopup align="end" side="top" {...composerFloatingLayerProps}>
             <MenuItem
               disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
               onClick={() => void onImplementPlanInNewThread()}
             >
-              {t("chat.action.implementNewThread")}
+              Implement in a new thread
             </MenuItem>
           </MenuPopup>
         </Menu>
@@ -245,16 +234,18 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       }
       aria-label={
         isEnvironmentUnavailable
-          ? t("chat.action.environmentDisconnected")
+          ? "Environment disconnected"
           : sendDisabledReason
             ? sendDisabledReason
             : isConnecting
-              ? t("chat.action.connecting")
+              ? "Connecting"
               : isPreparingWorktree
-                ? t("chat.action.preparingWorktree")
+                ? "Preparing worktree"
                 : isSendBusy
-                  ? t("chat.action.sending")
-                  : t("chat.action.send")
+                  ? "Sending"
+                  : isRunning
+                    ? "Queue message"
+                    : "Send message"
       }
     >
       {stageBackdropVariant ? (
@@ -282,10 +273,12 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     return sendButton;
   }
 
+  // While a turn runs, a sendable draft queues for the next tool boundary, so
+  // the send button stays next to Stop on every viewport.
   return (
     <>
       {renderStopGenerationButton(false)}
-      {showSendWhileRunning && hasSendableContent ? sendButton : null}
+      {hasSendableContent ? sendButton : null}
     </>
   );
 });

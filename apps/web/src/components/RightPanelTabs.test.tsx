@@ -1,13 +1,24 @@
+import { EnvironmentId, type ThreadPullRequestLink } from "@t3tools/contracts";
 import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   RightPanelTabs,
+  resolvePullRequestTabLink,
+  shouldOpenDefaultBrowserProfileFromMenuClick,
   surfaceShortcutActionForKey,
   surfaceShortcutTargetsTypingContext,
   tabMuteMenuItem,
 } from "./RightPanelTabs";
+
+describe("browser profile submenu", () => {
+  it("reserves touch clicks for opening the choices while mouse clicks use the default", () => {
+    expect(shouldOpenDefaultBrowserProfileFromMenuClick("touch")).toBe(false);
+    expect(shouldOpenDefaultBrowserProfileFromMenuClick("mouse")).toBe(true);
+    expect(shouldOpenDefaultBrowserProfileFromMenuClick(undefined)).toBe(true);
+  });
+});
 
 function shortcutEvent(
   key: string,
@@ -88,6 +99,7 @@ function renderTabs(
     <RightPanelTabs
       mode="inline"
       surfaces={second ? [previewSurface, secondSurface] : [previewSurface]}
+      environmentId={null}
       activeSurfaceId={previewSurface.id}
       pendingSurfaceIds={new Set()}
       previewSessions={sessions}
@@ -97,7 +109,6 @@ function renderTabs(
       }}
       {...(previewRuntimeTabId ? { previewRuntimeTabId } : {})}
       terminalLabelsById={new Map()}
-      agentTitlesById={new Map()}
       onActivate={() => undefined}
       onCloseSurface={() => undefined}
       onCloseOtherSurfaces={() => undefined}
@@ -105,98 +116,28 @@ function renderTabs(
       onCloseAllSurfaces={() => undefined}
       onCopyFilePath={() => undefined}
       onAddBrowser={() => undefined}
+      onAddBrowserInProfile={() => undefined}
       onAddTerminal={() => undefined}
       onAddPullRequest={() => undefined}
+      onAddPullRequests={() => undefined}
       onAddDiff={() => undefined}
       onAddFiles={() => undefined}
       onAddAgents={() => undefined}
-      onAddContext={() => undefined}
+      onAddDevice={() => undefined}
       liveAgentCount={0}
       browserAvailable
       terminalAvailable={false}
       diffAvailable={false}
       filesAvailable={false}
       pullRequestAvailable={false}
+      pullRequestsAvailable={false}
       agentsAvailable={false}
-      contextAvailable={false}
+      deviceAvailable={false}
     >
       <div>content</div>
     </RightPanelTabs>,
   );
 }
-
-describe("RightPanelTabs agent titles", () => {
-  it("renders one live title per agent surface and keeps a stable fallback", () => {
-    const firstAgent = {
-      id: "agent:child-1" as const,
-      kind: "agents" as const,
-      agentId: "child-1",
-    };
-    const secondAgent = {
-      id: "agent:child-2" as const,
-      kind: "agents" as const,
-      agentId: "child-2",
-    };
-    const missingAgent = {
-      id: "agent:missing" as const,
-      kind: "agents" as const,
-      agentId: "missing",
-    };
-
-    const html = renderToStaticMarkup(
-      <RightPanelTabs
-        mode="inline"
-        surfaces={[firstAgent, secondAgent, missingAgent]}
-        activeSurfaceId={firstAgent.id}
-        pendingSurfaceIds={new Set()}
-        previewSessions={{}}
-        desktopByTabId={{}}
-        terminalLabelsById={new Map()}
-        agentTitlesById={
-          new Map([
-            ["child-1", "Inspect timeline"],
-            ["child-2", "Audit mobile"],
-          ])
-        }
-        onActivate={() => undefined}
-        onCloseSurface={() => undefined}
-        onCloseOtherSurfaces={() => undefined}
-        onCloseSurfacesToRight={() => undefined}
-        onCloseAllSurfaces={() => undefined}
-        onCopyFilePath={() => undefined}
-        onAddBrowser={() => undefined}
-        onAddTerminal={() => undefined}
-        onAddPullRequest={() => undefined}
-        onAddDiff={() => undefined}
-        onAddFiles={() => undefined}
-        onAddAgents={() => undefined}
-        onAddContext={() => undefined}
-        liveAgentCount={0}
-        browserAvailable={false}
-        terminalAvailable={false}
-        diffAvailable={false}
-        filesAvailable={false}
-        pullRequestAvailable={false}
-        agentsAvailable
-        contextAvailable={false}
-      >
-        <div>content</div>
-      </RightPanelTabs>,
-    );
-
-    expect(html).toContain(">Inspect timeline<");
-    expect(html).toContain(">Audit mobile<");
-    expect(html).toContain(">Agents<");
-    expect(html).toContain('aria-label="Close Inspect timeline"');
-    expect(html).toContain('aria-label="Close Audit mobile"');
-    expect(html).toContain('aria-label="Close Agents"');
-    expect(html).toContain('role="tablist"');
-    expect(html).toContain('aria-label="Panel tabs"');
-    expect(html).toContain('role="tab" aria-selected="true" tabindex="0"');
-    expect((html.match(/role="tab"/g) ?? []).length).toBe(3);
-    expect((html.match(/role="tab" aria-selected="false" tabindex="-1"/g) ?? []).length).toBe(2);
-  });
-});
 
 describe("RightPanelTabs preview favicon", () => {
   it("prefers a live capture and never asks Google about a private hostname", () => {
@@ -341,5 +282,49 @@ describe("tabMuteMenuItem", () => {
       label: "Unmute tab",
       disabled: false,
     });
+  });
+});
+
+describe("pull request tab snapshots", () => {
+  const environmentId = EnvironmentId.make("local");
+  const link: ThreadPullRequestLink = {
+    host: "github.com",
+    repository: "acme/api",
+    number: 7,
+    url: "https://github.com/acme/api/pull/7",
+    source: "manual",
+    linkedAt: "2026-01-01T00:00:00Z",
+    stack: null,
+    snapshot: null,
+  };
+  it("keeps unknown linked state authoritative and scopes matches to environment and host", () => {
+    const threads = [{ environmentId, pullRequests: [link] }];
+    expect(resolvePullRequestTabLink(threads, environmentId, "github.com", link)).toBe(link);
+    expect(
+      resolvePullRequestTabLink(threads, EnvironmentId.make("remote"), "github.com", link),
+    ).toBeUndefined();
+    expect(
+      resolvePullRequestTabLink(threads, environmentId, "github.enterprise.test", link),
+    ).toBeUndefined();
+  });
+  it("uses the newest snapshot when several threads link the same PR", () => {
+    const snapshot = {
+      state: "merged" as const,
+      title: "API",
+      headBranch: "api",
+      baseBranch: "main",
+      isDraft: false,
+      updatedAt: null,
+      syncedAt: "2026-02-01T00:00:00Z",
+    };
+    const newer = { ...link, snapshot };
+    expect(
+      resolvePullRequestTabLink(
+        [{ environmentId, pullRequests: [link, newer] }],
+        environmentId,
+        "github.com",
+        link,
+      ),
+    ).toBe(newer);
   });
 });

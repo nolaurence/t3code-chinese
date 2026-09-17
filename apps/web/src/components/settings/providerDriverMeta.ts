@@ -1,4 +1,5 @@
 import {
+  AntigravitySettings,
   ClaudeSettings,
   CopilotSettings,
   CodexSettings,
@@ -11,6 +12,7 @@ import {
 } from "@t3tools/contracts";
 import type * as Schema from "effect/Schema";
 import {
+  AntigravityIcon,
   ClaudeAI,
   CursorIcon,
   GithubCopilotIcon,
@@ -21,7 +23,6 @@ import {
   OmpIcon,
   PiAgentIcon,
 } from "../Icons";
-import type { MessageKey } from "../../i18n";
 
 type ProviderSettingsSchema = {
   readonly fields: Readonly<Record<string, Schema.Top>>;
@@ -46,20 +47,9 @@ export interface ProviderClientDefinition {
    * built-in default or custom — advertises the same marker.
    */
   readonly badgeLabel?: string;
-  readonly settingsFieldMessages?: Readonly<
-    Record<
-      string,
-      {
-        readonly label: MessageKey;
-        readonly description?: MessageKey;
-        readonly placeholder?: MessageKey;
-      }
-    >
-  >;
-  readonly environmentHint?: string;
 }
 
-export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
+const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
   {
     value: ProviderDriverKind.make("codex"),
     label: "Codex",
@@ -77,31 +67,7 @@ export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = 
     label: "GitHub Copilot",
     icon: GithubCopilotIcon,
     badgeLabel: "SDK",
-    environmentHint:
-      "Add COPILOT_GITHUB_TOKEN as a sensitive environment variable. The bundled SDK does not require an external Copilot CLI.",
     settingsSchema: CopilotSettings,
-    settingsFieldMessages: {
-      baseUrl: {
-        label: "providers.copilot.baseUrl.label",
-        description: "providers.copilot.baseUrl.description",
-      },
-      providerType: {
-        label: "providers.copilot.providerType.label",
-        description: "providers.copilot.providerType.description",
-      },
-      apiKey: {
-        label: "providers.copilot.apiKey.label",
-        description: "providers.copilot.apiKey.description",
-      },
-      wireApi: {
-        label: "providers.copilot.wireApi.label",
-        description: "providers.copilot.wireApi.description",
-      },
-      azureApiVersion: {
-        label: "providers.copilot.azureApiVersion.label",
-        description: "providers.copilot.azureApiVersion.description",
-      },
-    },
   },
   {
     value: ProviderDriverKind.make("cursor"),
@@ -124,40 +90,26 @@ export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = 
     settingsSchema: OpenCodeSettings,
   },
   {
+    value: ProviderDriverKind.make("antigravity"),
+    label: "Antigravity",
+    icon: AntigravityIcon,
+    settingsSchema: AntigravitySettings,
+  },
+  {
     value: ProviderDriverKind.make("piAgent"),
     label: "Pi",
     icon: PiAgentIcon,
     settingsSchema: PiAgentSettings,
-    settingsFieldMessages: {
-      binaryPath: {
-        label: "providers.pi.binaryPath.label",
-        description: "providers.pi.binaryPath.description",
-      },
-      homePath: {
-        label: "providers.pi.homePath.label",
-        description: "providers.pi.homePath.description",
-      },
-    },
   },
   {
     value: ProviderDriverKind.make("omp"),
     label: "Oh My Pi",
     icon: OmpIcon,
     settingsSchema: OmpSettings,
-    settingsFieldMessages: {
-      binaryPath: {
-        label: "providers.omp.binaryPath.label",
-        description: "providers.omp.binaryPath.description",
-      },
-      homePath: {
-        label: "providers.omp.homePath.label",
-        description: "providers.omp.homePath.description",
-      },
-    },
   },
 ];
 
-export const PROVIDER_CLIENT_DEFINITION_BY_VALUE: Partial<
+const PROVIDER_CLIENT_DEFINITION_BY_VALUE: Partial<
   Record<ProviderDriverKind, ProviderClientDefinition>
 > = Object.fromEntries(
   PROVIDER_CLIENT_DEFINITIONS.map((definition) => [definition.value, definition]),

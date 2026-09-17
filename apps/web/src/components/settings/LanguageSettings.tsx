@@ -27,7 +27,7 @@ export function LanguageSettings() {
 
   return (
     <SettingsRow
-      id={searchableSetting("interface-language").id}
+      id={searchableSetting("interface-language", t).id}
       title={t("settings.language.title")}
       description={t("settings.language.description")}
       resetAction={

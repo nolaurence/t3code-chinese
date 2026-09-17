@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import { ProviderDriverKind } from "@t3tools/contracts";
-import { createTranslator } from "../../i18n";
 
 import { DRIVER_OPTION_BY_VALUE } from "./providerDriverMeta";
 import {
   deriveProviderSettingsFields,
-  localizeProviderSettingsFields,
   nextProviderConfigWithFieldValue,
-  readProviderConfigBoolean,
-  readProviderConfigString,
 } from "./ProviderSettingsForm";
 
 describe("ProviderSettingsForm helpers", () => {
@@ -39,52 +35,39 @@ describe("ProviderSettingsForm helpers", () => {
     });
   });
 
-  it("hides legacy single-provider Copilot fields from the generic form", () => {
-    const copilot = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("githubCopilot")];
-    expect(copilot).toBeDefined();
+  it("derives a select control with its choices for the Antigravity sign-in method", () => {
+    const antigravity = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("antigravity")];
+    expect(antigravity).toBeDefined();
 
-    const fields = deriveProviderSettingsFields(copilot!);
-    expect(fields).toEqual([]);
+    const fields = deriveProviderSettingsFields(antigravity!);
+    expect(fields.map((field) => field.key)).toEqual([
+      "authMethod",
+      "apiKey",
+      "gcpProject",
+      "gcpLocation",
+      "binaryPath",
+    ]);
+    const authMethod = fields.find((field) => field.key === "authMethod");
+    expect(authMethod).toMatchObject({ control: "select", clearWhenEmpty: "omit" });
+    expect(authMethod?.options?.map((option) => option.value)).toEqual([
+      "oauth-personal",
+      "oauth-business",
+      "gemini-api-key",
+      "agent-platform",
+    ]);
+    expect(fields.find((field) => field.key === "apiKey")?.control).toBe("password");
   });
 
-  it("registers localized Pi binary and home directory settings", () => {
-    const pi = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("piAgent")];
-    expect(pi).toBeDefined();
+  it("shows the auto-compaction threshold for Claude providers", () => {
+    const claude = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("claudeAgent")];
+    expect(claude).toBeDefined();
 
-    const fields = deriveProviderSettingsFields(pi!);
-    expect(fields.map((field) => field.key)).toEqual(["binaryPath", "homePath"]);
-    expect(localizeProviderSettingsFields(pi!, fields, createTranslator("en"))).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: "binaryPath", label: "Binary path" }),
-        expect.objectContaining({ key: "homePath", label: "Pi agent home path" }),
-      ]),
-    );
-    expect(localizeProviderSettingsFields(pi!, fields, createTranslator("zh-CN"))).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: "binaryPath", label: "可执行文件路径" }),
-        expect.objectContaining({ key: "homePath", label: "Pi Agent 主目录" }),
-      ]),
-    );
-  });
-
-  it("registers localized Oh My Pi settings independently", () => {
-    const omp = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("omp")];
-    expect(omp).toBeDefined();
-
-    const fields = deriveProviderSettingsFields(omp!);
-    expect(fields.map((field) => field.key)).toEqual(["binaryPath", "homePath"]);
-    expect(localizeProviderSettingsFields(omp!, fields, createTranslator("en"))).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: "binaryPath", label: "Binary path" }),
-        expect.objectContaining({ key: "homePath", label: "Oh My Pi home path" }),
-      ]),
-    );
-    expect(localizeProviderSettingsFields(omp!, fields, createTranslator("zh-CN"))).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: "binaryPath", label: "可执行文件路径" }),
-        expect.objectContaining({ key: "homePath", label: "Oh My Pi 主目录" }),
-      ]),
-    );
+    expect(deriveProviderSettingsFields(claude!).map((field) => field.key)).toEqual([
+      "binaryPath",
+      "homePath",
+      "autoCompactWindow",
+      "launchArgs",
+    ]);
   });
 
   it("preserves unknown config keys while omitting empty configurable fields", () => {
@@ -103,10 +86,6 @@ describe("ProviderSettingsForm helpers", () => {
     );
 
     expect(next).toEqual({ forkOwned: 1 });
-  });
-
-  it("reads non-string config values as blank strings", () => {
-    expect(readProviderConfigString({ binaryPath: 123 }, "binaryPath")).toBe("");
   });
 
   it("omits false boolean fields when clearWhenEmpty is omit", () => {
@@ -170,13 +149,5 @@ describe("ProviderSettingsForm helpers", () => {
     );
 
     expect(next).toEqual({ experimental: false });
-  });
-
-  it("reads non-boolean config values as false booleans", () => {
-    expect(readProviderConfigBoolean({ experimental: "true" }, "experimental")).toBe(false);
-  });
-
-  it("reads missing boolean config values from the supplied default", () => {
-    expect(readProviderConfigBoolean({}, "experimental", true)).toBe(true);
   });
 });

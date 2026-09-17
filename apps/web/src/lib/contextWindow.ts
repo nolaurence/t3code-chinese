@@ -1,5 +1,4 @@
 import type { OrchestrationThreadActivity, ThreadTokenUsageSnapshot } from "@t3tools/contracts";
-import type { Translate } from "~/i18n";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -25,31 +24,6 @@ export type ContextWindowSnapshot = NullableContextWindowUsage & {
   readonly remainingPercentage: number | null;
   readonly updatedAt: string;
 };
-
-/** Map a provider driver kind to a user-facing display name. */
-export function formatProviderDisplayName(
-  provider: string | null | undefined,
-  t?: Translate,
-): string {
-  if (!provider) return t?.("context.thisAgent") ?? "This agent";
-  switch (provider) {
-    case "claudeAgent":
-    case "claude":
-      return "Claude";
-    case "codex":
-      return "Codex";
-    case "cursor":
-      return "Cursor";
-    case "opencode":
-      return "OpenCode";
-    default: {
-      // Title-case unknown driver kinds so they read reasonably.
-      const trimmed = provider.replace(/Agent$/i, "").trim();
-      if (trimmed.length === 0) return provider;
-      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
-    }
-  }
-}
 
 export function deriveLatestContextWindowSnapshot(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
@@ -92,6 +66,7 @@ export function deriveLatestContextWindowSnapshot(
       toolUses: asFiniteNumber(payload?.toolUses),
       durationMs: asFiniteNumber(payload?.durationMs),
       compactsAutomatically: asBoolean(payload?.compactsAutomatically) ?? false,
+      autoCompactThreshold: asFiniteNumber(payload?.autoCompactThreshold),
       updatedAt: activity.createdAt,
     };
   }

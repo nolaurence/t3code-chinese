@@ -1,3 +1,4 @@
+import { RefreshIcon } from "~/components/ui/refresh-icon";
 import {
   ArrowLeft,
   ArrowRight,
@@ -5,7 +6,6 @@ import {
   ExternalLink,
   MousePointerClick,
   PictureInPicture2,
-  RotateCw,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -58,6 +58,11 @@ interface Props {
    * to mount the three-dot menu (hard reload, devtools, zoom, clear data).
    */
   trailingActions?: ReactNode;
+  /**
+   * Slot between the nav buttons and the URL input. The preview view uses it
+   * to name the tab's browser profile, which is otherwise invisible.
+   */
+  leadingActions?: ReactNode;
 }
 
 const NOOP = () => {};
@@ -86,6 +91,7 @@ export function PreviewChromeRow({
   pickDisabled,
   pickDisabledReason,
   trailingActions,
+  leadingActions,
 }: Props) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -166,11 +172,13 @@ export function PreviewChromeRow({
                 />
               }
             >
-              <RotateCw className={cn(loading && "animate-spin")} />
+              <RefreshIcon refreshing={loading} />
             </TooltipTrigger>
             <TooltipPopup>{loading ? t("preview.loading") : t("preview.refresh")}</TooltipPopup>
           </Tooltip>
         </div>
+
+        {leadingActions}
 
         <InputGroup variant="ghost" className="group/address h-7 flex-1">
           <Tooltip>

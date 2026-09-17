@@ -80,5 +80,12 @@ describe("translated messages", () => {
     expect(t("chat.skills.empty")).toBe("未找到技能。可输入 / 浏览供应商命令。");
     expect(t("chat.skills.source.repo")).toBe("仓库");
     expect(t("settings.skillsMenu.title")).toBe("在斜杠命令菜单中显示技能");
+    expect(t("settings.language.title")).toBe("界面语言");
+    expect(t("settings.reasoning.title")).toBe("显示思维链");
+    expect(t("chat.reasoning.thinking")).toBe("思考中");
+    expect(t("settings.search.responseStreaming")).toBe("响应流式输出");
+    expect(t("settings.search.snapShots")).toBe("截图");
+    expect(t("settings.nav.projects")).toBe("项目");
+    expect(t("commandPalette.settingsItem", { section: "常规" })).toBe("设置 · 常规");
   });
 });

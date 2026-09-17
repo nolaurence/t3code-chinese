@@ -28,12 +28,10 @@
  * Hot-reload
  * ----------
  * On layer build we:
- *   1. Acquire `ServerSettingsService.subscribeChanges` before reading the
- *      initial snapshot, so updates cannot fall between those operations.
- *   2. Read the current `ServerSettings` once and use it to seed the
+ *   1. Read the current `ServerSettings` once and use it to seed the
  *      registry's initial state via `ProviderInstanceRegistryMutableLayer`.
- *   3. Fork a daemon fiber (lifetime tied to the layer's scope) that
- *      consumes the pre-acquired subscription and calls
+ *   2. Fork a daemon fiber (lifetime tied to the layer's scope) that
+ *      acquires `ServerSettingsService.subscribeChanges` and calls
  *      `ProviderInstanceRegistryMutator.reconcile` on every emission.
  *
  * Failures inside the watcher are logged and swallowed so a single bad
@@ -92,11 +90,13 @@ export const deriveProviderInstanceConfigMap = (
     // built-in driver kinds.
     const legacyKey = driver.driverKind as keyof ServerSettings["providers"];
     const legacyConfig = settings.providers[legacyKey];
-    const config = legacyConfig ?? driver.defaultConfig();
+    if (legacyConfig === undefined) {
+      continue;
+    }
 
     merged[instanceId] = {
       driver: driver.driverKind,
-      config,
+      config: legacyConfig,
     };
   }
 
@@ -114,35 +114,36 @@ export const deriveProviderInstanceConfigMap = (
  * configs, so the only way the watcher could fail is a settings stream
  * tear-down, which logs and exits cleanly.
  */
-const settingsWatcherLayer = (settingsChanges: Stream.Stream<ServerSettings>) =>
-  Layer.effectDiscard(
-    Effect.gen(function* () {
-      const mutator = yield* ProviderInstanceRegistryMutator;
-      yield* settingsChanges.pipe(
-        Stream.runForEach((next) =>
-          mutator
-            .reconcile(deriveProviderInstanceConfigMap(next))
-            .pipe(
-              Effect.catchCause((cause) =>
-                Effect.logError("ProviderInstanceRegistry reconcile failed", cause),
-              ),
+const SettingsWatcherLive = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const mutator = yield* ProviderInstanceRegistryMutator;
+    const serverSettings = yield* ServerSettingsService;
+    const settingsChanges = yield* serverSettings.subscribeChanges;
+    yield* settingsChanges.pipe(
+      Stream.runForEach((next) =>
+        mutator
+          .reconcile(deriveProviderInstanceConfigMap(next))
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError("ProviderInstanceRegistry reconcile failed", cause),
             ),
-        ),
-        Effect.forkScoped,
-      );
-    }),
-  );
+          ),
+      ),
+      Effect.forkScoped,
+    );
+  }),
+);
 
 /**
  * Hydrate `ProviderInstanceRegistry` from `ServerSettings` and keep it in
- * sync with subsequent settings change notifications.
+ * sync with subsequent `streamChanges` emissions.
  *
  * The Layer's two halves:
  *   - `ProviderInstanceRegistryMutableLayer` produces the registry +
  *     mutator from the initial config map. Its scope owns every
  *     per-instance child scope created during reconcile.
- *   - `settingsWatcherLayer` consumes the mutator and runs a daemon fiber
- *     in the same scope.
+ *   - `SettingsWatcherLive` consumes the mutator, acquires its settings
+ *     subscription before forking, and runs a daemon fiber in the same scope.
  *
  * Composing via `Layer.provideMerge` makes the watcher's deps available
  * from the mutable layer while still surfacing the registry as an output.
@@ -156,7 +157,6 @@ export const ProviderInstanceRegistryHydrationLive: Layer.Layer<
 > = Layer.unwrap(
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
-    const settingsChanges = yield* serverSettings.subscribeChanges;
     const initialSettings: ServerSettings | undefined = yield* serverSettings.getSettings.pipe(
       Effect.orElseSucceed(() => undefined),
     );
@@ -170,6 +170,6 @@ export const ProviderInstanceRegistryHydrationLive: Layer.Layer<
       configMap: initialConfigMap,
     });
 
-    return settingsWatcherLayer(settingsChanges).pipe(Layer.provideMerge(mutableLayer));
+    return SettingsWatcherLive.pipe(Layer.provideMerge(mutableLayer));
   }),
 ) as Layer.Layer<ProviderInstanceRegistry, never, BuiltInDriversEnv | ServerSettingsService>;

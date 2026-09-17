@@ -1,3 +1,4 @@
+import { RefreshIcon } from "~/components/ui/refresh-icon";
 /**
  * What the list shows when it has no rows to show.
  *
@@ -11,10 +12,9 @@
  * with no project to read from — leave the button out, since pressing it could only repeat what
  * is already happening or ask nobody.
  */
-import { PlusIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
+import { PlusIcon, SearchIcon } from "lucide-react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
-import { useI18n } from "../../i18n";
 import { Button } from "../ui/button";
 import { PullRequestListGhost } from "./PullRequestGhosts";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
@@ -97,21 +97,21 @@ export function PullRequestListEmptyState({
   onLoadMore: () => void;
   onRefresh: () => void;
 }) {
-  const { t } = useI18n();
-  const visibleQuery = query.length > 48 ? `${query.slice(0, 48)}…` : query;
   // Ahead of the search and the filters, because neither can produce a row until a project does.
   if (!hasProjects) {
     return (
       <Empty className="py-16">
         <BranchMark joined={false} />
         <EmptyHeader>
-          <EmptyTitle>{t("pullRequest.empty.noProjects")}</EmptyTitle>
-          <EmptyDescription>{t("pullRequest.empty.noProjectsDescription")}</EmptyDescription>
+          <EmptyTitle>No projects in this workspace</EmptyTitle>
+          <EmptyDescription>
+            Add a project, and the pull requests from its repository appear here.
+          </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button size="sm" onClick={() => openCommandPalette({ open: "add-project" })}>
             <PlusIcon className="size-3.5" />
-            {t("sidebar.addProject")}
+            Add project
           </Button>
         </EmptyContent>
       </Empty>
@@ -124,7 +124,7 @@ export function PullRequestListEmptyState({
     return (
       <PullRequestListGhost
         rows={5}
-        caption={t("pullRequest.empty.searchingHosts", { query: visibleQuery })}
+        caption={`Searching every host for “${query.length > 48 ? `${query.slice(0, 48)}…` : query}”`}
       />
     );
   }
@@ -135,19 +135,23 @@ export function PullRequestListEmptyState({
         <BranchMark joined={false} />
         <EmptyHeader>
           {/* A pasted paragraph is still a search, but it is not a title. */}
-          <EmptyTitle>{t("pullRequest.empty.noMatch", { query: visibleQuery })}</EmptyTitle>
-          <EmptyDescription>{t("pullRequest.empty.noMatchDescription")}</EmptyDescription>
+          <EmptyTitle>
+            Nothing matches “{query.length > 48 ? `${query.slice(0, 48)}…` : query}”
+          </EmptyTitle>
+          <EmptyDescription>
+            The hosts were searched for it. Try fewer words, or search by number, author or branch.
+          </EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="flex-row flex-wrap justify-center gap-2">
           <Button size="sm" variant="outline" onClick={onClearQuery}>
             <SearchIcon className="size-3.5" />
-            {t("pullRequest.empty.clearSearch")}
+            Clear search
           </Button>
           {/* The hosts answered this query once; a pull request opened since then would answer
               differently, and nothing on screen says which of the two the reader is looking at. */}
           <Button size="sm" variant="outline" disabled={refreshing} onClick={onRefresh}>
-            <RefreshCwIcon className="size-3.5" />
-            {refreshing ? t("pullRequest.empty.checking") : t("pullRequest.empty.checkAgain")}
+            <RefreshIcon className="size-3.5" refreshing={refreshing} />
+            {refreshing ? "Checking..." : "Check again"}
           </Button>
         </EmptyContent>
       </Empty>
@@ -158,24 +162,22 @@ export function PullRequestListEmptyState({
     <Empty className="py-16">
       <BranchMark joined={false} />
       <EmptyHeader>
-        <EmptyTitle>
-          {filtered ? t("pullRequest.empty.filtered") : t("pullRequest.empty.none")}
-        </EmptyTitle>
+        <EmptyTitle>{filtered ? "Nothing under these filters" : "No pull requests"}</EmptyTitle>
         <EmptyDescription>
           {filtered
-            ? t("pullRequest.empty.filteredDescription")
-            : t("pullRequest.empty.noneDescription")}
+            ? "Widen the state, involvement or project filter to see more."
+            : "Pull requests from every project in this workspace appear here."}
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="flex-row flex-wrap justify-center gap-2">
         {canLoadMore ? (
           <Button size="sm" variant="outline" disabled={loadingMore} onClick={onLoadMore}>
-            {loadingMore ? t("common.loading") : t("pullRequest.empty.loadMore")}
+            {loadingMore ? "Loading..." : "Load more pull requests"}
           </Button>
         ) : null}
         <Button size="sm" variant="outline" disabled={refreshing} onClick={onRefresh}>
-          <RefreshCwIcon className="size-3.5" />
-          {refreshing ? t("pullRequest.empty.checking") : t("pullRequest.empty.checkAgain")}
+          <RefreshIcon className="size-3.5" refreshing={refreshing} />
+          {refreshing ? "Checking..." : "Check again"}
         </Button>
       </EmptyContent>
     </Empty>

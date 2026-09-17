@@ -114,7 +114,7 @@ export type PreviewMidsceneAssertResult = typeof PreviewMidsceneAssertResult.Typ
 export const PreviewMidsceneOperation = Schema.Literals(["act", "query", "assert"]);
 export type PreviewMidsceneOperation = typeof PreviewMidsceneOperation.Type;
 
-export class PreviewMidsceneConfigurationError extends Schema.TaggedErrorClass<PreviewMidsceneConfigurationError>()(
+export class PreviewMidsceneConfigurationError extends Schema.TaggedError<PreviewMidsceneConfigurationError>()(
   "PreviewMidsceneConfigurationError",
   {
     operation: PreviewMidsceneOperation,
@@ -126,7 +126,7 @@ export class PreviewMidsceneConfigurationError extends Schema.TaggedErrorClass<P
   }
 }
 
-export class PreviewMidsceneRuntimeUnavailableError extends Schema.TaggedErrorClass<PreviewMidsceneRuntimeUnavailableError>()(
+export class PreviewMidsceneRuntimeUnavailableError extends Schema.TaggedError<PreviewMidsceneRuntimeUnavailableError>()(
   "PreviewMidsceneRuntimeUnavailableError",
   {
     operation: PreviewMidsceneOperation,
@@ -137,7 +137,7 @@ export class PreviewMidsceneRuntimeUnavailableError extends Schema.TaggedErrorCl
   }
 }
 
-export class PreviewMidsceneExecutionError extends Schema.TaggedErrorClass<PreviewMidsceneExecutionError>()(
+export class PreviewMidsceneExecutionError extends Schema.TaggedError<PreviewMidsceneExecutionError>()(
   "PreviewMidsceneExecutionError",
   {
     operation: PreviewMidsceneOperation,
@@ -150,7 +150,7 @@ export class PreviewMidsceneExecutionError extends Schema.TaggedErrorClass<Previ
   }
 }
 
-export class PreviewMidsceneResultTooLargeError extends Schema.TaggedErrorClass<PreviewMidsceneResultTooLargeError>()(
+export class PreviewMidsceneResultTooLargeError extends Schema.TaggedError<PreviewMidsceneResultTooLargeError>()(
   "PreviewMidsceneResultTooLargeError",
   {
     operation: Schema.Literal("query"),

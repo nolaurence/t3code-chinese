@@ -6,6 +6,7 @@ import {
 import {
   type ProjectEntry,
   type ProviderDriverKind,
+  type PullRequestContextMetadata,
   type ServerProviderSkill,
   type ServerProviderSlashCommand,
 } from "@t3tools/contracts";
@@ -23,9 +24,9 @@ import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../compo
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { Command, CommandGroup, CommandItem, CommandList } from "../ui/command";
-import { useI18n } from "../../i18n";
-import type { MessageKey } from "../../i18n/messages";
 import { PierreEntryIcon } from "./PierreEntryIcon";
+import { ComposerBanner } from "./ComposerBanner";
+import { resolvePullRequestState } from "../pullRequest/pullRequestPresentation";
 
 export type ComposerCommandItem =
   | {
@@ -58,6 +59,13 @@ export type ComposerCommandItem =
       skill: ServerProviderSkill;
       label: string;
       description: string;
+    }
+  | {
+      id: string;
+      type: "pull-request";
+      pullRequest: PullRequestContextMetadata;
+      label: string;
+      description: string;
     };
 
 export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
@@ -70,7 +78,6 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   onHighlightedItemChange: (itemId: string | null) => void;
   onSelect: (item: ComposerCommandItem) => void;
 }) {
-  const { t } = useI18n();
   const listRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -91,13 +98,13 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
         );
       }}
     >
-      <div
+      <ComposerBanner.Surface
         ref={listRef}
-        className="chat-composer-drawer-surface chat-composer-drawer-attached relative w-full overflow-hidden **:data-[slot=scroll-area-scrollbar]:data-[orientation=vertical]:my-4"
+        className="flex min-h-0 w-full flex-col overflow-hidden pb-(--chat-composer-attachment-overlap) **:data-[slot=scroll-area-scrollbar]:data-[orientation=vertical]:my-4"
         data-composer-command-drawer="true"
       >
         {props.items.length > 0 ? (
-          <CommandList className="max-h-72 scroll-pb-6">
+          <CommandList className="max-h-72 min-h-0 scroll-pb-6">
             <CommandGroup>
               {props.items.map((item) => (
                 <ComposerCommandMenuItem
@@ -117,18 +124,20 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
             <p className="text-secondary-label text-xs">
               {props.isLoading
                 ? props.triggerKind === "skill"
-                  ? t("chat.skills.searching")
-                  : t("chat.command.searchingFiles")
+                  ? "Searching workspace skills..."
+                  : props.triggerKind === "pull-request"
+                    ? "Finding pull request..."
+                    : "Searching workspace files..."
                 : (props.emptyStateText ??
                   (props.triggerKind === "skill"
-                    ? t("chat.skills.empty")
+                    ? "No skills found. Try / to browse provider commands."
                     : props.triggerKind === "path"
-                      ? t("chat.command.noMatchingPaths")
-                      : t("chat.command.noMatchingCommand")))}
+                      ? "No matching files or folders."
+                      : "No matching command."))}
             </p>
           </div>
         )}
-      </div>
+      </ComposerBanner.Surface>
     </Command>
   );
 });
@@ -145,6 +154,8 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
     props.item.type === "skill" ? resolveProviderSkillSourceKind(props.item.skill) : null;
   const isSlashSkill =
     props.triggerKind === "slash-command" && props.item.type === "skill" ? props.item.skill : null;
+  const pullRequestPresentation =
+    props.item.type === "pull-request" ? resolvePullRequestState(props.item.pullRequest) : null;
 
   return (
     <CommandItem
@@ -169,6 +180,13 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           pathValue={props.item.path}
           kind={props.item.pathKind}
           theme={props.resolvedTheme}
+        />
+      ) : null}
+      {pullRequestPresentation ? (
+        <pullRequestPresentation.Icon
+          role="img"
+          aria-label={pullRequestPresentation.label}
+          className={cn("size-4 shrink-0", pullRequestPresentation.toneClassName)}
         />
       ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -205,23 +223,22 @@ const SKILL_SOURCE_ICON_BY_KIND: Record<ProviderSkillSourceKind, LucideIcon> = {
   other: PackageIcon,
 };
 
-const SKILL_SOURCE_LABEL_KEY_BY_KIND: Record<ProviderSkillSourceKind, MessageKey> = {
-  app: "chat.skills.source.app",
-  repo: "chat.skills.source.repo",
-  project: "chat.skills.source.project",
-  personal: "chat.skills.source.personal",
-  system: "chat.skills.source.system",
-  other: "chat.skills.source.provider",
+const SKILL_SOURCE_LABEL_BY_KIND: Record<ProviderSkillSourceKind, string> = {
+  app: "App",
+  repo: "Repo",
+  project: "Project",
+  personal: "Personal",
+  system: "System",
+  other: "Provider",
 };
 
 function SkillSourceBadge(props: { kind: ProviderSkillSourceKind; showSkillSuffix: boolean }) {
-  const { t } = useI18n();
   const Icon = SKILL_SOURCE_ICON_BY_KIND[props.kind];
   return (
     <Badge className="ms-auto" variant="secondary">
       <Icon aria-hidden="true" className="text-current" />
-      {t(SKILL_SOURCE_LABEL_KEY_BY_KIND[props.kind])}
-      {props.showSkillSuffix ? t("chat.skills.badgeSuffix") : null}
+      {SKILL_SOURCE_LABEL_BY_KIND[props.kind]}
+      {props.showSkillSuffix ? " Skill" : null}
     </Badge>
   );
 }

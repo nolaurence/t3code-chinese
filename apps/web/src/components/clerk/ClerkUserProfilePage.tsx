@@ -1,8 +1,8 @@
-import { RefreshCwIcon } from "lucide-react";
+import { RefreshIcon } from "~/components/ui/refresh-icon";
+
 import type { ReactNode } from "react";
 
 import { cn } from "../../lib/utils";
-import { useI18n } from "../../i18n";
 import { Button } from "../ui/button";
 
 export function ClerkUserProfilePage({
@@ -48,7 +48,6 @@ export function ClerkUserProfileRefreshButton({
   readonly isPending: boolean;
   readonly onClick: () => void;
 }) {
-  const { t } = useI18n();
   return (
     <Button
       size="sm"
@@ -57,8 +56,8 @@ export function ClerkUserProfileRefreshButton({
       disabled={disabled || isPending}
       onClick={onClick}
     >
-      <RefreshCwIcon aria-hidden="true" className={cn("size-3.5", isPending && "animate-spin")} />
-      {t("common.refresh")}
+      <RefreshIcon aria-hidden="true" className="size-3.5" refreshing={isPending} />
+      Refresh
     </Button>
   );
 }

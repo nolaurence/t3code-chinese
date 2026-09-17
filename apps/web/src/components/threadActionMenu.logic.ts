@@ -9,6 +9,7 @@ import type { Translate } from "../i18n";
  */
 export type ThreadActionMenuId =
   | "new-thread-on-branch"
+  | "project-settings"
   | "pin"
   | "unpin"
   | "settle"
@@ -111,10 +112,13 @@ export function buildThreadActionMenuItems(
                 label: t?.("sidebar.snooze") ?? "Snooze",
                 icon: "clock",
                 disabled: !state.canSnoozeNow,
-                children: state.snoozePresets.map((preset) => ({
-                  id: `snooze:${preset.id}` as const,
-                  label: `${preset.label} (${preset.whenLabel})`,
-                })),
+                children: [
+                  ...state.snoozePresets.map((preset) => ({
+                    id: `snooze:${preset.id}` as const,
+                    label: `${preset.label} (${preset.whenLabel})`,
+                  })),
+                  { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
+                ],
               },
         ]
       : []),
@@ -160,6 +164,7 @@ export function buildThreadActionMenuItems(
         },
       ],
     },
+    { id: "project-settings", label: "Project settings", icon: "settings" },
     // Archive removes the thread from the sidebar while keeping its
     // conversation under Settings > Archived threads — distinct from Settle
     // (stays visible in the Settled shelf) and Delete (clears history for
