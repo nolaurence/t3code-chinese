@@ -687,6 +687,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const rowsProjectionRef = useRef<{
     threadKey: string;
     workspaceRoot: string | undefined;
+    locale: string;
     projection: MessagesTimelineRowsProjection;
   } | null>(null);
   // Match the row header's liveness, retaining projection input identity
@@ -712,6 +713,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         : new Set(liveAgentTaskKey.length > 0 ? liveAgentTaskKey.split("\n") : []),
     [liveAgentTaskKey],
   );
+  const { t, locale } = useI18n();
   const rawRows = useMemo(() => {
     const previous = rowsProjectionRef.current;
     const projection = deriveMessagesTimelineRowsWithState(
@@ -729,17 +731,23 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         worktreeSetup,
         queuedMessages,
         showAssistantReasoning,
+        t,
+        workspaceRoot,
       },
-      previous?.threadKey === listIdentityKey && previous.workspaceRoot === workspaceRoot
+      previous?.threadKey === listIdentityKey &&
+        previous.workspaceRoot === workspaceRoot &&
+        previous.locale === locale
         ? previous.projection
         : null,
     );
-    rowsProjectionRef.current = { threadKey: listIdentityKey, workspaceRoot, projection };
+    rowsProjectionRef.current = { threadKey: listIdentityKey, workspaceRoot, locale, projection };
     return projection.rows;
   }, [
     rowsProjectionRef,
     listIdentityKey,
     workspaceRoot,
+    t,
+    locale,
     timelineEntries,
     latestTurn,
     runningTurnId,
@@ -2634,6 +2642,7 @@ function LiveActivityContent({
 
 function LiveWorkEntryTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "work-live" }> }) {
   const ctx = use(TimelineRowCtx);
+  const { t } = useI18n();
   if (row.entry.agentSpawn) {
     return (
       <AgentSpawnRow
@@ -2643,7 +2652,7 @@ function LiveWorkEntryTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "
       />
     );
   }
-  const label = liveWorkEntryLabel(row.entry, ctx.workspaceRoot, row.active);
+  const label = liveWorkEntryLabel(row.entry, ctx.workspaceRoot, row.active, t);
   const failed = workEntryDisplayIndicatesToolFailure(row.entry);
 
   return (
@@ -4194,6 +4203,7 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
 }) {
   const { workEntry, workspaceRoot, isExpandedToolGroupEntry, displayLabel } = props;
   const { threadRef, onImageExpand } = use(TimelineRowCtx);
+  const { t } = useI18n();
   const groupView = use(WorkGroupViewCtx);
   const [expanded, setExpanded] = useState(
     () => groupView?.state.expandedEntries.has(workEntry.id) ?? false,
@@ -4221,7 +4231,7 @@ const PlainWorkEntryRow = memo(function PlainWorkEntryRow(props: {
     showWarningIndicator || showDestructiveRowStyle
       ? undefined
       : (workEntry.toolIcon ?? workEntry.toolSource?.icon);
-  const previewText = displayLabel ?? workEntryDisplayLabel(workEntry, workspaceRoot);
+  const previewText = displayLabel ?? workEntryDisplayLabel(workEntry, workspaceRoot, t);
   const answerPreview = workEntry.questionAnswer
     ? getQuestionAnswerPreview(workEntry.questionAnswer)
     : null;

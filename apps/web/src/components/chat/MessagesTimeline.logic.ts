@@ -4,10 +4,8 @@ import { renderCodexDirectivesForCopy } from "@t3tools/client-runtime/codex-mark
 import { commandProgramName } from "@t3tools/client-runtime/work-log/command-label";
 import {
   liveActivityToolStatus,
-  normalizeCompactToolLabel,
   omitSupersededLifecycleMarkers,
   resolveWorkEntryToolPresentation,
-  summarizeToolGroup,
   toolGroupAction,
   toolGroupSummaryKind,
   type ToolGroupSummaryKind,
@@ -16,6 +14,8 @@ export {
   normalizeCompactToolLabel,
   toolGroupAction,
 } from "@t3tools/client-runtime/work-log/presentation";
+import { toolGroupSummaryText, toolSummaryLabel } from "./toolActivityPresentation";
+import { createTranslator, DEFAULT_LOCALE, type Translate } from "../../i18n";
 import {
   formatDuration,
   inferCheckpointTurnCountByTurnId,
@@ -35,7 +35,6 @@ import {
   type TurnId,
   type WorktreeSetupSnapshot,
 } from "@t3tools/contracts";
-import { formatWorkspaceRelativePath } from "../../filePathDisplay";
 
 const TIMELINE_MINIMAP_ITEM_SPACING = 8;
 export const TIMELINE_MINIMAP_MIN_ITEMS = 2;
@@ -43,35 +42,36 @@ const TIMELINE_MINIMAP_MAX_HEIGHT_CSS = "calc(100vh - 18rem)";
 const TIMELINE_CONTENT_MAX_WIDTH = 768;
 const TIMELINE_MINIMAP_PERSISTENT_GUTTER = 48;
 
-function singleToolCallLabel(entry: WorkLogEntry): string {
+const defaultTranslate = createTranslator(DEFAULT_LOCALE);
+
+function singleToolCallLabel(
+  entry: WorkLogEntry,
+  workspaceRoot: string | undefined,
+  t: Translate = defaultTranslate,
+): string {
   const toolPresentation = resolveWorkEntryToolPresentation(entry, "completed");
   if (toolPresentation) return toolPresentation.displayName;
-  const command = entry.command?.trim();
-  if (command) return command;
-  const heading = normalizeCompactToolLabel(entry.toolTitle || entry.label);
-  return `${heading.charAt(0).toUpperCase()}${heading.slice(1)}`;
+  return toolSummaryLabel(entry, t, workspaceRoot);
 }
 
-export function workEntryDisplayLabel(entry: WorkLogEntry, workspaceRoot: string | undefined) {
+export function workEntryDisplayLabel(
+  entry: WorkLogEntry,
+  workspaceRoot: string | undefined,
+  t: Translate = defaultTranslate,
+) {
   const toolPresentation = resolveWorkEntryToolPresentation(entry);
   if (toolPresentation) return toolPresentation.displayName;
-  if (entry.command) return entry.command;
+  const command = entry.command?.trim();
+  if (command) return t("chat.toolSummary.command", { command });
   if (entry.detail) return entry.detail;
-  const [firstPath] = entry.changedFiles ?? [];
-  if (firstPath) {
-    const path = formatWorkspaceRelativePath(firstPath, workspaceRoot);
-    return entry.changedFiles!.length === 1
-      ? path
-      : `${path} +${entry.changedFiles!.length - 1} more`;
-  }
-  const heading = normalizeCompactToolLabel(entry.toolTitle || entry.label);
-  return `${heading.charAt(0).toUpperCase()}${heading.slice(1)}`;
+  return toolSummaryLabel(entry, t, workspaceRoot);
 }
 
 export function liveWorkEntryLabel(
   entry: WorkLogEntry,
   workspaceRoot: string | undefined,
   active: boolean,
+  t: Translate = defaultTranslate,
 ) {
   const status = liveActivityToolStatus(entry.toolLifecycleStatus, active);
   const toolPresentation = resolveWorkEntryToolPresentation({
@@ -81,19 +81,20 @@ export function liveWorkEntryLabel(
   if (toolPresentation) return toolPresentation.displayName;
   const command = entry.command?.trim();
   if (command) {
-    const verb =
+    const name = commandProgramName(command) ?? t("chat.toolSummary.commandNoun");
+    const key =
       status === "inProgress"
-        ? "Running"
+        ? "chat.toolSummary.commandRunning"
         : status === "failed"
-          ? "Failed"
+          ? "chat.toolSummary.commandFailed"
           : status === "declined"
-            ? "Declined"
+            ? "chat.toolSummary.commandDeclined"
             : status === "stopped"
-              ? "Stopped"
-              : "Ran";
-    return `${verb} ${commandProgramName(command) ?? "command"}`;
+              ? "chat.toolSummary.commandStopped"
+              : "chat.toolSummary.command";
+    return t(key, { command: name });
   }
-  return workEntryDisplayLabel(entry, workspaceRoot);
+  return workEntryDisplayLabel(entry, workspaceRoot, t);
 }
 
 export function workEntryIsVisibleInGroup(
@@ -885,7 +886,11 @@ export function deriveMessagesTimelineRows(input: {
   /** Messages sent during the running turn, rendered after the live rows. */
   queuedMessages?: ReadonlyArray<QueuedComposerMessage>;
   showAssistantReasoning?: boolean;
+  t?: Translate | undefined;
+  workspaceRoot?: string | undefined;
 }): MessagesTimelineRow[] {
+  const t = input.t ?? defaultTranslate;
+  const workspaceRoot = input.workspaceRoot;
   const turnDiffSummaryByAssistantMessageId = new Map<MessageId, TurnDiffSummary>();
   for (const summary of input.turnDiffSummaries) {
     if (summary.assistantMessageId) {
@@ -1163,8 +1168,8 @@ export function deriveMessagesTimelineRows(input: {
             isExpandedToolGroup: false,
             displayLabel:
               toolGroupAction(singleEntry) === "edit"
-                ? summarizeToolGroup(visibleGroupedEntries)
-                : singleToolCallLabel(singleEntry),
+                ? toolGroupSummaryText(visibleGroupedEntries, t)
+                : singleToolCallLabel(singleEntry, workspaceRoot, t),
           });
         } else {
           const groupId = workGroupId(timelineEntry.id, timelineEntry.entry);
@@ -1205,10 +1210,10 @@ export function deriveMessagesTimelineRows(input: {
             hiddenCount: visibleGroupedEntries.length,
             expanded,
             summary: usesSingleToolCallLabel
-              ? singleToolCallLabel(singleEntry)
+              ? singleToolCallLabel(singleEntry, workspaceRoot, t)
               : singleEntry !== null && !workLogEntryIsToolLike(singleEntry)
                 ? singleEntry.label
-                : summarizeToolGroup(visibleGroupedEntries),
+                : toolGroupSummaryText(visibleGroupedEntries, t),
             summaryKind,
             ...(groupToolSurface ? { toolSurface: groupToolSurface } : {}),
             ...(groupToolIcon ? { toolIcon: groupToolIcon } : {}),

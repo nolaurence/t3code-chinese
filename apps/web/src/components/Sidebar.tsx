@@ -116,6 +116,7 @@ import {
   useThreadSelectionStore,
 } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
+import { useI18n } from "../i18n";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { startNewThreadFromContext } from "../lib/chatThreadActions";
@@ -2127,6 +2128,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
 });
 
 export default function Sidebar() {
+  const { t } = useI18n();
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
@@ -4769,7 +4771,7 @@ export default function Sidebar() {
                               <SidebarDragBoundary
                                 key="pinned-header"
                                 marker="pinned-header"
-                                label="Pinned"
+                                label={t("sidebar.pinned")}
                                 visible={from !== null}
                                 isDropTarget={dragTargetSection === "pinned"}
                               />,
@@ -4780,7 +4782,7 @@ export default function Sidebar() {
                               <SidebarDragBoundary
                                 key="pinned-divider"
                                 marker="pinned-divider"
-                                label="Active"
+                                label={t("sidebar.active")}
                                 visible={from !== null}
                                 isDropTarget={dragTargetSection === "active"}
                               />,
@@ -4791,7 +4793,7 @@ export default function Sidebar() {
                               <SidebarSectionPlaceholder
                                 key="active-placeholder"
                                 marker="active-placeholder"
-                                label="Active"
+                                label={t("sidebar.active")}
                                 showHint={
                                   from !== null &&
                                   (activeThreads.length === 0 ||
@@ -4812,8 +4814,8 @@ export default function Sidebar() {
                                 className="mt-auto"
                                 label={
                                   snoozedShelfExpanded
-                                    ? "Snoozed"
-                                    : `Snoozed (${snoozedThreads.length})`
+                                    ? t("sidebar.snoozed")
+                                    : t("sidebar.snoozedCount", { count: snoozedThreads.length })
                                 }
                                 toggle={{
                                   expanded: snoozedShelfExpanded,
@@ -4830,8 +4832,8 @@ export default function Sidebar() {
                                 className={cn(snoozedThreads.length === 0 && "mt-auto")}
                                 label={
                                   settledShelfExpanded
-                                    ? "Settled"
-                                    : `Settled (${settledThreads.length})`
+                                    ? t("sidebar.settled")
+                                    : t("sidebar.settledCount", { count: settledThreads.length })
                                 }
                                 dragging={from !== null}
                                 isDropTarget={dragTargetSection === "settled"}

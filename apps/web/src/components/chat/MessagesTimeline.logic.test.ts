@@ -746,7 +746,7 @@ describe("work entry labels", () => {
     const commandEntry = { ...entry, command: "vp test run", detail: "All tests passed" };
     expect(liveWorkEntryLabel(commandEntry, undefined, true)).toBe("Running vp");
     expect(liveWorkEntryLabel(commandEntry, undefined, false)).toBe("Ran vp");
-    expect(workEntryDisplayLabel(commandEntry, undefined)).toBe("vp test run");
+    expect(workEntryDisplayLabel(commandEntry, undefined)).toBe("Ran vp test run");
   });
 
   it("summarizes the program inside a shell wrapper while preserving the expanded command", () => {
@@ -754,7 +754,7 @@ describe("work entry labels", () => {
     const commandEntry = { ...entry, command };
     expect(liveWorkEntryLabel(commandEntry, undefined, true)).toBe("Running vp");
     expect(liveWorkEntryLabel(commandEntry, undefined, false)).toBe("Ran vp");
-    expect(workEntryDisplayLabel(commandEntry, undefined)).toBe(command);
+    expect(workEntryDisplayLabel(commandEntry, undefined)).toBe(`Ran ${command}`);
   });
 
   it.each([
@@ -2362,7 +2362,7 @@ describe("deriveMessagesTimelineRows", () => {
     expect(rows.find((row) => row.kind === "work")).toMatchObject({
       groupedEntries: [{ id: "completed-command", command: "rg toolCall" }],
       isExpandedToolGroup: false,
-      displayLabel: "rg toolCall",
+      displayLabel: "Ran rg toolCall",
     });
   });
 
@@ -2413,7 +2413,7 @@ describe("deriveMessagesTimelineRows", () => {
     expect(rows.find((row) => row.kind === "work")).toMatchObject({
       groupedEntries: [{ id: "command-completed", toolCallId: "call-1" }],
       isExpandedToolGroup: false,
-      displayLabel: "rg toolCall",
+      displayLabel: "Ran rg toolCall",
     });
     expect(rows.some((row) => row.kind === "work-toggle")).toBe(false);
   });

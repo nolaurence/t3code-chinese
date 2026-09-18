@@ -595,7 +595,20 @@ function toolGroupActionLabel(action: ToolGroupAction, count: number): string {
   }
 }
 
-export function summarizeToolGroup(entries: ReadonlyArray<WorkLogPresentationEntry>): string {
+export interface ToolGroupSummaryParts {
+  readonly actions: ReadonlyArray<{
+    readonly action: ToolGroupAction;
+    readonly count: number;
+  }>;
+  readonly sourceNames: ReadonlyArray<string>;
+  readonly sourceCount: number;
+  readonly allIntegrations: boolean;
+}
+
+/** Locale-neutral grouping so each client can phrase the summary itself. */
+export function collectToolGroupSummaryParts(
+  entries: ReadonlyArray<WorkLogPresentationEntry>,
+): ToolGroupSummaryParts {
   const summaryEntries = omitSupersededLifecycleMarkers(entries, (entry) => entry);
   const sources = new Map<string, ToolActivitySource>();
   const groupedEntries = new Map<ToolGroupAction, WorkLogPresentationEntry[]>();
@@ -609,21 +622,30 @@ export function summarizeToolGroup(entries: ReadonlyArray<WorkLogPresentationEnt
     if (group) group.push(entry);
     else groupedEntries.set(action, [entry]);
   }
-  const labels = [...groupedEntries].map(([action, actionEntries]) =>
-    toolGroupActionLabel(action, toolGroupActionCount(action, actionEntries)),
-  );
-  if (sources.size > 0) {
-    const sourceValues = [...sources.values()];
-    const sourceNames = sourceValues.map((source) => source.name);
+  return {
+    actions: [...groupedEntries].map(([action, actionEntries]) => ({
+      action,
+      count: toolGroupActionCount(action, actionEntries),
+    })),
+    sourceNames: [...sources.values()].map((source) => source.name),
+    sourceCount: sources.size,
+    allIntegrations: [...sources.values()].every((source) => source.kind === "integration"),
+  };
+}
+
+export function summarizeToolGroup(entries: ReadonlyArray<WorkLogPresentationEntry>): string {
+  const parts = collectToolGroupSummaryParts(entries);
+  const labels = parts.actions.map(({ action, count }) => toolGroupActionLabel(action, count));
+  if (parts.sourceCount > 0) {
+    const sourceNames = parts.sourceNames;
     const formattedNames =
       sourceNames.length < 2
         ? sourceNames[0]!
         : sourceNames.length === 2
           ? sourceNames.join(" and ")
           : `${sourceNames.slice(0, -1).join(", ")}, and ${sourceNames.at(-1)}`;
-    const allIntegrations = sourceValues.every((source) => source.kind === "integration");
     labels.unshift(
-      `Used ${formattedNames}${allIntegrations ? ` ${sources.size === 1 ? "integration" : "integrations"}` : ""}`,
+      `Used ${formattedNames}${parts.allIntegrations ? ` ${parts.sourceCount === 1 ? "integration" : "integrations"}` : ""}`,
     );
   }
   const sentenceLabels = labels.map((label, index) =>
