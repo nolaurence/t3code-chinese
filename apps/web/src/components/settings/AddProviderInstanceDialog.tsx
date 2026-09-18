@@ -29,6 +29,7 @@ import {
   type WizardNavigation,
 } from "./AddProviderInstanceDialog.logic";
 import { AddProviderInstanceWizardSteps } from "./AddProviderInstanceWizardSteps";
+import { useI18n, type Translate } from "../../i18n";
 
 const PROVIDER_ACCENT_SWATCHES = [
   "#2563eb",
@@ -98,13 +99,17 @@ const COMING_SOON_DRIVER_OPTIONS: readonly ComingSoonDriverOption[] = [
  * `ProviderInstanceId` (see `packages/contracts/src/providerInstance.ts`).
  * Returns a user-facing error string, or `null` if valid.
  */
-function validateInstanceId(id: string, existing: ReadonlySet<string>): string | null {
-  if (id.length === 0) return "Instance ID is required.";
-  if (id.length > 64) return "Instance ID must be 64 characters or fewer.";
+function validateInstanceId(
+  id: string,
+  existing: ReadonlySet<string>,
+  t: Translate,
+): string | null {
+  if (id.length === 0) return t("providers.instanceIdRequired");
+  if (id.length > 64) return t("providers.instanceIdTooLong");
   if (!INSTANCE_ID_PATTERN.test(id)) {
-    return "Instance ID must start with a letter and use only letters, digits, '-', or '_'.";
+    return t("providers.instanceIdInvalid");
   }
-  if (existing.has(id)) return `An instance named '${id}' already exists.`;
+  if (existing.has(id)) return t("providers.instanceIdExists", { id });
   return null;
 }
 
@@ -121,6 +126,7 @@ export function AddProviderInstanceDialog({
   environmentLabel,
   onOpenChange,
 }: AddProviderInstanceDialogProps) {
+  const { t } = useI18n();
   const settings = useEnvironmentSettings(environmentId);
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
 
@@ -147,9 +153,10 @@ export function AddProviderInstanceDialog({
     () => deriveProviderSettingsFields(driverOption),
     [driverOption],
   );
-  const instanceIdError = validateInstanceId(instanceId, existingIds);
+  const instanceIdError = validateInstanceId(instanceId, existingIds, t);
   const showInstanceIdError = hasAttemptedSubmit && instanceIdError !== null;
-  const previewLabel = label.trim() || `${driverOption.label} Workspace`;
+  const previewLabel =
+    label.trim() || t("providers.workspacePreview", { driver: driverOption.label });
   const wizardStepSummaries = [driverOption.label, previewLabel, null] as const;
 
   const configDraft = configByDriver[driver] ?? EMPTY_CONFIG_DRAFT;
@@ -208,15 +215,18 @@ export function AddProviderInstanceDialog({
       updateSettings({ providerInstances: nextMap });
       toastManager.add({
         type: "success",
-        title: "Provider instance added",
-        description: `${driverOption.label} instance '${instanceId}' was added.`,
+        title: t("providers.added"),
+        description: t("providers.addedDescription", {
+          provider: driverOption.label,
+          id: instanceId,
+        }),
       });
       onOpenChange(false);
     } catch (error) {
       toastManager.add({
         type: "error",
-        title: "Could not add provider instance",
-        description: error instanceof Error ? error.message : "Update failed.",
+        title: t("providers.addFailed"),
+        description: error instanceof Error ? error.message : t("providers.updateFailed"),
       });
     }
   };
@@ -225,13 +235,10 @@ export function AddProviderInstanceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <WizardPopup>
         <WizardHeader
-          title="Add provider instance"
-          description={
-            <>
-              Configure an additional provider instance on {environmentLabel} — for example, a
-              second Codex install pointed at a different workspace.
-            </>
-          }
+          title={t("providers.addInstance")}
+          description={t("providers.addDescriptionForEnvironment", {
+            environment: environmentLabel,
+          })}
         >
           <AddProviderInstanceWizardSteps
             currentStep={wizardStep}
@@ -244,7 +251,7 @@ export function AddProviderInstanceDialog({
         <WizardPanel>
           <div className={cn("grid gap-2", wizardStep !== 0 && "hidden")}>
             <div id="add-instance-driver-label" className="text-sm font-medium text-foreground">
-              Driver
+              {t("providers.driver")}
             </div>
             <RadioGroup
               value={driver}
@@ -294,7 +301,7 @@ export function AddProviderInstanceDialog({
                       {option.label}
                     </span>
                     <Badge variant="warning" size="sm">
-                      Coming Soon
+                      {t("providers.comingSoon")}
                     </Badge>
                   </RadioPrimitive.Root>
                 );
@@ -303,20 +310,20 @@ export function AddProviderInstanceDialog({
           </div>
 
           <label className={cn("grid gap-2", wizardStep !== 1 && "hidden")}>
-            <span className="text-xs font-medium text-foreground">Label</span>
+            <span className="text-xs font-medium text-foreground">{t("providers.label")}</span>
             <Input
               className="bg-background"
-              placeholder="e.g. Work"
+              placeholder={t("providers.labelPlaceholder")}
               value={label}
               onChange={(event) => setLabel(event.target.value)}
             />
             <span className="text-[11px] text-muted-foreground">
-              Shown in the provider list. Optional.
+              {t("providers.labelDescription")}
             </span>
           </label>
 
           <label className={cn("grid gap-2", wizardStep !== 1 && "hidden")}>
-            <span className="text-xs font-medium text-foreground">Instance ID</span>
+            <span className="text-xs font-medium text-foreground">{t("providers.instanceId")}</span>
             <Input
               className="bg-background"
               placeholder={`${driver}_work`}
@@ -330,19 +337,21 @@ export function AddProviderInstanceDialog({
               <span className="text-[11px] text-destructive">{instanceIdError}</span>
             ) : (
               <span className="text-[11px] text-muted-foreground">
-                Routing key used by threads and sessions. Letters, digits, '-', or '_'.
+                {t("providers.instanceIdDescription")}
               </span>
             )}
           </label>
 
           <div className={cn("grid gap-2", wizardStep !== 1 && "hidden")}>
-            <span className="text-xs font-medium text-foreground">Accent color</span>
+            <span className="text-xs font-medium text-foreground">
+              {t("providers.accentColor")}
+            </span>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <input
                 type="color"
                 value={normalizeProviderAccentColor(accentColor) ?? PROVIDER_ACCENT_SWATCHES[0]}
                 onChange={(event) => setAccentColor(event.target.value)}
-                aria-label="Provider instance accent color"
+                aria-label={t("providers.accentAria")}
                 className="h-8 w-10 cursor-pointer rounded-xl border border-input bg-background p-0.5"
               />
               <div className="flex flex-wrap gap-1.5">
@@ -360,7 +369,7 @@ export function AddProviderInstanceDialog({
                       )}
                       style={{ backgroundColor: swatch }}
                       onClick={() => setAccentColor(swatch)}
-                      aria-label={`Use ${swatch} accent`}
+                      aria-label={t("providers.useAccent", { color: swatch })}
                     />
                   );
                 })}
@@ -373,12 +382,12 @@ export function AddProviderInstanceDialog({
                   className="text-muted-foreground"
                   onClick={() => setAccentColor("")}
                 >
-                  Clear
+                  {t("common.clear")}
                 </Button>
               ) : null}
             </div>
             <span className="text-[11px] text-muted-foreground">
-              Optional marker shown in the picker.
+              {t("providers.accentDescription")}
             </span>
           </div>
 
@@ -394,9 +403,7 @@ export function AddProviderInstanceDialog({
             </div>
           ) : wizardStep === 2 ? (
             <div className="grid gap-2">
-              <p className="text-sm text-muted-foreground">
-                This driver has no required configuration. You can add the instance now.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("providers.noConfig")}</p>
             </div>
           ) : null}
         </WizardPanel>
@@ -412,12 +419,12 @@ export function AddProviderInstanceDialog({
               setWizardStep((step) => Math.max(0, step - 1));
             }}
           >
-            {wizardStep === 0 ? "Cancel" : "Back"}
+            {wizardStep === 0 ? t("common.cancel") : t("common.back")}
           </Button>
           {wizardStep < ADD_PROVIDER_WIZARD_STEPS.length - 1 ? (
-            <Button onClick={() => navigateToStep(wizardStep + 1)}>Next</Button>
+            <Button onClick={() => navigateToStep(wizardStep + 1)}>{t("common.next")}</Button>
           ) : (
-            <Button onClick={handleSave}>Add instance</Button>
+            <Button onClick={handleSave}>{t("providers.addInstanceAction")}</Button>
           )}
         </WizardFooter>
       </WizardPopup>

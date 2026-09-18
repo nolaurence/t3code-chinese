@@ -6,6 +6,7 @@ import {
 } from "@t3tools/shared/themePreview";
 import { cn } from "../../lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { useI18n } from "../../i18n";
 import {
   getThemeColorsForMode,
   getThemeModes,
@@ -169,6 +170,7 @@ export function ThemePreviewCircles({
   onSelectMode: (mode: ThemeMode) => void;
   previews: ThemeCardDefinition["previews"];
 }) {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-16 items-center justify-center gap-2.5 px-3 pt-3">
       {previews.map((preview) => {
@@ -215,7 +217,9 @@ export function ThemePreviewCircles({
               }
             />
             <TooltipPopup>
-              {mode === "light" ? "Use for light mode only" : "Use for dark mode only"}
+              {t("theme.useForModeOnly", {
+                mode: mode === "light" ? t("theme.appearance.light") : t("theme.appearance.dark"),
+              })}
             </TooltipPopup>
           </Tooltip>
         );

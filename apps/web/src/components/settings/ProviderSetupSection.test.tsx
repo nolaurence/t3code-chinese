@@ -73,6 +73,18 @@ vi.mock("../../localApi", () => ({
   ensureLocalApi: () => ({ dialogs: { confirm: setup.confirm } }),
 }));
 
+vi.mock("../../i18n", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../i18n")>();
+  return {
+    ...actual,
+    useI18n: () => ({
+      locale: "en" as const,
+      setLocale: () => undefined,
+      t: actual.createTranslator("en"),
+    }),
+  };
+});
+
 import { ProviderSetupSection } from "./ProviderSetupSection";
 
 const environmentId = EnvironmentId.make("remote-google");

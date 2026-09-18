@@ -11,6 +11,7 @@ import {
   persistClientSettingsPatch,
   useClientSettings,
 } from "../../hooks/useSettings";
+import { useI18n } from "../../i18n";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { toastManager } from "../ui/toast";
@@ -52,13 +53,14 @@ export function useScopedSettingSource(keys: readonly (keyof ServerSettings)[]) 
 }
 
 function useRunScopedPlan() {
+  const { t } = useI18n();
   const persistServer = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
-  return useCallback(
+  const run = useCallback(
     (plan: ReturnType<typeof planScopedSettingsPatch>) => {
       if (plan.unavailableReason) {
         toastManager.add({
           type: "warning",
-          title: "Setting not saved",
+          title: t("settings.scope.notSaved"),
           description: plan.unavailableReason,
         });
         return;
@@ -70,23 +72,26 @@ function useRunScopedPlan() {
             type: "error",
             title:
               savedEnvironmentCount > 0
-                ? "Setting saved on some environments"
-                : "Setting not saved",
-            description: `Could not update ${failedEnvironments.map((environment) => environment.label).join(", ")}.${savedEnvironmentCount > 0 ? " The other selected environments saved the change." : ""}`,
+                ? t("settings.scope.savedOnSome")
+                : t("settings.scope.notSaved"),
+            description: `${t("settings.scope.couldNotUpdateSome", {
+              environments: failedEnvironments.map((environment) => environment.label).join(", "),
+            })}${savedEnvironmentCount > 0 ? t("settings.scope.otherSaved") : ""}`,
           });
         },
       );
     },
-    [persistServer],
+    [persistServer, t],
   );
+  return { run, t };
 }
 
 export function useUpdateScopedSettings() {
   const { scope, environments } = useSettingsScope();
-  const run = useRunScopedPlan();
+  const { run, t } = useRunScopedPlan();
   return useCallback(
-    (patch: ScopedSettingsPatch) => run(planScopedSettingsPatch(scope, environments, patch)),
-    [environments, run, scope],
+    (patch: ScopedSettingsPatch) => run(planScopedSettingsPatch(scope, environments, patch, t)),
+    [environments, run, scope, t],
   );
 }
 
@@ -97,25 +102,25 @@ export function useUpdateScopedSettings() {
  */
 export function useClearScopedSettings() {
   const context = useOptionalSettingsScope();
-  const run = useRunScopedPlan();
+  const { run, t } = useRunScopedPlan();
   return useCallback(
     (keys: readonly ProjectScopedServerSettingKey[]) => {
       if (context === null) return;
-      run(planScopedSettingsClear(context.scope, context.environments, keys));
+      run(planScopedSettingsClear(context.scope, context.environments, keys, t));
     },
-    [context, run],
+    [context, run, t],
   );
 }
 
 /** Clear `keys` on specific project entries, from an environment scope's chain popover. */
 export function useClearProjectOverrides() {
   const context = useOptionalSettingsScope();
-  const run = useRunScopedPlan();
+  const { run, t } = useRunScopedPlan();
   return useCallback(
     (entries: readonly ProjectOverrideEntry[], keys: readonly ProjectScopedServerSettingKey[]) => {
       if (context === null) return;
-      run(planProjectOverridesClear(context.environments, entries, keys));
+      run(planProjectOverridesClear(context.environments, entries, keys, t));
     },
-    [context, run],
+    [context, run, t],
   );
 }

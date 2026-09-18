@@ -4,6 +4,7 @@ import {
   resolveWizardNavigation,
   type WizardNavigation,
 } from "./AddProviderInstanceDialog.logic";
+import { useI18n } from "../../i18n";
 
 interface AddProviderInstanceWizardStepsProps {
   readonly currentStep: number;
@@ -18,9 +19,10 @@ export function AddProviderInstanceWizardSteps({
   instanceIdError,
   onNavigation,
 }: AddProviderInstanceWizardStepsProps) {
+  const { t } = useI18n();
   return (
     <WizardSteps
-      steps={ADD_PROVIDER_WIZARD_STEPS}
+      steps={[t("providers.driver"), t("providers.identity"), t("providers.config")]}
       currentStep={currentStep}
       summaries={summaries}
       onStepChange={(requestedStep) =>

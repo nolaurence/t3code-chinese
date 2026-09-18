@@ -49,6 +49,17 @@ vi.mock("../../hooks/useSettings", () => ({
   useClientSettings: () => settingsStore.current,
   useUpdateClientSettings: () => settingsStore.update,
 }));
+vi.mock("../../i18n", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../i18n")>();
+  return {
+    ...actual,
+    useI18n: () => ({
+      locale: "en" as const,
+      setLocale: () => undefined,
+      t: actual.createTranslator("en"),
+    }),
+  };
+});
 
 import { SnapShotSettings } from "./SnapShotSettings";
 import { SnapShotSetupDialog } from "./SnapShotSetupDialog";

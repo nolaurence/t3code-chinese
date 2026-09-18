@@ -6,6 +6,7 @@ import { cn } from "~/lib/utils";
 import type { EnvironmentPresentation } from "~/state/environments";
 import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
+import type { Translate } from "../../i18n";
 
 export function formatDesktopSshTarget(target: DesktopSshEnvironmentTarget): string {
   const authority = target.username ? `${target.username}@${target.hostname}` : target.hostname;
@@ -16,19 +17,29 @@ export function formatDesktopSshTarget(target: DesktopSshEnvironmentTarget): str
  * How this client reaches a machine, printed first in every environment row so
  * T3 Connect, SSH, WSL, and plain remote links are told apart without a legend.
  */
-export function environmentTransportLabel(environment: EnvironmentPresentation): string {
+export function environmentTransportLabel(
+  environment: EnvironmentPresentation,
+  t?: Translate,
+): string {
   const { entry } = environment;
-  if (entry.target._tag === "PrimaryConnectionTarget") return "This machine";
-  if (environment.relayManaged) return "T3 Connect";
-  if (isDesktopLocalConnectionTarget(entry.target)) return "WSL";
+  if (entry.target._tag === "PrimaryConnectionTarget") {
+    return t ? t("connections.transport.thisMachine") : "This machine";
+  }
+  if (environment.relayManaged) {
+    return t ? t("connections.transport.t3Connect") : "T3 Connect";
+  }
+  if (isDesktopLocalConnectionTarget(entry.target)) {
+    return t ? t("connections.transport.wsl") : "WSL";
+  }
   if (
     entry.target._tag === "SshConnectionTarget" &&
     Option.isSome(entry.profile) &&
     entry.profile.value._tag === "SshConnectionProfile"
   ) {
-    return `SSH ${formatDesktopSshTarget(entry.profile.value.target)}`;
+    const target = formatDesktopSshTarget(entry.profile.value.target);
+    return t ? t("connections.transport.ssh", { target }) : `SSH ${target}`;
   }
-  return environment.displayUrl ?? "Remote link";
+  return environment.displayUrl ?? (t ? t("connections.transport.remoteLink") : "Remote link");
 }
 
 /**

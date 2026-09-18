@@ -15,15 +15,30 @@ import { toastManager } from "../ui/toast";
 import { EnvironmentRow, environmentTransportLabel } from "./EnvironmentRow";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { searchableSetting } from "./settingsSearch";
-import { useI18n } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 
-const options: ReadonlyArray<{ value: GitHubRoutingPermission; label: string }> = [
-  { value: "off", label: "Off" },
-  { value: "read", label: "Read PRs" },
-  { value: "read-write", label: "Read and act" },
-];
+const PERMISSION_VALUES: ReadonlyArray<GitHubRoutingPermission> = ["off", "read", "read-write"];
 
-const summaryLabels = { "read-write": "read and act", read: "read PRs" } as const;
+function permissionLabel(permission: GitHubRoutingPermission, t: Translate): string {
+  switch (permission) {
+    case "off":
+      return t("common.off");
+    case "read":
+      return t("settings.githubRouting.read");
+    case "read-write":
+      return t("settings.githubRouting.readWrite");
+  }
+}
+
+function permissionSummaryLabel(
+  permission: Exclude<GitHubRoutingPermission, "off">,
+  t?: Translate,
+): string {
+  if (permission === "read-write") {
+    return t ? t("settings.githubRouting.readWriteSummary") : "read and act";
+  }
+  return t ? t("settings.githubRouting.readSummary") : "read PRs";
+}
 
 /**
  * Closed-header summary: the machines that share, grouped by permission.
@@ -31,12 +46,15 @@ const summaryLabels = { "read-write": "read and act", read: "read PRs" } as cons
  */
 export function summarizeGitHubRouting(
   entries: ReadonlyArray<{ readonly label: string; readonly permission: GitHubRoutingPermission }>,
+  t?: Translate,
 ): string | null {
   const groups = (["read-write", "read"] as const).flatMap((permission) => {
     const labels = entries.filter((entry) => entry.permission === permission);
     return labels.length === 0
       ? []
-      : [`${labels.map((entry) => entry.label).join(", ")} ${summaryLabels[permission]}`];
+      : [
+          `${labels.map((entry) => entry.label).join(", ")} ${permissionSummaryLabel(permission, t)}`,
+        ];
   });
   return groups.length === 0 ? null : groups.join(" · ");
 }
@@ -71,23 +89,25 @@ export function GitHubRoutingSettings({
             label: environment.label,
             permission: gitHubRoutingPermissionFor(environment.entry, permissions),
           })),
-        ) ?? "Off"
+          t,
+        ) ?? t("common.off")
       }
     >
       <p className="px-3 py-2.5 text-xs text-muted-foreground sm:px-4">
-        Machines you trust here can read PR data through each other's GitHub access. Enable both
-        machines. Read and act may use broader permissions than the machine that owns them. This
-        applies only to this device.
+        {t("settings.githubRouting.description")}
       </p>
       {environments.map((environment) => (
         <EnvironmentRow
           key={environment.environmentId}
           kind={resolveEnvironmentMachineKind(environment.serverConfig)}
           label={environment.label}
-          subtitle={environmentTransportLabel(environment)}
+          subtitle={environmentTransportLabel(environment, t)}
         >
           <Select
-            items={options}
+            items={PERMISSION_VALUES.map((value) => ({
+              value,
+              label: permissionLabel(value, t),
+            }))}
             value={gitHubRoutingPermissionFor(environment.entry, permissions)}
             disabled={
               !catalog.isReady || saving || gitHubRoutingConnectionKey(environment.entry) === null
@@ -101,7 +121,7 @@ export function GitHubRoutingSettings({
                   if (result._tag === "Failure")
                     toastManager.add({
                       type: "error",
-                      title: "Could not save GitHub routing permission",
+                      title: t("settings.githubRouting.saveFailed"),
                     });
                 },
               );
@@ -110,14 +130,14 @@ export function GitHubRoutingSettings({
             <SelectTrigger
               size="xs"
               className="w-32"
-              aria-label={`${environment.label} GitHub routing`}
+              aria-label={t("settings.githubRouting.aria", { environment: environment.label })}
             >
               <SelectValue />
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
-              {options.map(({ value, label }) => (
+              {PERMISSION_VALUES.map((value) => (
                 <SelectItem key={value} value={value}>
-                  {label}
+                  {permissionLabel(value, t)}
                 </SelectItem>
               ))}
             </SelectPopup>

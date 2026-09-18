@@ -25,23 +25,33 @@ import {
   resolvePrimaryOperateAccess,
   resolveRemoteOperateAccess,
 } from "./ProviderSettingsPanel.logic";
+import { useI18n, type Translate } from "../../i18n";
 
 /**
  * Why the picker is inert, in the order the user can do something about it.
  * Null means it can be changed.
  */
-export function resolveEnvironmentIconPickerLock(input: {
-  readonly serverConfig: ServerConfig | null;
-  readonly operateAccess: "granted" | "denied" | "pending";
-}): string | null {
+export function resolveEnvironmentIconPickerLock(
+  input: {
+    readonly serverConfig: ServerConfig | null;
+    readonly operateAccess: "granted" | "denied" | "pending";
+  },
+  t?: Translate,
+): string | null {
   if (input.serverConfig === null) {
-    return "Connect to this environment to change its icon.";
+    return t?.("environment.icon.connect") ?? "Connect to this environment to change its icon.";
   }
   if (input.serverConfig.environment.capabilities.environmentIcon !== true) {
-    return "This environment's server is too old to keep an icon. Update it to choose one.";
+    return (
+      t?.("environment.icon.tooOld") ??
+      "This environment's server is too old to keep an icon. Update it to choose one."
+    );
   }
   if (input.operateAccess === "denied") {
-    return "Your session on this environment cannot change its settings.";
+    return (
+      t?.("environment.icon.cannotChange") ??
+      "Your session on this environment cannot change its settings."
+    );
   }
   return null;
 }
@@ -85,9 +95,10 @@ export function EnvironmentIconMenu({
   readonly environmentId: EnvironmentId;
   readonly serverConfig: ServerConfig | null;
 }) {
+  const { t } = useI18n();
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
   const operateAccess = useEnvironmentOperateAccess(environmentId);
-  const lock = resolveEnvironmentIconPickerLock({ serverConfig, operateAccess });
+  const lock = resolveEnvironmentIconPickerLock({ serverConfig, operateAccess }, t);
   // With no detection the server falls back to "server", so picking that
   // kind clears the override the same way picking the detected kind does.
   const detected = serverConfig?.environment.platform.machine ?? "server";
@@ -97,7 +108,7 @@ export function EnvironmentIconMenu({
     <MenuSub>
       <MenuSubTrigger>
         <EnvironmentMachineIcon kind={resolved} />
-        Icon
+        {t("environment.icon")}
       </MenuSubTrigger>
       <MenuSubPopup className="min-w-44">
         {lock !== null ? (
@@ -124,7 +135,9 @@ export function EnvironmentIconMenu({
                 </span>
                 {kind === detected ? (
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {serverConfig?.environment.platform.machine ? "detected" : "default"}
+                    {serverConfig?.environment.platform.machine
+                      ? t("environment.icon.detected")
+                      : t("environment.icon.default")}
                   </span>
                 ) : null}
               </span>

@@ -58,6 +58,7 @@ import { serverEnvironment } from "../../state/server";
 import { terminalEnvironment } from "../../state/terminal";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { connectPairing } from "../../connection/onboarding";
+import { useI18n } from "../../i18n";
 import { getProviderSummary } from "../settings/providerStatus";
 import { getDriverOption } from "../settings/providerDriverMeta";
 import { TerminalViewport } from "../ThreadTerminalDrawer";
@@ -753,7 +754,8 @@ function AgentCard({
   const meta = getDriverOption(ProviderDriverKind.make(driver));
   const Icon = meta?.icon;
   const displayName = driver === "claudeAgent" ? "Claude Code" : (meta?.label ?? driver);
-  const summary = getProviderSummary(provider);
+  const { t } = useI18n();
+  const summary = getProviderSummary(provider, t);
   const providerState = getOnboardingProviderState(provider);
 
   return (

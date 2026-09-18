@@ -1,5 +1,7 @@
 import type { ServerProvider, ServerProviderVersionAdvisory } from "@t3tools/contracts";
 
+import type { Translate } from "../../i18n";
+
 /**
  * Visual treatment for each server-reported provider status. Centralized so
  * the default-driver card and per-instance cards share the same language.
@@ -29,54 +31,67 @@ export type ProviderStatusKey = keyof typeof PROVIDER_STATUS_STYLES;
  * driver this build does not ship. A ready provider without account metadata
  * remains available and does not imply an authentication failure.
  */
-export function getProviderSummary(provider: ServerProvider | undefined) {
+export function getProviderSummary(provider: ServerProvider | undefined, t?: Translate) {
   if (!provider) {
     return {
-      headline: "Checking provider status",
-      detail: "Waiting for the server to report installation and authentication details.",
+      headline: t?.("providers.status.checking") ?? "Checking provider status",
+      detail:
+        t?.("providers.status.checkingDetail") ??
+        "Waiting for the server to report installation and authentication details.",
     };
   }
   if (!provider.enabled || provider.status === "disabled") {
     return {
-      headline: "Disabled",
+      headline: t?.("providers.status.disabled") ?? "Disabled",
       detail:
-        provider.message ?? "This provider is installed but disabled for new sessions in T3 Code.",
+        provider.message ??
+        t?.("providers.status.disabledDetail") ??
+        "This provider is installed but disabled for new sessions in T3 Code.",
     };
   }
   if (!provider.installed) {
     return {
-      headline: "Not found",
-      detail: provider.message ?? "CLI not detected on PATH.",
+      headline: t?.("providers.status.notFound") ?? "Not found",
+      detail:
+        provider.message ?? t?.("providers.status.notFoundDetail") ?? "CLI not detected on PATH.",
     };
   }
   if (provider.auth.status === "unauthenticated") {
     return {
-      headline: "Not authenticated",
+      headline: t?.("providers.status.unauthenticated") ?? "Not authenticated",
       detail: provider.message ?? null,
     };
   }
   if (provider.status === "warning") {
     return {
-      headline: "Needs attention",
+      headline: t?.("providers.status.attention") ?? "Needs attention",
       detail:
-        provider.message ?? "The provider is installed, but the server could not fully verify it.",
+        provider.message ??
+        t?.("providers.status.attentionDetail") ??
+        "The provider is installed, but the server could not fully verify it.",
     };
   }
   if (provider.status === "error") {
     return {
-      headline: "Unavailable",
-      detail: provider.message ?? "The provider failed its startup checks.",
+      headline: t?.("providers.status.unavailable") ?? "Unavailable",
+      detail:
+        provider.message ??
+        t?.("providers.status.unavailableDetail") ??
+        "The provider failed its startup checks.",
     };
   }
   if (provider.auth.status === "authenticated") {
     const authLabel = provider.auth.label ?? provider.auth.type;
     return {
-      headline: authLabel ? `Authenticated · ${authLabel}` : "Authenticated",
+      headline: authLabel
+        ? (t?.("providers.status.authenticatedDetail", { label: authLabel }) ??
+          `Authenticated · ${authLabel}`)
+        : (t?.("providers.status.authenticated") ?? "Authenticated"),
       detail: provider.message ?? null,
     };
   }
   return {
-    headline: "Available",
+    headline: t?.("providers.status.available") ?? "Available",
     detail: provider.message ?? null,
   };
 }
@@ -101,6 +116,7 @@ export function getProviderVersionLabel(version: string | null | undefined) {
 
 export function getProviderVersionAdvisoryPresentation(
   advisory: ServerProviderVersionAdvisory | undefined,
+  t?: Translate,
 ): {
   readonly detail: string;
   readonly updateCommand: string | null;
@@ -110,7 +126,6 @@ export function getProviderVersionAdvisoryPresentation(
     return null;
   }
 
-  const label = "Update available";
   const version = advisory.latestVersion;
   const versionLabel = getProviderVersionLabel(version);
 
@@ -118,8 +133,10 @@ export function getProviderVersionAdvisoryPresentation(
     detail:
       advisory.message ??
       (versionLabel
-        ? `${label}: install ${versionLabel}.`
-        : `${label}: install the latest provider version.`),
+        ? (t?.("providers.status.installVersion", { version: versionLabel }) ??
+          `Update available: install ${versionLabel}.`)
+        : (t?.("providers.status.installLatest") ??
+          "Update available: install the latest provider version.")),
     updateCommand: advisory.updateCommand,
     emphasis: "normal" as const,
   };

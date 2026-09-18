@@ -18,6 +18,7 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { useRef, useState } from "react";
 
 import { isElectron } from "../../env";
+import { useI18n } from "../../i18n";
 import {
   decodeProjectScriptKeybindingRule,
   keybindingValueForCommand,
@@ -33,13 +34,16 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import type { NewProjectScriptInput } from "../projectScriptEditor";
 import { toastManager } from "../ui/toast";
 
-function reportScriptFailure(result: AtomCommandResult<unknown, unknown>) {
+function reportScriptFailure(
+  result: AtomCommandResult<unknown, unknown>,
+  t: ReturnType<typeof useI18n>["t"],
+) {
   if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
     const error = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
-      title: "Failed to save project actions",
-      description: error instanceof Error ? error.message : "An error occurred.",
+      title: t("projectSettings.saveActionsFailed"),
+      description: error instanceof Error ? error.message : t("common.errorGeneric"),
     });
   }
   return mapAtomCommandResult(result, () => undefined);
@@ -57,6 +61,7 @@ export function useProjectScriptSettings(
     project?: { id: ProjectId; scripts: readonly ProjectScript[] };
   }[],
 ) {
+  const { t } = useI18n();
   const projects = useProjects();
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -76,8 +81,12 @@ export function useProjectScriptSettings(
     keybinding?: string | null,
   ): Promise<AtomCommandResult<void, unknown>> {
     if (savingRef.current || targets.length === 0) {
-      const message = "No available machine, or another action change is saving.";
-      toastManager.add({ type: "error", title: "Actions not saved", description: message });
+      const message = t("projectSettings.noMachineOrSaving");
+      toastManager.add({
+        type: "error",
+        title: t("projectSettings.actionsNotSaved"),
+        description: message,
+      });
       return AsyncResult.failure(Cause.fail(new Error(message)));
     }
     savingRef.current = true;
@@ -109,7 +118,7 @@ export function useProjectScriptSettings(
               : { defaultProjectScripts: nextScripts ?? [] },
           },
         });
-        if (result._tag === "Failure") return reportScriptFailure(result);
+        if (result._tag === "Failure") return reportScriptFailure(result, t);
         if (!isElectron) continue;
         const changedIds = scriptId
           ? [scriptId]
@@ -148,7 +157,7 @@ export function useProjectScriptSettings(
             : previous && !retainedElsewhere
               ? await removeKeybinding({ environmentId, input: previous })
               : null;
-          if (bindingResult?._tag === "Failure") return reportScriptFailure(bindingResult);
+          if (bindingResult?._tag === "Failure") return reportScriptFailure(bindingResult, t);
         }
       }
       return AsyncResult.success(undefined);

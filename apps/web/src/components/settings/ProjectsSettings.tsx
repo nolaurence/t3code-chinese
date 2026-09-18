@@ -1,11 +1,13 @@
 import { EnvironmentId } from "@t3tools/contracts";
 
+import { useI18n } from "../../i18n";
 import { ProjectSettingsPanel } from "./ProjectSettingsPanel";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsScopeNotice } from "./SettingsScopeNotice";
 
 /** Project identity and checkout management for the selected project. */
 export function ProjectsSettings() {
+  const { t } = useI18n();
   const { search: value, scope } = useSettingsScope();
   // The panel follows remembered members when grouping replaces a project key.
   const projectScope =
@@ -25,7 +27,7 @@ export function ProjectsSettings() {
         <p className="p-8 text-sm text-muted-foreground">{scope.message}</p>
       ) : (
         <SettingsScopeNotice target="project">
-          Choose a project to manage its name, icon, checkouts and actions.
+          {t("settings.scope.chooseProject")}
         </SettingsScopeNotice>
       )}
     </div>

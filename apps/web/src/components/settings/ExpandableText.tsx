@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 
+import { useI18n } from "../../i18n";
 import { cn } from "../../lib/utils";
 
 /**
@@ -10,16 +11,18 @@ export function ExpandableText({
   text,
   className,
   collapsedClassName = "line-clamp-3",
-  expandLabel = "Show full error",
+  expandLabel,
 }: {
   text: string;
   className?: string;
   collapsedClassName?: string;
   expandLabel?: string;
 }) {
+  const { t } = useI18n();
   const textId = useId();
   const [expanded, setExpanded] = useState(false);
   const canExpand = text.length > 180 || text.includes("\n");
+  const revealLabel = expandLabel ?? t("diagnostics.showFullError");
 
   return (
     <div className={cn("min-w-0", className)}>
@@ -40,7 +43,7 @@ export function ExpandableText({
           className="cursor-pointer mt-1 text-[11px] font-medium text-foreground/70 underline-offset-2 hover:text-foreground hover:underline"
           onClick={() => setExpanded((value) => !value)}
         >
-          {expanded ? "Show less" : expandLabel}
+          {expanded ? t("diagnostics.showLess") : revealLabel}
         </button>
       ) : null}
     </div>

@@ -70,12 +70,16 @@ export function whenAstToExpression(node: KeybindingWhenNode | undefined): strin
   }
 }
 
-export function whenNodeRemoveLabel(node: KeybindingWhenNode, depth: number): string {
-  if (depth === 0) return "Clear all conditions";
+export function whenNodeRemoveLabel(
+  node: KeybindingWhenNode,
+  depth: number,
+  t?: Translate,
+): string {
+  if (depth === 0) return t?.("keybindings.clearAllConditions") ?? "Clear all conditions";
   if (node.type === "identifier" || (node.type === "not" && node.node.type === "identifier")) {
-    return "Remove condition";
+    return t?.("keybindings.removeCondition") ?? "Remove condition";
   }
-  return "Remove group and its conditions";
+  return t?.("keybindings.removeGroupAndConditions") ?? "Remove group and its conditions";
 }
 
 function wrapWhenExpression(node: KeybindingWhenNode): string {
@@ -169,6 +173,7 @@ export function keybindingConflictLabels(
 export function buildKeybindingRows(
   keybindings: ResolvedKeybindingsConfig,
   query: string,
+  t?: Translate,
 ): ReadonlyArray<KeybindingRow> {
   const normalizedQuery = query.trim().toLowerCase();
   const rows = keybindings.map((binding, index) => {
@@ -210,12 +215,20 @@ export function buildKeybindingRows(
   }
 
   return rowsWithConflicts.filter((row) => {
+    const sourceLabel =
+      row.source === "Custom"
+        ? (t?.("keybindings.source.custom") ?? "Custom")
+        : row.source === "Project"
+          ? (t?.("keybindings.source.project") ?? "Project")
+          : row.source;
     return (
       row.command.toLowerCase().includes(normalizedQuery) ||
       commandLabel(row.command).toLowerCase().includes(normalizedQuery) ||
+      (t ? localizedCommandLabel(row.command, t).toLowerCase().includes(normalizedQuery) : false) ||
       row.key.toLowerCase().includes(normalizedQuery) ||
       row.when.toLowerCase().includes(normalizedQuery) ||
-      row.source.toLowerCase().includes(normalizedQuery)
+      row.source.toLowerCase().includes(normalizedQuery) ||
+      sourceLabel.toLowerCase().includes(normalizedQuery)
     );
   });
 }
@@ -268,14 +281,15 @@ export function buildWhenVariableOptions(): ReadonlyArray<WhenVariableOption> {
 
 export function buildKeybindingCommandOptions(
   keybindings: ResolvedKeybindingsConfig,
+  t?: Translate,
 ): ReadonlyArray<KeybindingCommandOption> {
   const commands = new Set<KeybindingCommand>(STATIC_KEYBINDING_COMMANDS);
   for (const binding of keybindings) {
     commands.add(binding.command);
   }
-  return [...commands].toSorted((left, right) =>
-    commandLabel(left).localeCompare(commandLabel(right)),
-  );
+  const label = (command: KeybindingCommand) =>
+    t ? localizedCommandLabel(command, t) : commandLabel(command);
+  return [...commands].toSorted((left, right) => label(left).localeCompare(label(right)));
 }
 
 export function commandLabel(command: KeybindingCommand): string {
@@ -295,6 +309,9 @@ const STATIC_COMMAND_LABEL_KEYS = {
   "terminal.new": "keybindings.command.terminalNew",
   "terminal.close": "keybindings.command.terminalClose",
   "rightPanel.toggle": "keybindings.command.rightPanelToggle",
+  "rightPanel.toggleMaximized": "keybindings.command.rightPanelToggleMaximized",
+  "rightPanel.close": "keybindings.command.rightPanelClose",
+  "pullRequest.copyNumber": "keybindings.command.pullRequestCopyNumber",
   "diff.toggle": "keybindings.command.diffToggle",
   "preview.toggle": "keybindings.command.previewToggle",
   "preview.refresh": "keybindings.command.previewRefresh",
@@ -303,12 +320,29 @@ const STATIC_COMMAND_LABEL_KEYS = {
   "preview.zoomOut": "keybindings.command.previewZoomOut",
   "preview.resetZoom": "keybindings.command.previewResetZoom",
   "commandPalette.toggle": "keybindings.command.commandPaletteToggle",
+  "filePicker.toggle": "keybindings.command.filePickerToggle",
+  "projectSearch.toggle": "keybindings.command.projectSearchToggle",
+  "themeEditor.toggle": "keybindings.command.themeEditorToggle",
+  "composer.stash": "keybindings.command.composerStash",
+  "composer.host": "keybindings.command.composerHost",
+  "composer.effort": "keybindings.command.composerEffort",
+  "composer.mode": "keybindings.command.composerMode",
+  "composer.workspace": "keybindings.command.composerWorkspace",
+  "composer.previousWorktree": "keybindings.command.composerPreviousWorktree",
+  "composer.branch": "keybindings.command.composerBranch",
   "chat.new": "keybindings.command.chatNew",
   "chat.newLocal": "keybindings.command.chatNewLocal",
-  "modelPicker.toggle": "keybindings.command.modelPickerToggle",
   "editor.openFavorite": "keybindings.command.editorOpenFavorite",
+  "modelPicker.toggle": "keybindings.command.modelPickerToggle",
+  "modelPicker.previousProvider": "keybindings.command.modelPickerPreviousProvider",
+  "modelPicker.nextProvider": "keybindings.command.modelPickerNextProvider",
+  "thread.stop": "keybindings.command.threadStop",
+  "thread.steerQueuedMessage": "keybindings.command.threadSteerQueuedMessage",
   "thread.previous": "keybindings.command.threadPrevious",
   "thread.next": "keybindings.command.threadNext",
+  "thread.copyReference": "keybindings.command.threadCopyReference",
+  "thread.settle": "keybindings.command.threadSettle",
+  "thread.pin": "keybindings.command.threadPin",
 } as const satisfies Readonly<Record<string, MessageKey>>;
 
 export function localizedCommandLabel(command: KeybindingCommand, t: Translate): string {

@@ -141,7 +141,7 @@ import { Switch } from "../ui/switch";
 import { ScopedSwitch } from "./ScopedSwitch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { LanguageSettings } from "./LanguageSettings";
+import { isDefaultLocalePreference, LanguageSettings } from "./LanguageSettings";
 import { ThemeLibrary } from "./ThemeSettings";
 import {
   backgroundActivityOverrideSettings,
@@ -214,9 +214,7 @@ function quitConfirmationModeLabels(t: Translate): Record<QuitConfirmationMode, 
   };
 }
 
-function backgroundActivityProfileLabels(
-  t: Translate,
-): Record<BackgroundActivityProfile, string> {
+function backgroundActivityProfileLabels(t: Translate): Record<BackgroundActivityProfile, string> {
   return {
     balanced: t("settings.background.balanced"),
     performance: t("settings.background.performance"),
@@ -324,7 +322,8 @@ function AboutVersionSection() {
             stackedThreadToast({
               type: "error",
               title: t("settings.update.couldNotChangeTrack"),
-              description: error instanceof Error ? error.message : t("settings.update.changeFailed"),
+              description:
+                error instanceof Error ? error.message : t("settings.update.changeFailed"),
             }),
           );
         })
@@ -347,7 +346,8 @@ function AboutVersionSection() {
           stackedThreadToast({
             type: "error",
             title: t("settings.update.couldNotDownload"),
-            description: error instanceof Error ? error.message : t("settings.update.downloadFailed"),
+            description:
+              error instanceof Error ? error.message : t("settings.update.downloadFailed"),
           }),
         );
       });
@@ -371,7 +371,8 @@ function AboutVersionSection() {
           stackedThreadToast({
             type: "error",
             title: t("settings.update.couldNotConfirm"),
-            description: error instanceof Error ? error.message : t("settings.update.confirmFailed"),
+            description:
+              error instanceof Error ? error.message : t("settings.update.confirmFailed"),
           }),
         );
         return;
@@ -387,7 +388,8 @@ function AboutVersionSection() {
             stackedThreadToast({
               type: "error",
               title: t("settings.update.couldNotInstall"),
-              description: error instanceof Error ? error.message : t("settings.update.installFailed"),
+              description:
+                error instanceof Error ? error.message : t("settings.update.installFailed"),
             }),
           );
         })
@@ -404,8 +406,7 @@ function AboutVersionSection() {
             stackedThreadToast({
               type: "error",
               title: t("settings.update.couldNotCheck"),
-              description:
-                result.state.message ?? t("settings.update.checkUnavailable"),
+              description: result.state.message ?? t("settings.update.checkUnavailable"),
             }),
           );
         }
@@ -515,7 +516,11 @@ function AboutVersionSection() {
                 );
               }}
             >
-              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label={t("settings.update.track")}>
+              <SelectTrigger
+                size="sm"
+                className="w-full sm:w-40"
+                aria-label={t("settings.update.track")}
+              >
                 <SelectValue>{HOSTED_APP_CHANNEL_LABEL}</SelectValue>
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -535,7 +540,7 @@ function AboutVersionSection() {
 }
 
 export function useSettingsRestore(onRestored?: () => void) {
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const {
     theme,
     setTheme,
@@ -578,6 +583,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.timestampFormat !== DEFAULT_UNIFIED_SETTINGS.timestampFormat
         ? [t("settings.time.title")]
         : []),
+      ...(!isDefaultLocalePreference(locale) ? [t("settings.language.title")] : []),
       ...(settings.notificationMode !== DEFAULT_UNIFIED_SETTINGS.notificationMode
         ? [t("settings.search.threadNotifications")]
         : []),
@@ -598,7 +604,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.sidebarAutoSettleOnMerge !== DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge
         ? [t("settings.autoSettle.mergedTitle")]
         : []),
-      ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap ? [t("settings.wordWrap.title")] : []),
+      ...(settings.wordWrap !== DEFAULT_UNIFIED_SETTINGS.wordWrap
+        ? [t("settings.wordWrap.title")]
+        : []),
       ...getChangedTypographySettingLabels(settings, t),
       ...(settings.diffFilesCollapsed !== DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed
         ? [t("settings.search.defaultDiffFileState")]
@@ -714,6 +722,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.showSkillsInSlashMenu,
       settings.showAssistantReasoning,
       settings.timestampFormat,
+      locale,
       settings.notificationMode,
       settings.inAppNotificationsEnabled,
       settings.wordWrap,
@@ -844,12 +853,15 @@ export function useSettingsRestore(onRestored?: () => void) {
       // rather than discovering it later.
       enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
     });
+    if (!isDefaultLocalePreference(locale)) setLocale("en");
     onRestored?.();
   }, [
     changedSettingLabels,
     clearThemeHalves,
+    locale,
     onRestored,
     setFollowSystem,
+    setLocale,
     setTheme,
     setThemeHalf,
     t,
@@ -963,9 +975,7 @@ function BackgroundActivityAdvancedDialog({
                   className="w-full sm:w-40"
                   aria-label={t("settings.background.sharedPolicy")}
                 >
-                  <SelectValue>
-                    {backgroundActivityProfileLabels(t)[activeProfile]}
-                  </SelectValue>
+                  <SelectValue>{backgroundActivityProfileLabels(t)[activeProfile]}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   <SelectItem hideIndicator value="balanced">
@@ -1023,7 +1033,9 @@ function BackgroundActivityAdvancedDialog({
 
             <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 space-y-1">
-                <div className="text-sm font-medium">{t("settings.background.providerHealthInterval")}</div>
+                <div className="text-sm font-medium">
+                  {t("settings.background.providerHealthInterval")}
+                </div>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {t("settings.background.providerHealthDescription")}
                 </p>
@@ -1050,9 +1062,13 @@ function BackgroundActivityAdvancedDialog({
                   }
                 >
                   <NumberFieldGroup>
-                    <NumberFieldDecrement aria-label={t("settings.background.providerHealthDecrease")} />
+                    <NumberFieldDecrement
+                      aria-label={t("settings.background.providerHealthDecrease")}
+                    />
                     <NumberFieldInput aria-label={t("settings.background.providerHealthInput")} />
-                    <NumberFieldIncrement aria-label={t("settings.background.providerHealthIncrease")} />
+                    <NumberFieldIncrement
+                      aria-label={t("settings.background.providerHealthIncrease")}
+                    />
                   </NumberFieldGroup>
                 </NumberField>
                 <span className="text-xs text-muted-foreground">{t("sourceControl.seconds")}</span>
@@ -1061,7 +1077,9 @@ function BackgroundActivityAdvancedDialog({
 
             <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 space-y-1">
-                <div className="text-sm font-medium">{t("settings.background.hostPowerMonitor")}</div>
+                <div className="text-sm font-medium">
+                  {t("settings.background.hostPowerMonitor")}
+                </div>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {t("settings.background.hostPowerDescription")}
                 </p>
@@ -1099,7 +1117,9 @@ function BackgroundActivityAdvancedDialog({
 
             <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0 space-y-1">
-                <div className="text-sm font-medium">{t("settings.background.idleHostMonitor")}</div>
+                <div className="text-sm font-medium">
+                  {t("settings.background.idleHostMonitor")}
+                </div>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {t("settings.background.idleHostDescription")}
                 </p>
@@ -1155,7 +1175,7 @@ function BackgroundActivityAdvancedDialog({
                               [key]: Boolean(checked),
                             },
                           ),
-                        ),
+                        )
                       }
                       aria-label={label}
                     />
@@ -1221,7 +1241,12 @@ export function AppearanceSettingsPanel() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="appearance" title={t("settings.section.colorsThemes")} variant="plain" hideTitle>
+      <SettingsSection
+        id="appearance"
+        title={t("settings.section.colorsThemes")}
+        variant="plain"
+        hideTitle
+      >
         <div id={searchableSetting("theme", t).id}>
           <ThemeLibrary
             appearanceMode={appearanceMode}
@@ -1402,7 +1427,11 @@ export function AppearanceSettingsPanel() {
                     updateSettings({ diffColorScheme: value });
                 }}
               >
-                <SelectTrigger size="sm" className="w-full min-w-0" aria-label={t("settings.diffColors.title")}>
+                <SelectTrigger
+                  size="sm"
+                  className="w-full min-w-0"
+                  aria-label={t("settings.diffColors.title")}
+                >
                   <span
                     aria-hidden="true"
                     className={
@@ -1421,7 +1450,9 @@ export function AppearanceSettingsPanel() {
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
-                  <SelectItem value="red-green">{t("settings.diffColors.redGreenDefault")}</SelectItem>
+                  <SelectItem value="red-green">
+                    {t("settings.diffColors.redGreenDefault")}
+                  </SelectItem>
                   <SelectItem value="blue-orange">{t("settings.diffColors.blueOrange")}</SelectItem>
                 </SelectPopup>
               </Select>
@@ -1497,8 +1528,12 @@ function useFontDefaultFamilies() {
   // hardcoded.
   const defaults = useMemo(
     () => ({
-      sans: resolveDefaultFamilyLabel(DEFAULT_SANS_FONT_STACK) ?? t("settings.typography.systemDefault"),
-      code: resolveDefaultFamilyLabel(DEFAULT_CODE_FONT_STACK) ?? t("settings.typography.systemMonospace"),
+      sans:
+        resolveDefaultFamilyLabel(DEFAULT_SANS_FONT_STACK) ??
+        t("settings.typography.systemDefault"),
+      code:
+        resolveDefaultFamilyLabel(DEFAULT_CODE_FONT_STACK) ??
+        t("settings.typography.systemMonospace"),
     }),
     [t],
   );
@@ -2398,7 +2433,11 @@ export function GeneralSettingsPanel() {
                 }
               }}
             >
-              <SelectTrigger size="sm" className="w-full sm:w-40" aria-label={t("settings.time.preference")}>
+              <SelectTrigger
+                size="sm"
+                className="w-full sm:w-40"
+                aria-label={t("settings.time.preference")}
+              >
                 <SelectValue>
                   {settings.timestampFormat === "locale"
                     ? t("settings.time.system")
@@ -2464,9 +2503,7 @@ export function GeneralSettingsPanel() {
                 >
                   <SelectValue>
                     {(value: ResponseStreamingMode | null) =>
-                      value === null
-                        ? t("settings.mixed")
-                        : responseStreamingModeLabels(t)[value]
+                      value === null ? t("settings.mixed") : responseStreamingModeLabels(t)[value]
                     }
                   </SelectValue>
                 </SelectTrigger>
@@ -3088,9 +3125,7 @@ export function GeneralSettingsPanel() {
                   className="w-full sm:w-40"
                   aria-label={t("settings.quit.aria")}
                 >
-                  <SelectValue>
-                    {quitConfirmationModeLabels(t)[settings.confirmQuit]}
-                  </SelectValue>
+                  <SelectValue>{quitConfirmationModeLabels(t)[settings.confirmQuit]}</SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   {Object.entries(quitConfirmationModeLabels(t)).map(([value, label]) => (
