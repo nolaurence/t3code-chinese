@@ -473,6 +473,20 @@
         "licenseId": "MIT",
         "copyrights": ["Copyright (c) 2025 opencode"]
       }
+    },
+    {
+      "repositoryUrl": "https://github.com/github/copilot-sdk",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) GitHub"]
+      }
+    },
+    {
+      "repositoryUrl": "https://github.com/lovell/sharp-libvips",
+      "generatedNotice": {
+        "licenseId": "LGPL-3.0-or-later",
+        "copyrights": ["Copyright (c) Lovell Fuller"]
+      }
     }
   ]
 }

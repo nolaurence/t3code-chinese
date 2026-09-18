@@ -64,6 +64,8 @@ await waitForResources({
   files: requiredFiles,
   tcpHost: devServer.hostname,
   tcpPort: port,
+  httpOrigin: devServer,
+  httpPaths: ["/", "/src/bootstrap.ts", "/src/main.tsx"],
 });
 
 const childEnv = { ...process.env };

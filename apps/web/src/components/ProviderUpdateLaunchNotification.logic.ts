@@ -11,6 +11,7 @@ import {
   squashAtomCommandFailure,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
+import { createTranslator, type Translate } from "../i18n";
 
 export type ProviderUpdateCandidate = ServerProvider & {
   readonly versionAdvisory: NonNullable<ServerProvider["versionAdvisory"]> & {
@@ -29,11 +30,32 @@ export type ProviderSettingsUpdateCandidate = ServerProvider & {
 export type ProviderUpdateToastType = "warning" | "loading" | "error" | "success";
 export type ProviderUpdateToastPhase = "initial" | "running" | "failed" | "unchanged" | "succeeded";
 
-export interface ProviderUpdateToastView {
-  readonly phase: ProviderUpdateToastPhase;
-  readonly type: ProviderUpdateToastType;
+export interface ProviderUpdateToastText {
   readonly title: string;
   readonly description: string;
+}
+
+export type ProviderUpdateToastCopy =
+  | {
+      readonly kind: "initial";
+      readonly drivers: ReadonlyArray<ProviderDriverKind>;
+      readonly latestVersion: string | null;
+      readonly oneClick: boolean;
+    }
+  | { readonly kind: "running"; readonly providerCount: number }
+  | { readonly kind: "rejected"; readonly providerCount: number; readonly message: string }
+  | {
+      readonly kind: "failed-progress";
+      readonly drivers: ReadonlyArray<ProviderDriverKind>;
+      readonly message: string | null;
+    }
+  | { readonly kind: "unchanged"; readonly drivers: ReadonlyArray<ProviderDriverKind> }
+  | { readonly kind: "succeeded"; readonly providerCount: number };
+
+export interface ProviderUpdateToastView extends ProviderUpdateToastText {
+  readonly phase: ProviderUpdateToastPhase;
+  readonly type: ProviderUpdateToastType;
+  readonly copy?: ProviderUpdateToastCopy;
   readonly dismissAfterVisibleMs?: number;
 }
 
@@ -220,28 +242,142 @@ export function providerUpdateNotificationKey(
   return parts.length > 0 ? parts.join("|") : null;
 }
 
-function formatProviderList(providers: ReadonlyArray<Pick<ServerProvider, "driver">>) {
+function formatProviderList(
+  providers: ReadonlyArray<Pick<ServerProvider, "driver">>,
+  t: Translate = createTranslator("en"),
+) {
   const names = providers.map(
     (provider) => PROVIDER_DISPLAY_NAMES[provider.driver] ?? provider.driver,
   );
   if (names.length <= 2) {
-    return names.join(" and ");
+    if (names.length === 2) {
+      return t("providerUpdate.list.two", { first: names[0]!, second: names[1]! });
+    }
+    return names[0] ?? "";
   }
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+  return t("providerUpdate.list.many", {
+    prefix: names.slice(0, -1).join(", "),
+    last: names[names.length - 1]!,
+  });
 }
 
-export function getProviderUpdateInitialToastView(input: {
-  readonly updateProviders: ReadonlyArray<ProviderUpdateCandidate>;
-  readonly oneClickProviders: ReadonlyArray<ProviderUpdateCandidate>;
-}): ProviderUpdateToastView {
+function formatDriverList(drivers: ReadonlyArray<ProviderDriverKind>, t: Translate) {
+  return formatProviderList(
+    drivers.map((driver) => ({ driver })),
+    t,
+  );
+}
+
+export function resolveProviderUpdateToastText(
+  view: {
+    readonly phase: ProviderUpdateToastPhase;
+    readonly copy?: ProviderUpdateToastCopy;
+    readonly title?: string;
+    readonly description?: string;
+  },
+  t: Translate,
+): ProviderUpdateToastText {
+  const copy = view.copy;
+  if (!copy) {
+    return { title: view.title ?? "", description: view.description ?? "" };
+  }
+
+  switch (copy.kind) {
+    case "initial": {
+      const title =
+        copy.drivers.length === 1
+          ? t("providerUpdate.initial.title", {
+              provider: PROVIDER_DISPLAY_NAMES[copy.drivers[0]!] ?? copy.drivers[0]!,
+              version: formatVersion(copy.latestVersion ?? ""),
+            })
+          : t("providerUpdate.initial.titleMany", { count: copy.drivers.length });
+      const description = copy.oneClick
+        ? t("providerUpdate.initial.description")
+        : t("providerUpdate.initial.manualDescription", {
+            providers: formatDriverList(copy.drivers, t),
+          });
+      return { title, description };
+    }
+    case "running":
+      return {
+        title:
+          copy.providerCount === 1
+            ? t("providerUpdate.running.title")
+            : t("providerUpdate.running.titleMany"),
+        description: t("providerUpdate.running.description"),
+      };
+    case "rejected":
+      return {
+        title:
+          copy.providerCount === 1
+            ? t("providerUpdate.failed.title")
+            : t("providerUpdate.failed.titleMany"),
+        description: copy.message,
+      };
+    case "failed-progress":
+      return {
+        title:
+          copy.drivers.length === 1
+            ? t("providerUpdate.failed.title")
+            : t("providerUpdate.failed.titleMany"),
+        description:
+          copy.message ??
+          t("providerUpdate.failed.description", {
+            providers: formatDriverList(copy.drivers, t),
+          }),
+      };
+    case "unchanged":
+      return {
+        title:
+          copy.drivers.length === 1
+            ? t("providerUpdate.unchanged.title")
+            : t("providerUpdate.unchanged.titleMany"),
+        description:
+          copy.drivers.length === 1
+            ? t("providerUpdate.unchanged.description", {
+                providers: formatDriverList(copy.drivers, t),
+              })
+            : t("providerUpdate.unchanged.descriptionMany", {
+                providers: formatDriverList(copy.drivers, t),
+              }),
+      };
+    case "succeeded":
+      return {
+        title:
+          copy.providerCount === 1
+            ? t("providerUpdate.success.title")
+            : t("providerUpdate.success.titleMany"),
+        description:
+          copy.providerCount === 1
+            ? t("providerUpdate.success.description")
+            : t("providerUpdate.success.descriptionMany"),
+      };
+  }
+}
+
+export function getProviderUpdateInitialToastView(
+  input: {
+    readonly updateProviders: ReadonlyArray<ProviderUpdateCandidate>;
+    readonly oneClickProviders: ReadonlyArray<ProviderUpdateCandidate>;
+  },
+  t: Translate = createTranslator("en"),
+): ProviderUpdateToastView {
+  const copy: ProviderUpdateToastCopy = {
+    kind: "initial",
+    drivers: input.updateProviders.map((provider) => provider.driver),
+    latestVersion:
+      input.updateProviders.length === 1
+        ? input.updateProviders[0]!.versionAdvisory.latestVersion
+        : null,
+    oneClick: input.oneClickProviders.length > 0,
+  };
+  const text = resolveProviderUpdateToastText({ phase: "initial", copy }, t);
   return {
     phase: "initial",
     type: "warning",
-    title: getProviderUpdateInitialToastTitle(input.updateProviders),
-    description:
-      input.oneClickProviders.length > 0
-        ? "Install the update now or review provider settings."
-        : `${formatProviderList(input.updateProviders)} can be updated from provider settings.`,
+    copy,
+    title: text.title,
+    description: text.description,
   };
 }
 
@@ -249,39 +385,60 @@ export function shouldShowPrimaryProviderUpdateToast(view: ProviderUpdateToastVi
   return view.phase !== "running";
 }
 
-function getProviderUpdateRunningToastView(providerCount: number): ProviderUpdateToastView {
+export function getProviderUpdateRunningToastView(
+  providerCount: number,
+  t: Translate = createTranslator("en"),
+): ProviderUpdateToastView {
+  const copy: ProviderUpdateToastCopy = { kind: "running", providerCount };
+  const text = resolveProviderUpdateToastText({ phase: "running", copy }, t);
   return {
     phase: "running",
     type: "loading",
-    title: providerCount === 1 ? "Updating provider" : "Updating providers",
-    description: "Running provider update command.",
+    copy,
+    title: text.title,
+    description: text.description,
   };
 }
 
 export function getProviderUpdateRejectedToastView(
   providerCount: number,
   message: string,
+  t: Translate = createTranslator("en"),
 ): ProviderUpdateToastView {
+  const copy: ProviderUpdateToastCopy = { kind: "rejected", providerCount, message };
+  const text = resolveProviderUpdateToastText({ phase: "failed", copy }, t);
   return {
     phase: "failed",
     type: "error",
-    title: providerCount === 1 ? "Provider update failed" : "Provider updates failed",
-    description: message,
+    copy,
+    title: text.title,
+    description: text.description,
   };
 }
 
-export function getProviderUpdateProgressToastView(input: {
-  readonly providers: ReadonlyArray<ServerProvider>;
-  readonly providerCount: number;
-}): ProviderUpdateToastView {
+export function getProviderUpdateProgressToastView(
+  input: {
+    readonly providers: ReadonlyArray<ServerProvider>;
+    readonly providerCount: number;
+  },
+  t: Translate = createTranslator("en"),
+): ProviderUpdateToastView {
   const providers = dedupeProvidersByDriver(input.providers);
   const failedProviders = providers.filter((provider) => provider.updateState?.status === "failed");
   if (failedProviders.length > 0) {
+    const copy: ProviderUpdateToastCopy = {
+      kind: "failed-progress",
+      drivers: failedProviders.map((provider) => provider.driver),
+      message:
+        failedProviders.length === 1 ? (failedProviders[0]!.updateState?.message ?? null) : null,
+    };
+    const text = resolveProviderUpdateToastText({ phase: "failed", copy }, t);
     return {
       phase: "failed",
       type: "error",
-      title: failedProviders.length === 1 ? "Provider update failed" : "Provider updates failed",
-      description: getFailedProviderUpdateDescription(failedProviders),
+      copy,
+      title: text.title,
+      description: text.description,
     };
   }
 
@@ -289,21 +446,22 @@ export function getProviderUpdateProgressToastView(input: {
     (provider) => provider.updateState?.status === "unchanged",
   );
   if (unchangedProviders.length > 0) {
+    const copy: ProviderUpdateToastCopy = {
+      kind: "unchanged",
+      drivers: unchangedProviders.map((provider) => provider.driver),
+    };
+    const text = resolveProviderUpdateToastText({ phase: "unchanged", copy }, t);
     return {
       phase: "unchanged",
       type: "warning",
-      title:
-        unchangedProviders.length === 1
-          ? "Provider still needs an update"
-          : "Providers still need updates",
-      description: `${formatProviderList(unchangedProviders)} ${
-        unchangedProviders.length === 1 ? "still appears" : "still appear"
-      } outdated. Check provider settings for details.`,
+      copy,
+      title: text.title,
+      description: text.description,
     };
   }
 
   if (providers.some(isProviderUpdateActive)) {
-    return getProviderUpdateRunningToastView(input.providerCount);
+    return getProviderUpdateRunningToastView(input.providerCount, t);
   }
 
   const hasCompleteProviderSnapshots = providers.length >= input.providerCount;
@@ -314,16 +472,19 @@ export function getProviderUpdateProgressToastView(input: {
         provider.updateState?.status === "succeeded" || !isProviderUpdateCandidate(provider),
     );
   if (allProvidersUpdated) {
+    const copy: ProviderUpdateToastCopy = { kind: "succeeded", providerCount: input.providerCount };
+    const text = resolveProviderUpdateToastText({ phase: "succeeded", copy }, t);
     return {
       phase: "succeeded",
       type: "success",
-      title: input.providerCount === 1 ? "Provider updated" : "Provider updates finished",
-      description: getProviderUpdatedDescription(input.providerCount),
+      copy,
+      title: text.title,
+      description: text.description,
       dismissAfterVisibleMs: PROVIDER_UPDATE_SUCCESS_VISIBLE_MS,
     };
   }
 
-  return getProviderUpdateRunningToastView(input.providerCount);
+  return getProviderUpdateRunningToastView(input.providerCount, t);
 }
 
 export function collectUpdatedProviderSnapshots(input: {
@@ -350,13 +511,14 @@ export function collectUpdatedProviderSnapshots(input: {
 
 export function firstFailedProviderUpdateMessage(
   results: ReadonlyArray<AtomCommandResult<unknown, unknown>>,
+  t: Translate = createTranslator("en"),
 ): string | null {
   const failed = results.find((result) => result._tag === "Failure");
   if (!failed || failed._tag !== "Failure") {
     return null;
   }
   const error = squashAtomCommandFailure(failed);
-  return error instanceof Error ? error.message : "Provider update failed.";
+  return error instanceof Error ? error.message : t("providerUpdate.error.generic");
 }
 
 function getUpdateFinishedAt(provider: ServerProvider): string | null {
@@ -514,17 +676,6 @@ export function getProviderUpdateSidebarPillView(
       })
       .find((candidate) => !options?.dismissedKeys?.has(candidate.key)) ?? null
   );
-}
-
-function getProviderUpdateInitialToastTitle(
-  providers: ReadonlyArray<ProviderUpdateCandidate>,
-): string {
-  if (providers.length === 1) {
-    const provider = providers[0]!;
-    const providerName = PROVIDER_DISPLAY_NAMES[provider.driver] ?? provider.driver;
-    return `Update Available: ${providerName} ${formatVersion(provider.versionAdvisory.latestVersion)}`;
-  }
-  return `Updates Available: ${providers.length} providers`;
 }
 
 function getFailedProviderUpdateDescription(providers: ReadonlyArray<ServerProvider>): string {

@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { DesktopEnvironmentBootstrapSchema } from "./ipc.ts";
+import { DesktopAppBrandingSchema, DesktopEnvironmentBootstrapSchema } from "./ipc.ts";
 
 describe("DesktopEnvironmentBootstrapSchema", () => {
   const decode = Schema.decodeUnknownSync(DesktopEnvironmentBootstrapSchema);
@@ -34,5 +34,21 @@ describe("DesktopEnvironmentBootstrapSchema", () => {
         wsBaseUrl: null,
       }).runningDistro,
     ).toBeNull();
+  });
+});
+
+describe("DesktopAppBrandingSchema", () => {
+  const decode = Schema.decodeUnknownSync(DesktopAppBrandingSchema);
+  const encode = Schema.encodeUnknownSync(DesktopAppBrandingSchema);
+
+  it("accepts the packaged Browser stage label", () => {
+    const branding = {
+      baseName: "T3 Code",
+      stageLabel: "Browser",
+      displayName: "T3 Code (Browser)",
+    };
+
+    expect(decode(branding)).toEqual(branding);
+    expect(encode(branding)).toEqual(branding);
   });
 });

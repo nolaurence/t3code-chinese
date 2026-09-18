@@ -51,6 +51,16 @@ export default Effect.gen(function* () {
     ON projection_thread_pull_requests(host, repository, number)
   `;
 
+  const threadColumns = yield* sql<{ readonly name: string }>`
+    PRAGMA table_info(projection_threads)
+  `;
+  if (!threadColumns.some((column) => column.name === "linked_pull_request_json")) {
+    yield* sql`
+      ALTER TABLE projection_threads
+      ADD COLUMN linked_pull_request_json TEXT
+    `;
+  }
+
   const legacyRows = yield* sql<LegacyLinkedThreadRow>`
     SELECT
       thread_id AS "threadId",

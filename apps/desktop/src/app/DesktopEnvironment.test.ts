@@ -197,4 +197,46 @@ describe("DesktopEnvironment", () => {
       );
     }),
   );
+
+  it("labels packaged production builds as Browser", () => {
+    assert.deepEqual(
+      DesktopEnvironment.resolveDesktopAppBranding({
+        isDevelopment: false,
+        appVersion: "0.1.3-dev",
+      }),
+      {
+        baseName: "T3 Code",
+        stageLabel: "Browser",
+        displayName: "T3 Code (Browser)",
+      },
+    );
+  });
+
+  it("labels development builds as Dev", () => {
+    assert.deepEqual(
+      DesktopEnvironment.resolveDesktopAppBranding({
+        isDevelopment: true,
+        appVersion: "0.1.3-dev",
+      }),
+      {
+        baseName: "T3 Code",
+        stageLabel: "Dev",
+        displayName: "T3 Code (Dev)",
+      },
+    );
+  });
+
+  it("labels nightly packaged builds as Nightly", () => {
+    assert.deepEqual(
+      DesktopEnvironment.resolveDesktopAppBranding({
+        isDevelopment: false,
+        appVersion: "0.0.41-nightly.20260911.7",
+      }),
+      {
+        baseName: "T3 Code",
+        stageLabel: "Nightly",
+        displayName: "T3 Code (Nightly)",
+      },
+    );
+  });
 });

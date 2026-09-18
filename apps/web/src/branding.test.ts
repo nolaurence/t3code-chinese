@@ -39,6 +39,27 @@ describe("branding", () => {
     expect(branding.APP_DISPLAY_NAME).toBe("T3 Code (Nightly)");
   });
 
+  it("uses injected packaged Browser branding when available", async () => {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: {
+        desktopBridge: {
+          getAppBranding: () => ({
+            baseName: "T3 Code",
+            stageLabel: "Browser",
+            displayName: "T3 Code (Browser)",
+          }),
+        },
+      },
+    });
+
+    const branding = await import("./branding");
+
+    expect(branding.APP_BASE_NAME).toBe("T3 Code");
+    expect(branding.APP_STAGE_LABEL).toBe("Browser");
+    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code (Browser)");
+  });
+
   it("normalizes hosted app channel metadata", async () => {
     vi.stubEnv("VITE_HOSTED_APP_CHANNEL", "nightly");
 
