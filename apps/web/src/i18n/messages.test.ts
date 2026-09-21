@@ -29,6 +29,15 @@ describe("translated messages", () => {
     expect(t("connections.title")).toBe("连接");
   });
 
+  it("covers the right panel launcher surfaces", () => {
+    const t = createTranslator("zh-CN");
+
+    expect(t("panel.openSurface")).toBe("打开面板");
+    expect(t("panel.linkedPullRequests")).toBe("已关联的拉取请求");
+    expect(t("panel.device")).toBe("设备");
+    expect(t("panel.closeNamed", { title: "终端" })).toBe("关闭 终端");
+  });
+
   it("covers desktop accessibility and contextual action copy", () => {
     const t = createTranslator("zh-CN");
 

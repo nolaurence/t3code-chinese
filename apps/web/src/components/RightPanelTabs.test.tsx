@@ -3,6 +3,7 @@ import type { DesktopPreviewFavicon, PreviewSessionSnapshot } from "@t3tools/con
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
+import { createTranslator, I18nProvider } from "../i18n";
 import {
   RightPanelTabs,
   resolvePullRequestTabLink,
@@ -89,6 +90,51 @@ function overlay(
   };
 }
 
+function tabsProps(
+  first: DesktopPreviewFavicon | null,
+  second?: DesktopPreviewFavicon,
+  audio?: { audible?: boolean; audioMuted?: boolean },
+  previewRuntimeTabId: ((tabId: string) => string) | null = (tabId) => `runtime:${tabId}`,
+) {
+  return {
+    mode: "inline" as const,
+    surfaces: second ? [previewSurface, secondSurface] : [previewSurface],
+    environmentId: null,
+    pendingSurfaceIds: new Set<string>(),
+    previewSessions: sessions,
+    desktopByTabId: {
+      "tab-1": overlay(first, audio),
+      ...(second ? { "tab-2": overlay(second) } : {}),
+    },
+    ...(previewRuntimeTabId ? { previewRuntimeTabId } : {}),
+    terminalLabelsById: new Map<string, string>(),
+    onActivate: () => undefined,
+    onCloseSurface: () => undefined,
+    onCloseOtherSurfaces: () => undefined,
+    onCloseSurfacesToRight: () => undefined,
+    onCloseAllSurfaces: () => undefined,
+    onCopyFilePath: () => undefined,
+    onAddBrowser: () => undefined,
+    onAddBrowserInProfile: () => undefined,
+    onAddTerminal: () => undefined,
+    onAddPullRequest: () => undefined,
+    onAddPullRequests: () => undefined,
+    onAddDiff: () => undefined,
+    onAddFiles: () => undefined,
+    onAddAgents: () => undefined,
+    onAddDevice: () => undefined,
+    liveAgentCount: 0,
+    browserAvailable: true,
+    terminalAvailable: false,
+    diffAvailable: false,
+    filesAvailable: false,
+    pullRequestAvailable: false,
+    pullRequestsAvailable: false,
+    agentsAvailable: false,
+    deviceAvailable: false,
+  };
+}
+
 function renderTabs(
   first: DesktopPreviewFavicon | null,
   second?: DesktopPreviewFavicon,
@@ -97,45 +143,21 @@ function renderTabs(
 ) {
   return renderToStaticMarkup(
     <RightPanelTabs
-      mode="inline"
-      surfaces={second ? [previewSurface, secondSurface] : [previewSurface]}
-      environmentId={null}
+      {...tabsProps(first, second, audio, previewRuntimeTabId)}
       activeSurfaceId={previewSurface.id}
-      pendingSurfaceIds={new Set()}
-      previewSessions={sessions}
-      desktopByTabId={{
-        "tab-1": overlay(first, audio),
-        ...(second ? { "tab-2": overlay(second) } : {}),
-      }}
-      {...(previewRuntimeTabId ? { previewRuntimeTabId } : {})}
-      terminalLabelsById={new Map()}
-      onActivate={() => undefined}
-      onCloseSurface={() => undefined}
-      onCloseOtherSurfaces={() => undefined}
-      onCloseSurfacesToRight={() => undefined}
-      onCloseAllSurfaces={() => undefined}
-      onCopyFilePath={() => undefined}
-      onAddBrowser={() => undefined}
-      onAddBrowserInProfile={() => undefined}
-      onAddTerminal={() => undefined}
-      onAddPullRequest={() => undefined}
-      onAddPullRequests={() => undefined}
-      onAddDiff={() => undefined}
-      onAddFiles={() => undefined}
-      onAddAgents={() => undefined}
-      onAddDevice={() => undefined}
-      liveAgentCount={0}
-      browserAvailable
-      terminalAvailable={false}
-      diffAvailable={false}
-      filesAvailable={false}
-      pullRequestAvailable={false}
-      pullRequestsAvailable={false}
-      agentsAvailable={false}
-      deviceAvailable={false}
     >
       <div>content</div>
     </RightPanelTabs>,
+  );
+}
+
+function renderLauncher(locale: Parameters<typeof createTranslator>[0]) {
+  return renderToStaticMarkup(
+    <I18nProvider initialLocale={locale}>
+      <RightPanelTabs {...tabsProps(null)} activeSurfaceId={null}>
+        <div>content</div>
+      </RightPanelTabs>
+    </I18nProvider>,
   );
 }
 
@@ -215,6 +237,26 @@ describe("surface shortcut typing contexts", () => {
   });
 });
 
+describe("RightPanelTabs empty-state launcher", () => {
+  it("lists every surface in English by default", () => {
+    const markup = renderLauncher("en");
+
+    expect(markup).toContain("Open a surface");
+    expect(markup).toContain("Linked pull requests");
+    expect(markup).toContain("Device");
+  });
+
+  it("lists every surface in the active locale", () => {
+    const markup = renderLauncher("zh-CN");
+
+    expect(markup).toContain("打开面板");
+    expect(markup).toContain("已关联的拉取请求");
+    expect(markup).toContain("设备");
+    expect(markup).not.toContain("Open a surface");
+    expect(markup).not.toContain("Linked pull requests");
+  });
+});
+
 describe("RightPanelTabs audio indicator", () => {
   // A muted tab only shows the indicator while it is actually making sound:
   // arming mute on a quiet tab is deliberate and stays invisible until there
@@ -254,32 +296,49 @@ describe("RightPanelTabs audio indicator", () => {
 });
 
 describe("tabMuteMenuItem", () => {
+  const t = createTranslator("en");
   const overlay = (audioMuted: boolean) =>
     ({ audioMuted, audible: false }) as Parameters<typeof tabMuteMenuItem>[0]["overlay"];
 
   it("stays disabled until the desktop tab exists", () => {
     // The server session id resolves before the preview manager finishes
     // createTab. Muting in that window fails with an error nobody surfaces.
-    expect(tabMuteMenuItem({ overlay: null, canResolveRuntimeTabId: true })).toEqual({
+    expect(tabMuteMenuItem({ overlay: null, canResolveRuntimeTabId: true, t })).toEqual({
       label: "Mute tab",
       disabled: true,
     });
   });
 
   it("stays disabled when no runtime tab id can be resolved", () => {
-    expect(tabMuteMenuItem({ overlay: overlay(false), canResolveRuntimeTabId: false })).toEqual({
+    expect(tabMuteMenuItem({ overlay: overlay(false), canResolveRuntimeTabId: false, t })).toEqual({
       label: "Mute tab",
       disabled: true,
     });
   });
 
   it("offers mute and unmute once the tab is addressable", () => {
-    expect(tabMuteMenuItem({ overlay: overlay(false), canResolveRuntimeTabId: true })).toEqual({
+    expect(tabMuteMenuItem({ overlay: overlay(false), canResolveRuntimeTabId: true, t })).toEqual({
       label: "Mute tab",
       disabled: false,
     });
-    expect(tabMuteMenuItem({ overlay: overlay(true), canResolveRuntimeTabId: true })).toEqual({
+    expect(tabMuteMenuItem({ overlay: overlay(true), canResolveRuntimeTabId: true, t })).toEqual({
       label: "Unmute tab",
+      disabled: false,
+    });
+  });
+
+  it("translates the label for the active locale", () => {
+    const zh = createTranslator("zh-CN");
+    expect(
+      tabMuteMenuItem({ overlay: overlay(false), canResolveRuntimeTabId: true, t: zh }),
+    ).toEqual({
+      label: "静音标签页",
+      disabled: false,
+    });
+    expect(
+      tabMuteMenuItem({ overlay: overlay(true), canResolveRuntimeTabId: true, t: zh }),
+    ).toEqual({
+      label: "取消标签页静音",
       disabled: false,
     });
   });
