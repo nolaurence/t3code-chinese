@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import ensureSettlementColumns from "./033_ProjectionThreadsSettled.ts";
 
 // Server auto-settlement used to stamp settledAt with the sweep time instead
 // of the thread's last activity. Repair the projection only: the engine and
@@ -9,6 +10,10 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 // is how an unrepaired automatic settlement is identified below.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+
+  // Early fork releases used migration 33 for message reasoning text. The
+  // migrator skips that slot, so restore its prerequisites before querying them.
+  yield* ensureSettlementColumns;
 
   yield* sql`
     WITH activity_timestamps AS (
