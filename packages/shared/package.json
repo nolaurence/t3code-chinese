@@ -19,6 +19,10 @@
       "types": "./src/themePalettes.ts",
       "import": "./src/themePalettes.ts"
     },
+    "./standardTheme": {
+      "types": "./src/standardTheme.ts",
+      "import": "./src/standardTheme.ts"
+    },
     "./themePreview": {
       "types": "./src/themePreview.ts",
       "import": "./src/themePreview.ts"
