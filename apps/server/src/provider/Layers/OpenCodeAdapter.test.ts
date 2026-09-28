@@ -2147,6 +2147,286 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     }),
   );
 
+  const PARENT_SESSION = "http://127.0.0.1:9999/session";
+
+  const taskToolPart = (input: {
+    readonly callID: string;
+    readonly status: "running" | "completed";
+    readonly output?: string;
+  }) => ({
+    id: `part-${input.callID}`,
+    sessionID: PARENT_SESSION,
+    messageID: "msg-parent",
+    type: "tool" as const,
+    callID: input.callID,
+    tool: "task",
+    state: {
+      status: input.status,
+      input: { description: "Research the API", subagent_type: "researcher" },
+      title: "Research the API",
+      metadata: { sessionId: "ses_child", model: { modelID: "kimi-k3", providerID: "opencode" } },
+      time: { start: 1, ...(input.status === "completed" ? { end: 9 } : {}) },
+      ...(input.status === "completed" ? { output: input.output ?? "Findings summarized." } : {}),
+    },
+  });
+
+  const childToolPart = {
+    id: "part-child-read",
+    sessionID: "ses_child",
+    messageID: "msg-child",
+    type: "tool" as const,
+    callID: "call_child_read",
+    tool: "read",
+    state: {
+      status: "running" as const,
+      input: { filePath: "src/api.ts" },
+      title: "Read src/api.ts",
+      time: { start: 2 },
+    },
+  };
+
+  const childStepPart = {
+    id: "step-child",
+    sessionID: "ses_child",
+    messageID: "msg-child",
+    type: "step-finish" as const,
+    reason: "tool-calls",
+    cost: 0,
+    tokens: { input: 100, output: 20, reasoning: 5, cache: { read: 40, write: 10 } },
+  };
+
+  it.effect("projects a subagent's child session into Agents-surface task events", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-subagent-progress");
+      const push = makeOpenCodeEventQueue();
+      runtimeMock.state.sessionStatus = "busy";
+
+      const eventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            (event.type === "task.started" ||
+              event.type === "task.progress" ||
+              event.type === "task.completed" ||
+              event.type === "item.updated" ||
+              event.type === "item.completed" ||
+              event.type === "content.delta"),
+        ),
+        Stream.take(7),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const sendFiber = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "Delegate the research",
+          modelSelection: createModelSelection(
+            ProviderInstanceId.make("opencode"),
+            "opencode/kimi-k3",
+          ),
+        })
+        .pipe(Effect.forkChild);
+      push({
+        id: "evt-subagent-busy",
+        type: "session.status",
+        properties: { sessionID: PARENT_SESSION, status: { type: "busy" } },
+      });
+      yield* Fiber.join(sendFiber);
+
+      // The parent's `task` tool part names the child session it spawned.
+      push({
+        id: "evt-subagent-task-running",
+        type: "message.part.updated",
+        properties: {
+          sessionID: PARENT_SESSION,
+          part: taskToolPart({ callID: "call_task", status: "running" }),
+        },
+      });
+      push({
+        id: "evt-subagent-child-created",
+        type: "session.created",
+        properties: {
+          sessionID: "ses_child",
+          info: {
+            id: "ses_child",
+            parentID: PARENT_SESSION,
+            title: "Research the API (@researcher subagent)",
+            agent: "researcher",
+          },
+        },
+      });
+      // The child's own work: a tool call, its step usage, and narration that
+      // must stay out of the parent conversation.
+      push({
+        id: "evt-subagent-child-tool",
+        type: "message.part.updated",
+        properties: { sessionID: "ses_child", part: childToolPart },
+      });
+      push({
+        id: "evt-subagent-child-step",
+        type: "message.part.updated",
+        properties: { sessionID: "ses_child", part: childStepPart },
+      });
+      push({
+        id: "evt-subagent-child-text",
+        type: "message.part.updated",
+        properties: {
+          sessionID: "ses_child",
+          part: {
+            id: "part-child-text",
+            sessionID: "ses_child",
+            messageID: "msg-child",
+            type: "text",
+            text: "Child narration that must not reach the parent timeline.",
+            time: { start: 3 },
+          },
+        },
+      });
+      push({
+        id: "evt-subagent-task-completed",
+        type: "message.part.updated",
+        properties: {
+          sessionID: PARENT_SESSION,
+          part: taskToolPart({ callID: "call_task", status: "completed" }),
+        },
+      });
+      push({
+        id: "evt-subagent-idle",
+        type: "session.status",
+        properties: { sessionID: PARENT_SESSION, status: { type: "idle" } },
+      });
+
+      const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
+      NodeAssert.deepEqual(
+        events.map((event) => event.type),
+        [
+          "item.updated",
+          "task.started",
+          "item.updated",
+          "task.progress",
+          "task.progress",
+          "task.completed",
+          "item.completed",
+        ],
+      );
+      // The child's narration never becomes a parent content delta.
+      NodeAssert.ok(!events.some((event) => event.type === "content.delta"));
+
+      const started = events.find((event) => event.type === "task.started");
+      NodeAssert.ok(started?.type === "task.started");
+      NodeAssert.equal(started.payload.taskId, "ses_child");
+      NodeAssert.equal(started.payload.title, "Research the API");
+      NodeAssert.equal(started.payload.role, "researcher");
+      NodeAssert.equal(started.payload.taskType, "subagent");
+      NodeAssert.equal(started.payload.timelineBypass, true);
+
+      const childItem = events.find(
+        (event) => event.type === "item.updated" && event.itemId === "call_child_read",
+      );
+      NodeAssert.ok(childItem?.type === "item.updated");
+      NodeAssert.equal(childItem.payload.agentId, "ses_child");
+      NodeAssert.equal(childItem.payload.parentToolUseId, "call_task");
+
+      const completed = events.find((event) => event.type === "task.completed");
+      NodeAssert.ok(completed?.type === "task.completed");
+      NodeAssert.equal(completed.payload.status, "completed");
+      NodeAssert.equal(completed.payload.summary, "Findings summarized.");
+      NodeAssert.equal(completed.payload.typedUsage?.totalTokens, 175);
+
+      const usageProgress = events.find(
+        (event) => event.type === "task.progress" && event.payload.typedUsage !== undefined,
+      );
+      NodeAssert.ok(usageProgress?.type === "task.progress");
+      NodeAssert.equal(usageProgress.payload.typedUsage?.outputTokens, 25);
+      NodeAssert.equal(usageProgress.payload.typedUsage?.reasoningOutputTokens, 5);
+      NodeAssert.equal(usageProgress.payload.typedUsage?.inputTokens, 150);
+      NodeAssert.equal(usageProgress.payload.typedUsage?.cachedInputTokens, 40);
+      NodeAssert.equal(usageProgress.payload.typedUsage?.toolUses, 1);
+
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
+  it.effect("settles an unfinished subagent when the turn ends", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-subagent-settle");
+      const push = makeOpenCodeEventQueue();
+      runtimeMock.state.sessionStatus = "busy";
+
+      const eventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === threadId &&
+            (event.type === "task.started" ||
+              event.type === "task.progress" ||
+              event.type === "task.completed"),
+        ),
+        Stream.take(3),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+      const sendFiber = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "Delegate without a terminal row",
+          modelSelection: createModelSelection(
+            ProviderInstanceId.make("opencode"),
+            "opencode/kimi-k3",
+          ),
+        })
+        .pipe(Effect.forkChild);
+      push({
+        id: "evt-settle-busy",
+        type: "session.status",
+        properties: { sessionID: PARENT_SESSION, status: { type: "busy" } },
+      });
+      yield* Fiber.join(sendFiber);
+
+      push({
+        id: "evt-settle-task-running",
+        type: "message.part.updated",
+        properties: {
+          sessionID: PARENT_SESSION,
+          part: taskToolPart({ callID: "call_task", status: "running" }),
+        },
+      });
+      push({
+        id: "evt-settle-child-tool",
+        type: "message.part.updated",
+        properties: { sessionID: "ses_child", part: childToolPart },
+      });
+      // No terminal `task` tool part: only the turn ending can settle the run.
+      push({
+        id: "evt-settle-idle",
+        type: "session.status",
+        properties: { sessionID: PARENT_SESSION, status: { type: "idle" } },
+      });
+
+      const events = Array.from(yield* Fiber.join(eventsFiber).pipe(Effect.timeout("2 seconds")));
+      NodeAssert.deepEqual(
+        events.map((event) => event.type),
+        ["task.started", "task.progress", "task.completed"],
+      );
+      const completed = events[2];
+      NodeAssert.ok(completed?.type === "task.completed");
+      NodeAssert.equal(completed.payload.status, "completed");
+
+      yield* adapter.stopSession(threadId);
+    }),
+  );
+
   it.effect("marks subagents when a child is proven related by ancestry lookup", () =>
     Effect.gen(function* () {
       const adapter = yield* OpenCodeAdapter;
@@ -6295,15 +6575,35 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
         ]),
       });
 
-      NodeAssert.deepEqual(runtimeMock.state.promptCalls.at(-1), {
-        sessionID: "http://127.0.0.1:9999/session",
-        model: {
-          providerID: "openai",
-          modelID: "gpt-5",
+      const prompt = runtimeMock.state.promptCalls.at(-1) as {
+        sessionID: string;
+        messageID?: string;
+        model: { providerID: string; modelID: string };
+        agent?: string;
+        variant?: string;
+        system?: string;
+        parts: ReadonlyArray<unknown>;
+      };
+      // `build` is OpenCode's implicit default, so the key must be absent
+      // entirely — sending it makes OpenCode persist an agent-switch message.
+      NodeAssert.equal("agent" in prompt, false);
+      NodeAssert.deepEqual(
+        {
+          sessionID: prompt.sessionID,
+          model: prompt.model,
+          variant: prompt.variant,
+          parts: prompt.parts,
         },
-        variant: "high",
-        parts: [{ type: "text", text: "Fix it" }],
-      });
+        {
+          sessionID: "http://127.0.0.1:9999/session",
+          model: {
+            providerID: "openai",
+            modelID: "gpt-5",
+          },
+          variant: "high",
+          parts: [{ type: "text", text: "Fix it" }],
+        },
+      );
     }),
   );
 
