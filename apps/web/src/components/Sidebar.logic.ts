@@ -6,6 +6,7 @@ import {
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
 import type { ContextMenuItem } from "@t3tools/contracts";
+import type { Translate } from "../i18n";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import type { AsyncResult } from "effect/unstable/reactivity";
 import { planPinnedReorder } from "@t3tools/client-runtime/state/thread-sort";
@@ -461,36 +462,54 @@ export async function archiveSelectedThreadEntries<
   return { archivedThreadKeys, mutationFailure: null, followupFailures };
 }
 
-export function buildMultiSelectThreadContextMenuItems(input: {
-  count: number;
-  hasRunningThread: boolean;
-}): readonly ContextMenuItem<"mark-unread" | "archive" | "delete">[] {
+export function buildMultiSelectThreadContextMenuItems(
+  input: {
+    count: number;
+    hasRunningThread: boolean;
+  },
+  t?: Translate,
+): readonly ContextMenuItem<"mark-unread" | "archive" | "delete">[] {
   return [
-    { id: "mark-unread", label: `Mark unread (${input.count})` },
+    {
+      id: "mark-unread",
+      label:
+        t?.("sidebar.markUnreadCount", { count: input.count }) ?? `Mark unread (${input.count})`,
+    },
     {
       id: "archive",
-      label: `Archive (${input.count})`,
+      label: t?.("sidebar.archiveCount", { count: input.count }) ?? `Archive (${input.count})`,
       disabled: input.hasRunningThread,
     },
-    { id: "delete", label: `Delete (${input.count})`, destructive: true },
+    {
+      id: "delete",
+      label: t?.("sidebar.deleteCount", { count: input.count }) ?? `Delete (${input.count})`,
+      destructive: true,
+    },
   ];
 }
 
-export function buildBulkTitleRegenerationContextMenuItem(input: {
-  supportedCount: number;
-  actionableCount: number;
-}): ContextMenuItem<"regenerate-title"> | null {
+export function buildBulkTitleRegenerationContextMenuItem(
+  input: {
+    supportedCount: number;
+    actionableCount: number;
+  },
+  t?: Translate,
+): ContextMenuItem<"regenerate-title"> | null {
   if (input.supportedCount === 0) return null;
   if (input.actionableCount === 0) {
     return {
       id: "regenerate-title",
-      label: `Regenerating… (${input.supportedCount})`,
+      label:
+        t?.("sidebar.regeneratingTitleCount", { count: input.supportedCount }) ??
+        `Regenerating… (${input.supportedCount})`,
       disabled: true,
     };
   }
   return {
     id: "regenerate-title",
-    label: `Regenerate titles (${input.actionableCount})`,
+    label:
+      t?.("sidebar.regenerateTitlesCount", { count: input.actionableCount }) ??
+      `Regenerate titles (${input.actionableCount})`,
   };
 }
 
@@ -499,11 +518,18 @@ export function buildBulkTitleRegenerationContextMenuItem(input: {
  * as title regeneration: on a mixed selection the label counts the pinned
  * rows alone, and the item disappears when nothing selected is pinned.
  */
-export function buildBulkUnpinContextMenuItem(input: {
-  pinnedCount: number;
-}): ContextMenuItem<"unpin"> | null {
+export function buildBulkUnpinContextMenuItem(
+  input: {
+    pinnedCount: number;
+  },
+  t?: Translate,
+): ContextMenuItem<"unpin"> | null {
   if (input.pinnedCount === 0) return null;
-  return { id: "unpin", label: `Unpin (${input.pinnedCount})` };
+  return {
+    id: "unpin",
+    label:
+      t?.("sidebar.unpinCount", { count: input.pinnedCount }) ?? `Unpin (${input.pinnedCount})`,
+  };
 }
 
 export interface ThreadStatusPill {

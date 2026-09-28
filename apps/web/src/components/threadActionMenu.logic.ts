@@ -115,9 +115,17 @@ export function buildThreadActionMenuItems(
                 children: [
                   ...state.snoozePresets.map((preset) => ({
                     id: `snooze:${preset.id}` as const,
-                    label: `${preset.label} (${preset.whenLabel})`,
+                    label:
+                      t?.("sidebar.snoozePresetWhen", {
+                        preset: preset.label,
+                        when: preset.whenLabel,
+                      }) ?? `${preset.label} (${preset.whenLabel})`,
                   })),
-                  { id: "snooze:custom" as const, label: "Custom…", separatorBefore: true },
+                  {
+                    id: "snooze:custom" as const,
+                    label: t?.("sidebar.snoozeCustom") ?? "Custom…",
+                    separatorBefore: true,
+                  },
                 ],
               },
         ]
@@ -164,7 +172,11 @@ export function buildThreadActionMenuItems(
         },
       ],
     },
-    { id: "project-settings", label: "Project settings", icon: "settings" },
+    {
+      id: "project-settings",
+      label: t?.("sidebar.projectSettings") ?? "Project settings",
+      icon: "settings",
+    },
     // Archive removes the thread from the sidebar while keeping its
     // conversation under Settings > Archived threads — distinct from Settle
     // (stays visible in the Settled shelf) and Delete (clears history for

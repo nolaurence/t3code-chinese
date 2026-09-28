@@ -4,6 +4,7 @@ import { type ComponentProps, useCallback, useEffect, useId, useRef, useState } 
 import { flushSync } from "react-dom";
 import { isElectron } from "../../env";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { useI18n } from "../../i18n";
 import { cn } from "../../lib/utils";
 import { ensureLocalApi } from "../../localApi";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
@@ -93,16 +94,17 @@ export function SidebarUpdateArchitectureWarning() {
 }
 
 function SidebarUpdateArchitectureWarningContent() {
+  const { t } = useI18n();
   const state = useDesktopUpdateState();
   const visible = shouldShowArm64IntelBuildWarning(state);
-  const description = state && visible ? getArm64IntelBuildWarningDescription(state) : null;
+  const description = state && visible ? getArm64IntelBuildWarningDescription(state, t) : null;
 
   if (!visible || !description) return null;
 
   return (
     <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8 text-xs">
       <TriangleAlertIcon />
-      <AlertTitle>Intel build on Apple Silicon</AlertTitle>
+      <AlertTitle>{t("update.intelOnApple")}</AlertTitle>
       <AlertDescription>{description}</AlertDescription>
     </Alert>
   );
@@ -113,6 +115,7 @@ export function SidebarUpdatePill() {
 }
 
 function SidebarUpdateControl() {
+  const { t } = useI18n();
   const state = useDesktopUpdateState();
   const [isActionPending, setIsActionPending] = useState(false);
   const [checkAnimationKey, setCheckAnimationKey] = useState(0);
@@ -145,11 +148,11 @@ function SidebarUpdateControl() {
   });
   const tooltip = showUpdateDetails
     ? state
-      ? getDesktopUpdateButtonTooltip(state)
-      : "Update available"
+      ? getDesktopUpdateButtonTooltip(state, t)
+      : t("update.available")
     : showCheckIcon
-      ? "Checking for updates…"
-      : "Check for updates";
+      ? t("update.checking")
+      : t("update.checkForUpdates");
   const disabled = showCheckIcon
     ? true
     : showUpdateDetails
@@ -193,7 +196,7 @@ function SidebarUpdateControl() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not download update",
+              title: t("update.downloadFailed"),
               description: actionError,
             }),
           );
@@ -202,8 +205,8 @@ function SidebarUpdateControl() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not start update download",
-              description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              title: t("update.downloadStartFailed"),
+              description: error instanceof Error ? error.message : t("update.unexpectedError"),
             }),
           );
         })
@@ -215,15 +218,16 @@ function SidebarUpdateControl() {
       let confirmed = false;
       try {
         confirmed = await ensureLocalApi().dialogs.confirm(
-          getDesktopUpdateInstallConfirmationMessage(state),
+          getDesktopUpdateInstallConfirmationMessage(state, t),
         );
       } catch (error) {
         setIsActionPending(false);
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not confirm update",
-            description: error instanceof Error ? error.message : "Update confirmation failed.",
+            title: t("update.confirmFailed"),
+            description:
+              error instanceof Error ? error.message : t("update.confirmFailedDescription"),
           }),
         );
         return;
@@ -241,7 +245,7 @@ function SidebarUpdateControl() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not install update",
+              title: t("update.installFailed"),
               description: actionError,
             }),
           );
@@ -250,8 +254,8 @@ function SidebarUpdateControl() {
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not install update",
-              description: error instanceof Error ? error.message : "An unexpected error occurred.",
+              title: t("update.installFailed"),
+              description: error instanceof Error ? error.message : t("update.unexpectedError"),
             }),
           );
         })
@@ -270,9 +274,8 @@ function SidebarUpdateControl() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not check for updates",
-            description:
-              result.state.message ?? "Automatic updates are not available in this build.",
+            title: t("update.checkFailed"),
+            description: result.state.message ?? t("update.automaticUnavailable"),
           }),
         );
       })
@@ -280,13 +283,14 @@ function SidebarUpdateControl() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not check for updates",
-            description: error instanceof Error ? error.message : "Update check failed.",
+            title: t("update.checkFailed"),
+            description:
+              error instanceof Error ? error.message : t("update.checkFailedDescription"),
           }),
         );
       })
       .finally(() => setIsActionPending(false));
-  }, [action, isInteractionDisabled, prefersReducedMotion, state]);
+  }, [action, isInteractionDisabled, prefersReducedMotion, state, t]);
 
   const handleCheckAnimationIteration = useCallback(() => {
     setIsCheckAnimationLatched(
@@ -392,7 +396,7 @@ function SidebarUpdateControl() {
         {showReleaseNotesPopover && state ? (
           <PopoverPopup
             align="center"
-            aria-label="Nightly update release notes"
+            aria-label={t("update.releaseNotesPopup")}
             className="max-w-none text-balance shadow-xl shadow-black/25"
             initialFocus={false}
             onKeyDownCapture={(event) => {
@@ -411,6 +415,7 @@ function SidebarUpdateControl() {
               shell={window.desktopBridge}
               state={state}
               tooltip={tooltip}
+              t={t}
             />
           </PopoverPopup>
         ) : null}
