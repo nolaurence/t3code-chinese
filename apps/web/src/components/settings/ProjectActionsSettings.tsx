@@ -158,7 +158,7 @@ export function ProjectActionsSettings() {
                   {t("projectSettings.importScripts")}
                   <ChevronDownIcon className="size-3.5" />
                 </MenuTrigger>
-                <MenuPopup align="end" className="w-72">
+                <MenuPopup align="end">
                   <MenuGroup>
                     <MenuGroupLabel>{t("projectSettings.importFromT3Json")}</MenuGroupLabel>
                     <p className="px-2 pb-2 text-pretty text-sm text-muted-foreground">

@@ -3,7 +3,6 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
-import { useI18n } from "~/i18n";
 
 import { isCommentSubmitShortcut } from "./commentSubmitShortcut";
 
@@ -38,13 +37,12 @@ export function DiffCommentAnnotation({
   onCancel,
   onComment,
   onDelete,
-  placeholder,
-  submitLabel,
+  placeholder = "Add a comment…",
+  submitLabel = "Comment",
   pending = false,
   secondaryAction,
   focusOnMount = true,
 }: DiffCommentAnnotationProps) {
-  const { t } = useI18n();
   const [localDraftText, setLocalDraftText] = useState("");
   const displayedText = kind === "draft" && !onTextChange ? localDraftText : text;
   const trimmedText = displayedText.trim();
@@ -67,17 +65,18 @@ export function DiffCommentAnnotation({
         onPointerDown={(event) => event.stopPropagation()}
       >
         <MessageCircle className="mt-0.5 size-3.5 shrink-0 text-primary/70" aria-hidden="true" />
-        <p className="min-w-0 flex-1 whitespace-pre-wrap text-[13px] leading-5">{displayedText}</p>
+        <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-5">{displayedText}</p>
         {onDelete ? (
-          <Button
-            className="-my-1 -mr-1 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/comment:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={t("diff.comment.delete")}
-            onClick={onDelete}
-          >
-            <Trash2 className="size-3" />
-          </Button>
+          <span className="-my-1 -mr-1 flex shrink-0 opacity-0 transition-opacity group-hover/comment:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
+            <Button
+              variant="ghost-muted"
+              size="icon-xs"
+              aria-label="Delete comment"
+              onClick={onDelete}
+            >
+              <Trash2 className="size-3" />
+            </Button>
+          </span>
         ) : null}
       </div>
     );
@@ -93,12 +92,10 @@ export function DiffCommentAnnotation({
       <Textarea
         ref={textareaRef}
         autoFocus={focusOnMount}
-        unstyled
-        className="relative inline-flex w-full rounded-md border border-border/50 bg-background/20 font-sans text-foreground transition-colors focus-within:border-border/70 [&_[data-slot=textarea]]:min-h-12 [&_[data-slot=textarea]]:cursor-text [&_[data-slot=textarea]]:caret-foreground [&_[data-slot=textarea]]:px-2.5 [&_[data-slot=textarea]]:py-1.5 [&_[data-slot=textarea]]:font-sans [&_[data-slot=textarea]]:text-xs [&_[data-slot=textarea]]:leading-5 max-sm:[&_[data-slot=textarea]]:min-h-12"
         size="sm"
         value={displayedText}
-        placeholder={placeholder ?? t("diff.comment.placeholder")}
-        aria-label={t("diff.comment.linesAria", { lines: rangeLabel })}
+        placeholder={placeholder}
+        aria-label={`Comment on lines ${rangeLabel}`}
         onChange={(event) => (onTextChange ?? setLocalDraftText)(event.target.value)}
         onFocus={(event) => {
           const end = event.currentTarget.value.length;
@@ -116,16 +113,9 @@ export function DiffCommentAnnotation({
         }}
       />
       <div className="mt-1.5 flex items-center gap-1">
-        <span className="mr-auto text-[10px] text-muted-foreground/70">
-          {t("diff.comment.sendShortcut")}
-        </span>
-        <Button
-          className="text-muted-foreground hover:text-foreground"
-          variant="ghost"
-          size="xs"
-          onClick={onCancel}
-        >
-          {t("common.cancel")}
+        <span className="mr-auto text-3xs text-muted-foreground/70">⌘/Ctrl Enter to send</span>
+        <Button variant="ghost-muted" size="xs" onClick={onCancel}>
+          Cancel
         </Button>
         {secondaryAction ? (
           <Button
@@ -139,7 +129,7 @@ export function DiffCommentAnnotation({
           </Button>
         ) : null}
         <Button size="xs" disabled={pending || !trimmedText} onClick={() => onComment(trimmedText)}>
-          {submitLabel ?? t("diff.comment.submit")}
+          {submitLabel}
         </Button>
       </div>
     </div>

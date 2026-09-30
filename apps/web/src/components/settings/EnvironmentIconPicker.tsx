@@ -110,10 +110,10 @@ export function EnvironmentIconMenu({
         <EnvironmentMachineIcon kind={resolved} />
         {t("environment.icon")}
       </MenuSubTrigger>
-      <MenuSubPopup className="min-w-44">
+      <MenuSubPopup>
         {lock !== null ? (
           <>
-            <MenuItem disabled className="whitespace-normal text-xs">
+            <MenuItem disabled className="whitespace-normal">
               {lock}
             </MenuItem>
             <MenuSeparator />

@@ -25,7 +25,6 @@ import {
 } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Spinner } from "./ui/spinner";
-import { useI18n } from "~/i18n";
 
 interface PullRequestThreadDialogProps {
   open: boolean;
@@ -46,7 +45,6 @@ export function PullRequestThreadDialog({
   onOpenChange,
   onPrepared,
 }: PullRequestThreadDialogProps) {
-  const { t } = useI18n();
   const referenceInputRef = useRef<HTMLInputElement>(null);
   const [reference, setReference] = useState(initialReference ?? "");
   const [referenceDirty, setReferenceDirty] = useState(false);
@@ -173,9 +171,9 @@ export function PullRequestThreadDialog({
   const validationMessage = !referenceDirty
     ? null
     : reference.trim().length === 0
-      ? t("git.checkout.validationEmpty", { request: terminology.singular })
+      ? `Paste a ${terminology.singular} URL, checkout command, or enter 123 / #123.`
       : parsedReference === null
-        ? t("git.checkout.validationInvalid", { request: terminology.singular })
+        ? `Use a ${terminology.singular} URL, checkout command, 123, or #123.`
         : null;
   const errorMessage =
     validationMessage ??
@@ -184,7 +182,7 @@ export function PullRequestThreadDialog({
       : preparePullRequestThreadAction.error instanceof Error
         ? preparePullRequestThreadAction.error.message
         : preparePullRequestThreadAction.error
-          ? t("git.checkout.prepareFailed", { request: terminology.singular })
+          ? `Failed to prepare ${terminology.singular} thread.`
           : null);
 
   return (
@@ -198,18 +196,16 @@ export function PullRequestThreadDialog({
     >
       <DialogPopup className="max-w-xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <SourceControlIcon className="size-4" />
-            {t("git.checkout.title", { request: terminology.singular })}
+          <DialogTitle className="flex items-center">
+            <SourceControlIcon className="me-2 size-4" />
+            Checkout {terminology.singular}
           </DialogTitle>
           <DialogDescription>
-            {t("git.checkout.description", {
-              provider: sourceControlPresentation.providerName,
-              request: terminology.singular,
-            })}
+            Resolve a {sourceControlPresentation.providerName} {terminology.singular}, then create
+            the draft thread in the main repo or in a dedicated worktree.
           </DialogDescription>
         </DialogHeader>
-        <DialogPanel className="space-y-4">
+        <DialogPanel>
           <label className="grid gap-1.5">
             <span className="text-xs font-medium text-foreground capitalize">
               {terminology.singular}
@@ -226,9 +222,12 @@ export function PullRequestThreadDialog({
                 if (event.key !== "Enter") {
                   return;
                 }
+                if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                  return;
+                }
                 event.preventDefault();
                 if (!isResolving && !preparePullRequestThreadAction.isPending) {
-                  void handleConfirm("local");
+                  void handleConfirm("worktree");
                 }
               }}
             />
@@ -240,15 +239,12 @@ export function PullRequestThreadDialog({
                 <div className="min-w-0">
                   <p className="truncate font-medium text-sm">{resolvedPullRequest.title}</p>
                   <p className="truncate text-muted-foreground text-xs">
-                    {t("git.checkout.branchRange", {
-                      number: resolvedPullRequest.number,
-                      head: resolvedPullRequest.headBranch,
-                      base: resolvedPullRequest.baseBranch,
-                    })}
+                    #{resolvedPullRequest.number} · {resolvedPullRequest.headBranch} to{" "}
+                    {resolvedPullRequest.baseBranch}
                   </p>
                 </div>
                 <span className={cn("shrink-0 text-xs capitalize", statusTone)}>
-                  {t(`git.checkout.state.${resolvedPullRequest.state}` as Parameters<typeof t>[0])}
+                  {resolvedPullRequest.state}
                 </span>
               </div>
             </div>
@@ -256,8 +252,8 @@ export function PullRequestThreadDialog({
 
           {isResolving ? (
             <div className="flex items-center gap-2 text-muted-foreground text-xs">
-              <Spinner className="size-3.5" />
-              {t("git.checkout.resolving", { request: terminology.singular })}
+              <Spinner size="sm" />
+              Resolving {terminology.singular}...
             </div>
           ) : null}
 
@@ -271,7 +267,7 @@ export function PullRequestThreadDialog({
             onClick={() => onOpenChange(false)}
             disabled={preparePullRequestThreadAction.isPending}
           >
-            {t("common.cancel")}
+            Cancel
           </Button>
           <Button
             type="button"
@@ -287,9 +283,7 @@ export function PullRequestThreadDialog({
               preparePullRequestThreadAction.isPending
             }
           >
-            {preparingMode === "local"
-              ? t("git.checkout.preparingLocal")
-              : t("settings.newThreads.local")}
+            {preparingMode === "local" ? "Preparing local..." : "Local"}
           </Button>
           <Button
             type="button"
@@ -304,9 +298,7 @@ export function PullRequestThreadDialog({
               preparePullRequestThreadAction.isPending
             }
           >
-            {preparingMode === "worktree"
-              ? t("git.checkout.preparingWorktree")
-              : t("git.checkout.worktree")}
+            {preparingMode === "worktree" ? "Preparing worktree..." : "Worktree"}
           </Button>
         </DialogFooter>
       </DialogPopup>

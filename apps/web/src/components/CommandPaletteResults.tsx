@@ -1,7 +1,6 @@
 import { type ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { ChevronRightIcon } from "lucide-react";
 import { shortcutLabelForCommand } from "../keybindings";
-import { useI18n } from "../i18n";
 import {
   type CommandPaletteActionItem,
   type CommandPaletteGroup,
@@ -15,71 +14,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "./ui/command";
-import { cn } from "~/lib/utils";
-
-function foldAsciiCase(value: string): string {
-  return value.replace(/[A-Z]/g, (character) => character.toLowerCase());
-}
-
-function HighlightedSearchText(props: { text: string; query: string }) {
-  const query = props.query.trim();
-  if (query.length === 0) return props.text;
-
-  const normalizedText = foldAsciiCase(props.text);
-  const normalizedQuery = foldAsciiCase(query);
-  const parts: Array<{
-    readonly text: string;
-    readonly highlighted: boolean;
-    readonly start: number;
-  }> = [];
-  let cursor = 0;
-
-  while (cursor < props.text.length) {
-    const matchIndex = normalizedText.indexOf(normalizedQuery, cursor);
-    if (matchIndex === -1) {
-      parts.push({ text: props.text.slice(cursor), highlighted: false, start: cursor });
-      break;
-    }
-    if (matchIndex > cursor) {
-      parts.push({
-        text: props.text.slice(cursor, matchIndex),
-        highlighted: false,
-        start: cursor,
-      });
-    }
-    parts.push({
-      text: props.text.slice(matchIndex, matchIndex + query.length),
-      highlighted: true,
-      start: matchIndex,
-    });
-    cursor = matchIndex + query.length;
-  }
-
-  return parts.map((part) =>
-    part.highlighted ? (
-      <mark className="bg-transparent font-semibold text-foreground" key={part.start}>
-        {part.text}
-      </mark>
-    ) : (
-      part.text
-    ),
-  );
-}
-
-function ThreadContentMatch(props: {
-  match: NonNullable<CommandPaletteActionItem["threadContentMatch"]>;
-}) {
-  const { t } = useI18n();
-  const isUser = props.match.source === "user";
-  return (
-    <span className="truncate text-xs text-muted-foreground/85">
-      <span className={isUser ? "text-blue-400" : "text-emerald-400"}>
-        {isUser ? t("commandPalette.you") : t("commandPalette.agent")}
-      </span>{" "}
-      <HighlightedSearchText text={props.match.snippet} query={props.match.query} />
-    </span>
-  );
-}
+import { ThreadSearchMatchExcerpt } from "./ThreadSearchMatch";
 
 interface CommandPaletteResultsProps {
   emptyStateMessage?: string;
@@ -91,14 +26,13 @@ interface CommandPaletteResultsProps {
 }
 
 export function CommandPaletteResults(props: CommandPaletteResultsProps) {
-  const { t } = useI18n();
   if (props.groups.length === 0) {
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">
         {props.emptyStateMessage ??
           (props.isActionsOnly
-            ? t("commandPalette.noMatchingActions")
-            : t("commandPalette.noMatchingResults"))}
+            ? "No matching actions."
+            : "No matching commands, projects, or threads.")}
       </div>
     );
   }
@@ -107,7 +41,7 @@ export function CommandPaletteResults(props: CommandPaletteResultsProps) {
     <CommandList>
       {props.groups.map((group) => (
         <CommandGroup items={group.items} key={group.value}>
-          <CommandGroupLabel className="ps-[9px]">{group.label}</CommandGroupLabel>
+          <CommandGroupLabel>{group.label}</CommandGroupLabel>
           <CommandCollection>
             {(item) =>
               item.disabled ? (
@@ -142,7 +76,7 @@ function DisabledCommandPaletteResultRow(props: {
             <span className="truncate">{props.item.title}</span>
           </span>
           {props.item.threadContentMatch ? (
-            <ThreadContentMatch match={props.item.threadContentMatch} />
+            <ThreadSearchMatchExcerpt match={props.item.threadContentMatch} />
           ) : null}
           {props.item.description ? (
             <span className="min-w-0 text-muted-foreground/70 text-xs">
@@ -174,10 +108,7 @@ function CommandPaletteResultRow(props: {
   return (
     <CommandItem
       value={props.item.value}
-      className={cn(
-        "cursor-pointer gap-2 hover:bg-transparent hover:text-inherit data-highlighted:bg-transparent data-highlighted:text-inherit data-selected:bg-transparent data-selected:text-inherit [&[data-highlighted][data-selected]]:bg-transparent [&[data-highlighted][data-selected]]:text-inherit",
-        props.isActive && "bg-accent! text-accent-foreground!",
-      )}
+      active={props.isActive}
       onMouseDown={(event) => {
         event.preventDefault();
       }}
@@ -193,7 +124,7 @@ function CommandPaletteResultRow(props: {
             <span className="truncate">{props.item.title}</span>
           </span>
           {props.item.threadContentMatch ? (
-            <ThreadContentMatch match={props.item.threadContentMatch} />
+            <ThreadSearchMatchExcerpt match={props.item.threadContentMatch} />
           ) : null}
           {props.item.description ? (
             <span className="min-w-0 text-muted-foreground/70 text-xs">

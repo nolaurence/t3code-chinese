@@ -12,7 +12,6 @@ import {
   deregisterManagedRelayEnvironmentCommand,
   useManagedRelayEnvironments,
 } from "../../cloud/managedRelayState";
-import { useI18n, type Translate } from "../../i18n";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
@@ -26,17 +25,17 @@ import {
 
 const linkedAtFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
-function linkedAtLabel(value: string, t: Translate): string {
+function linkedAtLabel(value: string): string {
   const linkedAt = new Date(value);
   return Number.isNaN(linkedAt.getTime())
-    ? t("cloud.account.linkDateUnavailable")
-    : t("cloud.account.linkedAt", { date: linkedAtFormatter.format(linkedAt) });
+    ? "Link date unavailable"
+    : `Linked ${linkedAtFormatter.format(linkedAt)}`;
 }
 
-function endpointLabel(environment: RelayClientEnvironmentRecord, t: Translate): string {
+function endpointLabel(environment: RelayClientEnvironmentRecord): string {
   return environment.endpoint.providerKind === "cloudflare_tunnel"
-    ? t("cloud.account.managedTunnel")
-    : t("cloud.account.activityOnly");
+    ? "Managed tunnel"
+    : "Activity publishing only";
 }
 
 export function T3ConnectEnvironmentRow(props: {
@@ -46,29 +45,23 @@ export function T3ConnectEnvironmentRow(props: {
   readonly onConfirmationChange: (open: boolean) => void;
   readonly onDeregister: (environment: RelayClientEnvironmentRecord) => void;
 }) {
-  const { t } = useI18n();
   const { environment } = props;
   return (
     <ClerkUserProfileRow icon={<ServerIcon className="size-4" />}>
       <Collapsible open={props.confirmationOpen} onOpenChange={props.onConfirmationChange}>
         <div className="flex items-start gap-4">
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-[0.8125rem] leading-[1.125rem] font-medium text-foreground">
+            <h3 className="truncate text-sm leading-4.5 font-medium text-foreground">
               {environment.label}
             </h3>
-            <p className="mt-1 text-xs leading-[1.125rem] text-muted-foreground">
-              {linkedAtLabel(environment.linkedAt, t)} · {endpointLabel(environment, t)}
+            <p className="mt-1 text-xs leading-4.5 text-muted-foreground">
+              {linkedAtLabel(environment.linkedAt)} · {endpointLabel(environment)}
             </p>
           </div>
           <CollapsibleTrigger
             render={
-              <Button
-                size="sm"
-                variant="destructive-outline"
-                className="text-[0.8125rem]"
-                disabled={props.mutationPending}
-              >
-                {t("cloud.account.deregister")}
+              <Button size="sm" variant="destructive-outline" disabled={props.mutationPending}>
+                Deregister
               </Button>
             }
           />
@@ -79,39 +72,34 @@ export function T3ConnectEnvironmentRow(props: {
             <div
               className="rounded-lg border border-input bg-muted/32 px-5 py-4 shadow-xs/5"
               role="group"
-              aria-label={t("cloud.account.confirmDeregister", {
-                environment: environment.label,
-              })}
+              aria-label={`Confirm deregistration of ${environment.label}`}
             >
-              <h4 className="text-[0.8125rem] leading-[1.125rem] font-semibold text-foreground">
-                {t("cloud.account.deregisterServer")}
+              <h4 className="text-sm leading-4.5 font-semibold text-foreground">
+                Deregister server
               </h4>
-              <p className="mt-1 text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
-                {t("cloud.account.removeDescription", { environment: environment.label })}
+              <p className="mt-1 text-xs leading-4.5 text-muted-foreground">
+                “{environment.label}” will be removed from this account.
               </p>
-              <p className="mt-4 max-w-xl text-[0.8125rem] leading-[1.125rem] text-muted-foreground">
-                {t("cloud.account.deregisterImpact")}
+              <p className="mt-4 max-w-xl text-xs leading-4.5 text-muted-foreground">
+                T3 Connect access will be revoked, any managed tunnel will be removed, and a host
+                space will become available. Local connections on your devices are not changed.
               </p>
               <div className="mt-4 flex justify-end gap-2">
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="text-[0.8125rem]"
                   disabled={props.mutationPending}
                   onClick={() => props.onConfirmationChange(false)}
                 >
-                  {t("common.cancel")}
+                  Cancel
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
-                  className="text-[0.8125rem]"
                   disabled={props.mutationPending}
                   onClick={() => props.onDeregister(environment)}
                 >
-                  {props.mutationPending
-                    ? t("cloud.account.deregistering")
-                    : t("cloud.account.deregister")}
+                  {props.mutationPending ? "Deregistering…" : "Deregister"}
                 </Button>
               </div>
             </div>
@@ -123,7 +111,6 @@ export function T3ConnectEnvironmentRow(props: {
 }
 
 export function T3ConnectUserProfilePage() {
-  const { t } = useI18n();
   const environmentsState = useManagedRelayEnvironments();
   const deregisterEnvironment = useAtomCommand(deregisterManagedRelayEnvironmentCommand, {
     reportFailure: false,
@@ -162,15 +149,15 @@ export function T3ConnectUserProfilePage() {
       environmentsState.refresh();
       toastManager.add({
         type: "success",
-        title: t("cloud.account.deregistered"),
-        description: t("cloud.account.deregisteredDescription"),
+        title: "Server deregistered",
+        description: "T3 Connect access was revoked and a host space is now available.",
       });
       return;
     }
     if (isAtomCommandInterrupted(result)) return;
 
     const cause = squashAtomCommandFailure(result);
-    const message = cause instanceof Error ? cause.message : t("cloud.account.deregisterFailed");
+    const message = cause instanceof Error ? cause.message : "Could not deregister the server.";
     const traceId = findErrorTraceId(cause);
     console.error("[t3-connect] Could not deregister environment", {
       environmentId: environment.environmentId,
@@ -180,12 +167,12 @@ export function T3ConnectUserProfilePage() {
     });
     toastManager.add({
       type: "error",
-      title: t("cloud.account.deregisterFailedTitle"),
+      title: "Could not deregister server",
       description: message,
       data: traceId
         ? {
             secondaryActionProps: {
-              children: t("common.copyTraceId"),
+              children: "Copy trace ID",
               onClick: () => void navigator.clipboard?.writeText(traceId),
             },
           }
@@ -207,7 +194,7 @@ export function T3ConnectUserProfilePage() {
   return (
     <ClerkUserProfilePage
       title="T3 Connect"
-      description={t("cloud.account.description")}
+      description="Environments registered to your account. Connections on this device are managed in Settings."
       action={
         <ClerkUserProfileRefreshButton
           disabled={deregisteringEnvironmentId !== null}
@@ -218,17 +205,17 @@ export function T3ConnectUserProfilePage() {
     >
       <div>
         {environmentsState.error ? (
-          <div className="mb-4 border-t border-destructive/35 py-3 text-[0.8125rem]" role="alert">
+          <div className="mb-4 border-t border-destructive/35 py-3 text-xs" role="alert">
             <p className="font-medium text-destructive-foreground">
-              {t("cloud.loadEnvironmentsFailed")}
+              Could not load T3 Connect environments
             </p>
             <p className="mt-1 text-xs text-muted-foreground">{environmentsState.error}</p>
           </div>
         ) : null}
 
         {isInitialLoad ? (
-          <p className="border-t py-4 text-[0.8125rem] text-muted-foreground" role="status">
-            {t("cloud.account.loadingEnvironments")}
+          <p className="border-t py-4 text-xs text-muted-foreground" role="status">
+            Loading environments…
           </p>
         ) : environments.length > 0 ? (
           <ul className="border-t">
@@ -246,19 +233,20 @@ export function T3ConnectUserProfilePage() {
             ))}
           </ul>
         ) : environmentsState.error ? null : (
-          <Empty className="min-h-64 gap-4 border-t px-6 py-10 md:p-10">
-            <EmptyMedia className="mb-0" variant="icon">
-              <ServerIcon />
-            </EmptyMedia>
-            <EmptyHeader>
-              <EmptyTitle className="text-[1.0625rem] leading-6">
-                {t("cloud.account.noEnvironments")}
-              </EmptyTitle>
-              <EmptyDescription className="text-[0.8125rem] leading-[1.125rem]">
-                {t("cloud.account.noEnvironmentsDescription")}
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <div className="border-t">
+            <Empty size="compact">
+              <EmptyMedia variant="icon">
+                <ServerIcon />
+              </EmptyMedia>
+              <EmptyHeader>
+                <EmptyTitle>No T3 Connect environments</EmptyTitle>
+                <EmptyDescription>
+                  Link an environment from its local Settings to make it available through T3
+                  Connect.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </div>
         )}
       </div>
     </ClerkUserProfilePage>

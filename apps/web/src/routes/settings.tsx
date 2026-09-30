@@ -1,28 +1,23 @@
-import {
-  Outlet,
-  createFileRoute,
-  redirect,
-  useCanGoBack,
-  useLocation,
-  useNavigate,
-} from "@tanstack/react-router";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Outlet, createFileRoute, redirect, useLocation } from "@tanstack/react-router";
+import { useState, type ReactNode } from "react";
 import { RotateCcwIcon } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
-import { useI18n } from "../i18n";
 
 import { SettingsBreadcrumb } from "../components/settings/SettingsBreadcrumb";
 import { SidebarInset } from "../components/ui/sidebar";
+import { useNavigateToMainApp } from "../components/sidebar/mainAppLocation";
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
 import { isElectron } from "../env";
+import { useEscapeToGoBack } from "../hooks/useNavigateBack";
 import {
   SettingsScopeProvider,
   useSettingsScope,
 } from "../components/settings/SettingsScopeContext";
-import { useSettingsProjectGroups } from "../components/settings/useSettingsProjectGroups";
 import { useEnvironments } from "../state/environments";
 import { SettingsScopeNotice } from "../components/settings/SettingsScopeNotice";
+import { SETTINGS_DEVICE_ONLY_PATHS } from "../components/settings/SettingsScopeSentence";
+import { SettingsPageContainer } from "../components/settings/settingsLayout";
 import {
   retainSettingsScope,
   validateSettingsRouteSearch,
@@ -34,7 +29,6 @@ import {
 } from "../components/settings/settingsSearch";
 
 function RestoreDeviceDefaultsButton({ onRestored }: { onRestored: () => void }) {
-  const { t } = useI18n();
   const { changedSettingLabels, restoreDefaults } = useSettingsRestore(onRestored);
   return (
     <Button
@@ -44,20 +38,12 @@ function RestoreDeviceDefaultsButton({ onRestored }: { onRestored: () => void })
       onClick={() => void restoreDefaults()}
     >
       <RotateCcwIcon className="mx-1 size-3.5" />
-      {t("settings.restore.deviceDefaults")}
+      Restore device defaults
     </Button>
   );
 }
 
-/** Pages whose every row is saved on this client; the scope selects are hidden there. */
-const DEVICE_ONLY_PATHS = new Set([
-  "/settings/appearance",
-  "/settings/snap-shot",
-  "/settings/connections",
-]);
-
 function SettingsScopeBoundary({ pathname, children }: { pathname: string; children: ReactNode }) {
-  const { t } = useI18n();
   const { scope, connectedEnvironments } = useSettingsScope();
   const { environments } = useEnvironments();
   const hash = useLocation({ select: (location) => location.hash });
@@ -78,8 +64,8 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
         eligibleEnvironmentIds={autoSettlementAvailability.eligibleEnvironmentIds}
       >
         {autoSettlementAvailability.eligibleEnvironmentIds.length > 0
-          ? t("settings.scope.requiresSupportingEnvironmentChoose", { title: searchTarget.title })
-          : t("settings.scope.requiresSupportingEnvironmentConnect", { title: searchTarget.title })}
+          ? `${searchTarget.title} requires a supporting environment. Choose one to continue.`
+          : `${searchTarget.title} requires a supporting environment. Connect or update an environment to continue.`}
       </SettingsScopeNotice>
     );
   }
@@ -96,22 +82,29 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
         : "all";
     return (
       <SettingsScopeNotice target={target} targetId={hash}>
-        {t("settings.scope.notAvailableForTarget", { title: searchTarget.title })}
+        {`${searchTarget.title} is not available for the selected target. Choose its owning scope to continue.`}
       </SettingsScopeNotice>
     );
   }
   // Device-local pages ignore the scope entirely; the project page follows
   // remembered members while a grouping change replaces its URL key.
-  if (DEVICE_ONLY_PATHS.has(pathname) || pathname === "/settings/projects") {
+  if (SETTINGS_DEVICE_ONLY_PATHS.has(pathname) || pathname === "/settings/projects") {
     return children;
   }
+  // Keep the scope sentence on screen so the selection can be changed back.
   if (scope.kind === "unavailable")
-    return <p className="p-8 text-sm text-muted-foreground">{scope.message}</p>;
+    return (
+      <SettingsPageContainer>
+        <p className="text-sm text-muted-foreground">{scope.message}</p>
+      </SettingsPageContainer>
+    );
   if (scope.kind === "environment" && connectedEnvironments.length === 0) {
     return (
-      <p className="p-8 text-sm text-muted-foreground">
-        {t("settings.scope.reconnectToChange", { environment: scope.label })}
-      </p>
+      <SettingsPageContainer>
+        <p className="text-sm text-muted-foreground">
+          Reconnect {scope.label} to change its settings.
+        </p>
+      </SettingsPageContainer>
     );
   }
   return children;
@@ -119,55 +112,17 @@ function SettingsScopeBoundary({ pathname, children }: { pathname: string; child
 
 function SettingsContentLayout() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const canGoBack = useCanGoBack();
-  const { search, selectScope } = useSettingsScope();
-  const groups = useSettingsProjectGroups();
-  const { environments } = useEnvironments();
+  const navigateToMainApp = useNavigateToMainApp();
+  useEscapeToGoBack(navigateToMainApp);
+  const { search } = useSettingsScope();
   const [restoreSignal, setRestoreSignal] = useState(0);
-  const showScope = !DEVICE_ONLY_PATHS.has(location.pathname);
-  const navigateBackWithinApp = useCallback(() => {
-    if (canGoBack) {
-      window.history.back();
-      return;
-    }
-    void navigate({ to: "/" });
-  }, [canGoBack, navigate]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-
-        const activeElement = document.activeElement;
-        if (activeElement instanceof HTMLElement) {
-          activeElement.blur();
-        }
-
-        navigateBackWithinApp();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [navigateBackWithinApp]);
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground isolate">
+    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
           <div className="flex w-full items-center gap-3">
-            <SettingsBreadcrumb
-              pathname={location.pathname}
-              scope={
-                showScope
-                  ? { value: search, groups, environments, onChange: selectScope }
-                  : undefined
-              }
-            />
+            <SettingsBreadcrumb pathname={location.pathname} />
             {location.pathname === "/settings/general" ? (
               <div className="ms-auto flex shrink-0 items-center">
                 <RestoreDeviceDefaultsButton
@@ -198,6 +153,7 @@ function SettingsRouteLayout() {
   return (
     <SettingsScopeProvider
       search={rawSearch}
+      singleEnvironment={pathname === "/settings/providers"}
       onChange={(next) => {
         // Send every axis so the retain middleware sees an explicit target
         // even when the choice is "all", which is the absence of a key.

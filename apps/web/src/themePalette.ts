@@ -13,6 +13,8 @@ import {
   IRIS_THEME,
   OCEAN_THEME,
   T3_CHAT_THEME,
+  T3_CODE_LIGHT_THEME_COLORS,
+  T3_CODE_DARK_THEME_COLORS,
   RESERVED_THEME_IDS,
   THEME_COLOR_ROLES,
   type ThemeAppearance,
@@ -242,9 +244,11 @@ export function invalidateCustomThemes() {
   notifyCustomThemeListeners();
 }
 
+const EMPTY_CUSTOM_THEMES: ReadonlyArray<ThemeDefinition> = [];
+
 export function getCustomThemes(): ReadonlyArray<ThemeDefinition> {
   const snapshot = getCustomThemeLibrarySnapshot();
-  return snapshot.status === "ready" ? snapshot.themes : [];
+  return snapshot.status === "ready" ? snapshot.themes : EMPTY_CUSTOM_THEMES;
 }
 
 export function getEnvironmentThemes(): ReadonlyArray<ThemeDefinition> {
