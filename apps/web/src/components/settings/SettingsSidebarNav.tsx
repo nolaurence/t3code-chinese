@@ -25,6 +25,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useI18n } from "~/i18n";
 
 import { Button } from "../ui/button";
 import { Kbd } from "../ui/kbd";
@@ -43,7 +44,7 @@ import { scrollToSettingsTarget } from "./settingsLayout";
 import {
   searchSettings,
   isSettingsOverviewVisible,
-  SETTINGS_SECTION_LABELS,
+  SETTINGS_SECTION_LABEL_KEYS,
   type SettingsPath,
   type SettingsSearchItem,
 } from "./settingsSearch";
@@ -90,12 +91,10 @@ const SETTINGS_SECTION_ICONS: Readonly<
 };
 
 const SETTINGS_NAV_ITEMS: ReadonlyArray<{
-  label: string;
   to: SettingsPath;
   icon: ComponentType<{ className?: string }>;
-}> = (Object.keys(SETTINGS_SECTION_LABELS) as SettingsPath[]).map((to) => ({
+}> = (Object.keys(SETTINGS_SECTION_LABEL_KEYS) as SettingsPath[]).map((to) => ({
   to,
-  label: SETTINGS_SECTION_LABELS[to],
   icon: SETTINGS_SECTION_ICONS[to],
 }));
 
@@ -105,6 +104,7 @@ function SettingsSectionIcon({ to }: { to: SettingsPath }) {
 }
 
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const currentHash = useLocation({ select: (location) => location.hash });
   const currentSearch = useLocation({ select: (location) => location.search });
@@ -248,8 +248,8 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                   setActiveResultIndex(0);
                 }}
                 onKeyDown={handleSearchKeyDown}
-                placeholder="Search"
-                aria-label="Search settings"
+                placeholder={t("settings.search.placeholder")}
+                aria-label={t("settings.search.aria")}
                 role="combobox"
                 aria-autocomplete="list"
                 aria-expanded={isSearching && hasResults}
@@ -267,7 +267,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                   size="icon-micro"
                   variant="ghost-muted"
                   className="shrink-0"
-                  aria-label="Clear settings search"
+                  aria-label={t("settings.search.clear")}
                   onClick={() => {
                     clearSearch();
                     searchInputRef.current?.focus();
@@ -284,14 +284,14 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                 role="status"
                 className="px-2 py-6 text-center text-xs text-sidebar-muted-foreground"
               >
-                No settings found
+                {t("settings.search.empty")}
               </p>
             ) : null}
             {isSearching ? (
               <SidebarMenu
                 id={hasResults ? "settings-search-results" : undefined}
                 role={hasResults ? "listbox" : undefined}
-                aria-label={hasResults ? "Settings search results" : undefined}
+                aria-label={hasResults ? t("settings.search.results") : undefined}
               >
                 {results.map((item, index) => (
                   <SidebarMenuItem key={item.id} role="presentation">
@@ -312,7 +312,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                           {item.title}
                         </span>
                         <span className="block truncate text-2xs text-sidebar-muted-foreground/75">
-                          {SETTINGS_SECTION_LABELS[item.to]}
+                          {t(SETTINGS_SECTION_LABEL_KEYS[item.to])}
                         </span>
                       </span>
                     </SidebarMenuButton>
@@ -337,7 +337,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                         onClick={() => handleSectionClick(item.to)}
                       >
                         <Icon />
-                        <span className="truncate">{item.label}</span>
+                        <span className="truncate">{t(SETTINGS_SECTION_LABEL_KEYS[item.to])}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

@@ -153,6 +153,15 @@
   ],
   "packageOverrides": [
     {
+      "license": "ISC",
+      "name": "pptx-preview",
+      "sourceUrl": "https://www.npmjs.com/package/pptx-preview",
+      "generatedNotice": {
+        "licenseId": "ISC",
+        "copyrights": ["Copyright (c) _hit757_ (pptx-preview authors)"]
+      }
+    },
+    {
       "license": "MIT",
       "name": "@react-grab/cli",
       "sourceUrl": "https://github.com/aidenybai/react-grab/tree/main/packages/cli",

@@ -3,15 +3,16 @@ import {
   WorkspaceBreadcrumbItem,
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
-import { SETTINGS_SECTION_LABELS } from "./settingsSearch";
+import { useI18n, type MessageKey } from "~/i18n";
+import { SETTINGS_SECTION_LABEL_KEYS } from "./settingsSearch";
 
-const SETTINGS_BREADCRUMB_LABELS: Readonly<Record<string, string>> = {
-  ...SETTINGS_SECTION_LABELS,
-  "/settings/diagnostics": "Diagnostics",
-  "/settings/open-source-licenses": "Open source licenses",
+const SETTINGS_BREADCRUMB_LABELS: Readonly<Record<string, MessageKey>> = {
+  ...SETTINGS_SECTION_LABEL_KEYS,
+  "/settings/diagnostics": "settings.nav.diagnostics",
+  "/settings/open-source-licenses": "settings.nav.openSourceLicenses",
 };
 
-function settingsBreadcrumbLabel(pathname: string): string | null {
+function settingsBreadcrumbLabel(pathname: string): MessageKey | null {
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
   return SETTINGS_BREADCRUMB_LABELS[normalizedPathname] ?? null;
 }
@@ -21,18 +22,19 @@ function settingsBreadcrumbLabel(pathname: string): string | null {
  * page content, see `SettingsScopeSentence`.
  */
 export function SettingsBreadcrumb({ pathname }: { pathname: string }) {
+  const { t } = useI18n();
   const sectionLabel = settingsBreadcrumbLabel(pathname);
 
   return (
-    <WorkspaceBreadcrumb ariaLabel="Settings breadcrumb">
+    <WorkspaceBreadcrumb ariaLabel={t("settings.breadcrumb")}>
       {sectionLabel ? (
         <>
-          <WorkspaceBreadcrumbItem>Settings</WorkspaceBreadcrumbItem>
+          <WorkspaceBreadcrumbItem>{t("settings.title")}</WorkspaceBreadcrumbItem>
           <WorkspaceBreadcrumbSeparator />
         </>
       ) : null}
       <WorkspaceBreadcrumbItem current className="truncate">
-        {sectionLabel ?? "Settings"}
+        {t(sectionLabel ?? "settings.title")}
       </WorkspaceBreadcrumbItem>
     </WorkspaceBreadcrumb>
   );

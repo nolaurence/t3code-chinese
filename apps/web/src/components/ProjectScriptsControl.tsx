@@ -10,6 +10,7 @@ import {
 import { ChevronDownIcon, DownloadIcon, PlusIcon, SettingsIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { useI18n } from "~/i18n";
 import { commandForProjectScript, primaryProjectScript } from "~/projectScripts";
 import { shortcutLabelForCommand } from "~/keybindings";
 import {
@@ -72,6 +73,7 @@ export default function ProjectScriptsControl({
   onUpdateScript,
   onDeleteScript,
 }: ProjectScriptsControlProps) {
+  const { t } = useI18n();
   const [actionsMenuOpen, setActionsMenuOpen] = useState({
     presentation,
     scripts: false,
@@ -137,7 +139,7 @@ export default function ProjectScriptsControl({
       setEditorRequest({
         scriptId: null,
         initial: payload,
-        error: error instanceof Error ? error.message : "Failed to import action.",
+        error: error instanceof Error ? error.message : t("scripts.importFailed"),
       });
     }
   };
@@ -146,7 +148,7 @@ export default function ProjectScriptsControl({
     <>
       {primaryScript && <MenuSeparator />}
       <MenuGroup>
-        <MenuGroupLabel>From t3.json</MenuGroupLabel>
+        <MenuGroupLabel>{t("scripts.fromConfig")}</MenuGroupLabel>
         {importableScripts.map((fileScript) => (
           <MenuItem
             density={presentation === "menu" ? "touch" : "default"}
@@ -156,7 +158,7 @@ export default function ProjectScriptsControl({
             <ScriptIcon icon={fileScript.icon ?? "play"} className="size-4" />
             <MenuItemLabel>{fileScript.name}</MenuItemLabel>
             <MenuShortcut>
-              <DownloadIcon className="size-3.5" aria-label="Import" />
+              <DownloadIcon className="size-3.5" aria-label={t("scripts.import")} />
             </MenuShortcut>
           </MenuItem>
         ))}
@@ -180,7 +182,9 @@ export default function ProjectScriptsControl({
           >
             <ScriptIcon icon={script.icon} className="size-4" />
             <MenuItemLabel>
-              {script.runOnWorktreeCreate ? `${script.name} (setup)` : script.name}
+              {script.runOnWorktreeCreate
+                ? t("scripts.setupLabel", { name: script.name })
+                : script.name}
             </MenuItemLabel>
             <span className="relative ms-auto flex h-6 min-w-6 items-center justify-end">
               {shortcutLabel &&
@@ -200,7 +204,7 @@ export default function ProjectScriptsControl({
                   variant="ghost"
                   size="icon-xs"
                   className="size-6"
-                  aria-label={`Edit ${script.name}`}
+                  aria-label={t("scripts.editNamed", { name: script.name })}
                   onPointerDown={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -221,7 +225,7 @@ export default function ProjectScriptsControl({
       {importMenuItems}
       <MenuItem density={presentation === "menu" ? "touch" : "default"} onClick={openAddDialog}>
         <PlusIcon className="size-4" />
-        <MenuItemLabel>Add action</MenuItemLabel>
+        <MenuItemLabel>{t("scripts.add")}</MenuItemLabel>
       </MenuItem>
     </>
   );
@@ -236,7 +240,7 @@ export default function ProjectScriptsControl({
               onClick={() => onRunScript(primaryScript)}
             >
               <ScriptIcon icon={primaryScript.icon} className="size-4" />
-              <MenuItemLabel>Run {primaryScript.name}</MenuItemLabel>
+              <MenuItemLabel>{t("scripts.run", { name: primaryScript.name })}</MenuItemLabel>
               <MenuShortcut>
                 {shortcutLabelForCommand(keybindings, commandForProjectScript(primaryScript.id))}
               </MenuShortcut>
@@ -251,7 +255,7 @@ export default function ProjectScriptsControl({
             >
               <MenuSubTrigger density="touch">
                 <ScriptIcon icon="play" className="size-4" />
-                <MenuItemLabel>Project actions</MenuItemLabel>
+                <MenuItemLabel>{t("scripts.projectActionsMenu")}</MenuItemLabel>
               </MenuSubTrigger>
               <MenuSubPopup>{scriptItems}</MenuSubPopup>
             </MenuSub>
@@ -261,12 +265,12 @@ export default function ProjectScriptsControl({
               onClick={openAddDialog}
             >
               <PlusIcon className="size-4" />
-              <MenuItemLabel>Add project action…</MenuItemLabel>
+              <MenuItemLabel>{t("scripts.addProjectAction")}</MenuItemLabel>
             </MenuItem>
           )}
         </>
       ) : primaryScript ? (
-        <Group aria-label="Project scripts">
+        <Group aria-label={t("scripts.projectActions")}>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -274,7 +278,7 @@ export default function ProjectScriptsControl({
                   size="xs"
                   variant="outline"
                   className="w-7 sm:w-6 @3xl/header-actions:w-auto!"
-                  aria-label={`Run ${primaryScript.name}`}
+                  aria-label={t("scripts.run", { name: primaryScript.name })}
                   // The tooltip wrapper replaces data-slot="button", so themed
                   // toolbar styling needs its own hook.
                   data-toolbar-control=""
@@ -287,7 +291,7 @@ export default function ProjectScriptsControl({
                 {primaryScript.name}
               </span>
             </TooltipTrigger>
-            <TooltipPopup side="top">Run {primaryScript.name}</TooltipPopup>
+            <TooltipPopup side="top">{t("scripts.run", { name: primaryScript.name })}</TooltipPopup>
           </Tooltip>
           <GroupSeparator className="hidden @3xl/header-actions:block" />
           <Menu
@@ -297,7 +301,7 @@ export default function ProjectScriptsControl({
             }
           >
             <MenuTrigger
-              render={<Button size="icon-xs" variant="outline" aria-label="Script actions" />}
+              render={<Button size="icon-xs" variant="outline" aria-label={t("scripts.actions")} />}
             >
               <ChevronDownIcon className="size-4" />
             </MenuTrigger>
@@ -311,10 +315,14 @@ export default function ProjectScriptsControl({
             setActionsMenuOpen({ presentation, scripts: false, imports: open })
           }
         >
-          <MenuTrigger render={<Button size="xs" variant="outline" aria-label="Project actions" />}>
+          <MenuTrigger
+            render={
+              <Button size="xs" variant="outline" aria-label={t("scripts.projectActionsMenu")} />
+            }
+          >
             <PlusIcon className="size-3.5" />
             <span className="sr-only @3xl/header-actions:not-sr-only @3xl/header-actions:ml-0.5">
-              Add action
+              {t("scripts.add")}
             </span>
             <ChevronDownIcon className="size-3.5" />
           </MenuTrigger>
@@ -322,7 +330,7 @@ export default function ProjectScriptsControl({
             {importMenuItems}
             <MenuItem onClick={openAddDialog}>
               <PlusIcon className="size-4" />
-              Add action
+              {t("scripts.add")}
             </MenuItem>
           </MenuPopup>
         </Menu>
@@ -334,7 +342,7 @@ export default function ProjectScriptsControl({
                 size="xs"
                 variant="outline"
                 className="w-7 sm:w-6 @3xl/header-actions:w-auto!"
-                aria-label="Add action"
+                aria-label={t("scripts.add")}
                 // The tooltip wrapper replaces data-slot="button", so themed
                 // toolbar styling needs its own hook.
                 data-toolbar-control=""
@@ -344,10 +352,10 @@ export default function ProjectScriptsControl({
           >
             <PlusIcon className="size-3.5" />
             <span className="sr-only @3xl/header-actions:not-sr-only @3xl/header-actions:ml-0.5">
-              Add action
+              {t("scripts.add")}
             </span>
           </TooltipTrigger>
-          <TooltipPopup side="top">Add action</TooltipPopup>
+          <TooltipPopup side="top">{t("scripts.add")}</TooltipPopup>
         </Tooltip>
       )}
 

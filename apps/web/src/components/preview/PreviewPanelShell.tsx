@@ -50,6 +50,11 @@ export function getPreviewPanelMaxWidth(viewportWidth: number, containerWidth?: 
  */
 export function PreviewPanelShell(props: {
   mode: PreviewPanelMode;
+  /**
+   * Which side of its sibling column the panel docks to. Defaults to "right";
+   * the left dock flips the border and the resize edge.
+   */
+  side?: "left" | "right";
   maximized?: boolean;
   open?: boolean;
   /**
@@ -64,6 +69,7 @@ export function PreviewPanelShell(props: {
   children: ReactNode;
 }) {
   const isInline = props.mode === "inline";
+  const side = props.side ?? "right";
   const collapsible = isInline && props.open !== undefined;
   const open = props.open ?? true;
   const maximized = props.maximized ?? false;
@@ -76,7 +82,7 @@ export function PreviewPanelShell(props: {
     defaultWidth: props.defaultWidth ?? PREVIEW_PANEL_DEFAULT_WIDTH,
     minWidth: PREVIEW_PANEL_MIN_WIDTH,
     maxWidth,
-    edge: "left",
+    edge: side === "left" ? "right" : "left",
   });
   // Derive suppression before the layout commits so the browser never creates
   // a width transition for resize or maximize changes.
@@ -122,8 +128,12 @@ export function PreviewPanelShell(props: {
         "relative flex h-full min-h-0 min-w-0 max-w-full flex-col self-stretch bg-background",
         isInline
           ? maximized
-            ? "flex-1 border-l border-border"
-            : "shrink-0 border-l border-border"
+            ? side === "left"
+              ? "flex-1 border-r border-border"
+              : "flex-1 border-l border-border"
+            : side === "left"
+              ? "shrink-0 border-r border-border"
+              : "shrink-0 border-l border-border"
           : "w-full",
         collapsible &&
           "[[data-panel-animations=true]_&]:transition-[width] [[data-panel-animations=true]_&]:duration-(--panel-animation-duration) [[data-panel-animations=true]_&]:ease-out",
@@ -141,7 +151,7 @@ export function PreviewPanelShell(props: {
       data-preview-panel-mode={props.mode}
       data-preview-panel-maximized={maximized ? "true" : "false"}
     >
-      {isInline && !maximized ? <RightPanelResizeHandle handlers={handlers} /> : null}
+      {isInline && !maximized ? <RightPanelResizeHandle handlers={handlers} side={side} /> : null}
       <div className={cn("h-full min-h-0 w-full", collapsible && "overflow-clip")}>
         <div
           className="flex h-full min-h-0 min-w-0 flex-col"

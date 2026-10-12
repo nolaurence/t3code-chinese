@@ -81,6 +81,8 @@ import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 
 interface RightPanelTabsProps {
   mode: PreviewPanelMode;
+  /** Which side of the chat column the panel docks to; flips border, resize edge and reserved titlebar space. */
+  side?: "left" | "right";
   maximized?: boolean;
   open?: boolean;
   /** Forwarded to PreviewPanelShell so this surface persists its own width. */
@@ -1101,6 +1103,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   return (
     <PreviewPanelShell
       mode={props.mode}
+      {...(props.side !== undefined ? { side: props.side } : {})}
       {...(props.maximized !== undefined ? { maximized: props.maximized } : {})}
       {...(props.open !== undefined ? { open: props.open } : {})}
       {...(props.widthStorageKey !== undefined ? { widthStorageKey: props.widthStorageKey } : {})}
@@ -1108,11 +1111,16 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
     >
       <div
         className={cn(
-          "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1 pl-2",
+          "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1",
+          // The fixed titlebar control cluster overlays the panel's top corner
+          // on its outer side, so the tabs reserve room there.
+          props.side === "left" ? "pl-28" : "pl-2",
           // The sheet overlays from the viewport top, so its tab bar keeps
           // the titlebar's height: a compact row re-centers the layout
           // controls a few pixels higher and the cluster jumps on open.
-          props.mode === "inline" && !props.layoutControls ? "pr-28" : "pr-3",
+          props.mode === "inline" && !props.layoutControls && props.side !== "left"
+            ? "pr-28"
+            : "pr-3",
           ownsDesktopTitleBar && "drag-region",
           ownsDesktopTitleBar && "wco:pr-(--workspace-native-controls-inset)",
           props.mode === "inline" && props.maximized && COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
@@ -1399,7 +1407,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         {ownsDesktopTitleBar ? (
           <span
             aria-hidden
-            className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]"
+            className={cn(
+              "pointer-events-none fixed top-[var(--workspace-controls-top)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]",
+              props.side === "left"
+                ? "left-[var(--workspace-controls-left)]"
+                : "right-[var(--workspace-controls-right)]",
+            )}
           />
         ) : null}
       </div>

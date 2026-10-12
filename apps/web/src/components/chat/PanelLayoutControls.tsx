@@ -1,9 +1,17 @@
-import { Maximize2Icon, Minimize2Icon, PanelBottomIcon, PanelRightIcon } from "lucide-react";
+import {
+  ArrowLeftRightIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+  PanelBottomIcon,
+  PanelLeftIcon,
+  PanelRightIcon,
+} from "lucide-react";
 import { memo } from "react";
 
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useI18n } from "~/i18n";
+import type { RightPanelSide } from "../preview/rightPanelSide";
 
 interface PanelLayoutControlsProps {
   showTerminalControl?: boolean;
@@ -16,8 +24,13 @@ interface PanelLayoutControlsProps {
   rightPanelUnavailableLabel?: string;
   /** Running + waiting subagents in this thread; badges the right panel toggle. */
   liveAgentCount: number;
+  /** Which side the panel docks to; flips the toggle icon. */
+  rightPanelSide?: RightPanelSide;
+  /** Swap-button visibility; the sheet layout overlays the panel, so it has no side. */
+  showPanelSideSwap?: boolean;
   onToggleTerminal: () => void;
   onToggleRightPanel: () => void;
+  onToggleRightPanelSide?: () => void;
 }
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
@@ -30,8 +43,11 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   rightPanelShortcutLabel,
   rightPanelUnavailableLabel,
   liveAgentCount,
+  rightPanelSide = "right",
+  showPanelSideSwap = false,
   onToggleTerminal,
   onToggleRightPanel,
+  onToggleRightPanelSide,
 }: PanelLayoutControlsProps) {
   const { t } = useI18n();
   const resolvedRightPanelUnavailableLabel =
@@ -40,6 +56,8 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
     liveAgentCount === 1 ? "chat.panel.agentWorking" : "chat.panel.agentsWorking",
     { count: liveAgentCount },
   );
+  const sideSwapLabel =
+    rightPanelSide === "right" ? t("chat.panel.moveToLeft") : t("chat.panel.moveToRight");
   return (
     <div
       className="flex h-full shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
@@ -82,7 +100,11 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
             size="sm"
             disabled={!rightPanelAvailable}
           >
-            <PanelRightIcon className="size-4" />
+            {rightPanelSide === "left" ? (
+              <PanelLeftIcon className="size-4" />
+            ) : (
+              <PanelRightIcon className="size-4" />
+            )}
             {liveAgentCount > 0 ? (
               <span
                 aria-hidden
@@ -101,6 +123,22 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
             : resolvedRightPanelUnavailableLabel}
         </TooltipPopup>
       </Tooltip>
+      {showPanelSideSwap && onToggleRightPanelSide ? (
+        <Tooltip>
+          <TooltipTrigger render={<span className="flex shrink-0" />}>
+            <Toggle
+              className="shrink-0 [-webkit-app-region:no-drag]"
+              aria-label={sideSwapLabel}
+              variant="ghost"
+              size="sm"
+              onPressedChange={onToggleRightPanelSide}
+            >
+              <ArrowLeftRightIcon className="size-4" />
+            </Toggle>
+          </TooltipTrigger>
+          <TooltipPopup side="bottom">{sideSwapLabel}</TooltipPopup>
+        </Tooltip>
+      ) : null}
     </div>
   );
 });

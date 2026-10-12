@@ -9,6 +9,7 @@ import type {
 import { filePreviewDelimiter } from "@t3tools/shared/delimitedPreview";
 import {
   isWorkspaceAudioPreviewPath,
+  isWorkspaceDocumentPreviewPath,
   isWorkspaceImagePreviewPath,
   isWorkspaceVideoPreviewPath,
 } from "@t3tools/shared/filePreview";
@@ -57,6 +58,7 @@ import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import FileBrowserPanel from "./FileBrowserPanel";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
 import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import { WorkspaceDocumentPreview } from "./WorkspaceDocumentPreview";
 import {
   type FileCommentAnnotationEntry,
   type FileCommentAnnotationGroup,
@@ -941,6 +943,8 @@ export default function FilePreviewPanel({
   // PDFs have no text to show; HTML has, and can toggle between page and source.
   const isPdf = relativePath !== null && isPdfPreviewFile(relativePath);
   const isHtml = relativePath !== null && !isPdf && isBrowserPreviewFile(relativePath);
+  // Office documents are parsed in the browser from their bytes, never read as text.
+  const isDocument = relativePath !== null && isWorkspaceDocumentPreviewPath(relativePath);
   // A file outside the workspace (an absolute path) is shown, never edited.
   const isHostFile =
     attachment !== undefined || (relativePath !== null && isAbsolutePath(relativePath));
@@ -1039,10 +1043,10 @@ export default function FilePreviewPanel({
     enabled:
       attachment === undefined &&
       relativePath !== null &&
-      // Media and PDFs never show their contents, so re-reading them on every
-      // workspace mutation is waste. A folder named like one still re-reads, so
-      // it notices when the path becomes a file.
-      (isDirectory || (!isMedia && !isPdf)) &&
+      // Media, PDFs and office documents never show their contents, so re-reading
+      // them on every workspace mutation is waste. A folder named like one still
+      // re-reads, so it notices when the path becomes a file.
+      (isDirectory || (!isMedia && !isPdf && !isDocument)) &&
       !selectedFilePending,
     mutationId: workspaceMutationId,
     refresh: file.refresh,
@@ -1233,6 +1237,15 @@ export default function FilePreviewPanel({
               absolutePath={absolutePath}
               workspaceRoot={cwd}
               title={relativePath}
+              workspaceMutationId={workspaceMutationId}
+            />
+          ) : relativePath && isDocument && absolutePath ? (
+            <WorkspaceDocumentPreview
+              key={absolutePath}
+              environmentId={environmentId}
+              threadRef={threadRef}
+              absolutePath={absolutePath}
+              workspaceRoot={cwd}
               workspaceMutationId={workspaceMutationId}
             />
           ) : relativePath && file.error && file.data === null ? (

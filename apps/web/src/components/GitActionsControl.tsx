@@ -114,6 +114,7 @@ import { resolvePathLinkTarget } from "~/terminal-links";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
 import { getSourceControlPresentation } from "~/sourceControlPresentation";
 import { useOpenLink } from "~/browser/useOpenLink";
+import { useI18n, type Translate } from "~/i18n";
 import { useOpenPrLink } from "~/lib/openPullRequestLink";
 
 interface GitActionsControlProps {
@@ -301,15 +302,17 @@ function getMenuActionDisabledReason({
   gitStatus,
   isBusy,
   hasPrimaryRemote,
+  t,
 }: {
+  t: Translate;
   item: GitActionMenuItem;
   gitStatus: VcsStatusResult | null;
   isBusy: boolean;
   hasPrimaryRemote: boolean;
 }): string | null {
   if (!item.disabled) return null;
-  if (isBusy) return "Git action in progress.";
-  if (!gitStatus) return "Git status is unavailable.";
+  if (isBusy) return t("git.hint.inProgress");
+  if (!gitStatus) return t("git.hint.statusUnavailable");
 
   const hasBranch = gitStatus.refName !== null;
   const hasChanges = gitStatus.hasWorkingTreeChanges;
@@ -320,49 +323,49 @@ function getMenuActionDisabledReason({
 
   if (item.id === "commit") {
     if (!hasChanges) {
-      return "Worktree is clean. Make changes before committing.";
+      return t("git.hint.cleanWorktree");
     }
-    return "Commit is currently unavailable.";
+    return t("git.hint.commitUnavailable");
   }
 
   if (item.id === "push") {
     if (!hasBranch) {
-      return "Detached HEAD: check out a branch before pushing.";
+      return t("git.hint.detachedPush");
     }
     if (hasChanges) {
-      return "Commit or stash local changes before pushing.";
+      return t("git.hint.commitBeforePush");
     }
     if (isBehind) {
-      return "Branch is behind upstream. Pull/rebase before pushing.";
+      return t("git.hint.behindBeforePush");
     }
     if (!gitStatus.hasUpstream && !hasPrimaryRemote) {
-      return 'Add an "origin" remote before pushing.';
+      return t("git.hint.addOriginBeforePush");
     }
     if (!isAhead) {
-      return "No local commits to push.";
+      return t("git.hint.noCommitsToPush");
     }
-    return "Push is currently unavailable.";
+    return t("git.hint.pushUnavailable");
   }
 
   if (hasOpenPr) {
-    return `View ${terminology.singular} is currently unavailable.`;
+    return t("git.hint.viewRequestUnavailable", { request: terminology.singular });
   }
   if (!hasBranch) {
-    return `Detached HEAD: check out a branch before creating a ${terminology.singular}.`;
+    return t("git.hint.detachedCreateRequest", { request: terminology.singular });
   }
   if (hasChanges) {
-    return `Commit local changes before creating a ${terminology.singular}.`;
+    return t("git.hint.commitBeforeRequest", { request: terminology.singular });
   }
   if (!gitStatus.hasUpstream && !hasPrimaryRemote) {
-    return `Add an "origin" remote before creating a ${terminology.singular}.`;
+    return t("git.hint.addOriginBeforeRequest", { request: terminology.singular });
   }
   if (!isAhead) {
-    return `No local commits to include in a ${terminology.singular}.`;
+    return t("git.hint.noCommitsForRequest", { request: terminology.singular });
   }
   if (isBehind) {
-    return `Branch is behind upstream. Pull/rebase before creating a ${terminology.singular}.`;
+    return t("git.hint.behindBeforeRequest", { request: terminology.singular });
   }
-  return `Create ${terminology.singular} is currently unavailable.`;
+  return t("git.hint.createRequestUnavailable", { request: terminology.singular });
 }
 
 const COMMIT_DIALOG_TITLE = "Commit changes";
@@ -390,6 +393,7 @@ function GitQuickActionIcon({
   className?: string;
   SourceControlIcon: ReturnType<typeof getSourceControlPresentation>["Icon"];
 }) {
+  const { t } = useI18n();
   if (quickAction.kind === "open_pr") return <SourceControlIcon className={className} />;
   if (quickAction.kind === "open_publish") return <CloudUploadIcon className={className} />;
   if (quickAction.kind === "run_pull") return <CloudDownloadIcon className={className} />;
@@ -400,8 +404,8 @@ function GitQuickActionIcon({
     }
     return <SourceControlIcon className={className} />;
   }
-  if (quickAction.label === "Commit") return <GitCommitIcon className={className} />;
-  if (quickAction.label === "Push") return <CloudUploadIcon className={className} />;
+  if (quickAction.label === t("git.commit")) return <GitCommitIcon className={className} />;
+  if (quickAction.label === t("git.push")) return <CloudUploadIcon className={className} />;
   return <InfoIcon className={className} />;
 }
 
@@ -949,6 +953,7 @@ export default function GitActionsControl({
   draftId,
   onOpenPullRequest,
 }: GitActionsControlProps) {
+  const { t } = useI18n();
   const updateThreadMetadata = useAtomCommand(
     threadEnvironment.updateMetadata,
     "thread branch metadata update",
@@ -1127,16 +1132,22 @@ export default function GitActionsControl({
   }, [gitStatusForActions?.isDefaultRef]);
 
   const gitActionMenuItems = useMemo(
-    () => buildMenuItems(gitStatusForActions, isGitActionRunning, hasPrimaryRemote),
-    [gitStatusForActions, hasPrimaryRemote, isGitActionRunning],
+    () => buildMenuItems(gitStatusForActions, isGitActionRunning, hasPrimaryRemote, t),
+    [gitStatusForActions, hasPrimaryRemote, isGitActionRunning, t],
   );
   const quickAction = useMemo(
     () =>
-      resolveQuickAction(gitStatusForActions, isGitActionRunning, isDefaultRef, hasPrimaryRemote),
-    [gitStatusForActions, hasPrimaryRemote, isDefaultRef, isGitActionRunning],
+      resolveQuickAction(
+        gitStatusForActions,
+        isGitActionRunning,
+        isDefaultRef,
+        hasPrimaryRemote,
+        t,
+      ),
+    [gitStatusForActions, hasPrimaryRemote, isDefaultRef, isGitActionRunning, t],
   );
   const quickActionDisabledReason = quickAction.disabled
-    ? (quickAction.hint ?? "This action is currently unavailable.")
+    ? (quickAction.hint ?? t("git.actionUnavailable"))
     : null;
   const pendingDefaultBranchActionCopy = pendingDefaultBranchAction
     ? resolveDefaultBranchActionDialogCopy({
@@ -1653,6 +1664,7 @@ export default function GitActionsControl({
     <>
       {gitActionMenuItems.map((item) => {
         const disabledReason = getMenuActionDisabledReason({
+          t,
           item,
           gitStatus: gitStatusForActions,
           isBusy: isGitActionRunning,
@@ -1716,20 +1728,18 @@ export default function GitActionsControl({
           }}
         >
           <CloudUploadIcon />
-          <MenuItemLabel>Publish repository...</MenuItemLabel>
+          <MenuItemLabel>{t("git.publishRepository")}…</MenuItemLabel>
         </MenuItem>
       ) : null}
       {gitStatusForActions?.refName === null && (
-        <p className="px-2 py-1.5 text-xs text-warning">
-          Detached HEAD: create and check out a branch to enable push and pull request actions.
-        </p>
+        <p className="px-2 py-1.5 text-xs text-warning">{t("git.detachedWarning")}</p>
       )}
       {gitStatusForActions &&
         gitStatusForActions.refName !== null &&
         !gitStatusForActions.hasWorkingTreeChanges &&
         gitStatusForActions.behindCount > 0 &&
         gitStatusForActions.aheadCount === 0 && (
-          <p className="px-2 py-1.5 text-xs text-warning">Behind upstream. Pull/rebase first.</p>
+          <p className="px-2 py-1.5 text-xs text-warning">{t("git.behindUpstream")}</p>
         )}
       {gitStatusError && <p className="px-2 py-1.5 text-xs text-destructive">{gitStatusError}</p>}
     </>
@@ -1749,7 +1759,7 @@ export default function GitActionsControl({
           >
             <GitBranchPlusIcon className="size-4" />
             <MenuItemLabel>
-              {initAction.isPending ? "Initializing..." : "Initialize Git"}
+              {initAction.isPending ? t("git.initializing") : t("git.initialize")}
             </MenuItemLabel>
           </MenuItem>
         ) : (
@@ -1779,7 +1789,7 @@ export default function GitActionsControl({
             >
               <MenuSubTrigger density="touch" disabled={isGitActionRunning}>
                 <SourceControlIcon className="size-4" />
-                <MenuItemLabel>Git actions</MenuItemLabel>
+                <MenuItemLabel>{t("git.actions")}</MenuItemLabel>
               </MenuSubTrigger>
               <MenuSubPopup>{gitItems}</MenuSubPopup>
             </MenuSub>
@@ -1789,11 +1799,11 @@ export default function GitActionsControl({
         <Button variant="outline" size="xs" disabled={initAction.isPending} onClick={initializeGit}>
           <GitBranchPlusIcon className="size-3.5" aria-hidden />
           <span className="ml-0.5">
-            {initAction.isPending ? "Initializing..." : "Initialize Git"}
+            {initAction.isPending ? t("git.initializing") : t("git.initialize")}
           </span>
         </Button>
       ) : (
-        <Group aria-label="Git actions" className="shrink-0">
+        <Group aria-label={t("git.actions")} className="shrink-0">
           {quickActionDisabledReason ? (
             <Popover>
               <PopoverTrigger
@@ -1834,7 +1844,9 @@ export default function GitActionsControl({
             }}
           >
             <MenuTrigger
-              render={<Button aria-label="Git action options" size="icon-xs" variant="outline" />}
+              render={
+                <Button aria-label={t("git.actionOptions")} size="icon-xs" variant="outline" />
+              }
               disabled={isGitActionRunning}
             >
               <ChevronDownIcon aria-hidden="true" className="size-4" />

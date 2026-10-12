@@ -73,6 +73,15 @@ export function decodeFilePreviewText(bytes: Uint8Array, truncated = false) {
 
 export const WORKSPACE_BROWSER_PREVIEW_EXTENSIONS = [".htm", ".html", ".pdf"] as const;
 
+export const WORKSPACE_DOCUMENT_PREVIEW_EXTENSIONS = [".docx", ".pptx", ".xls", ".xlsx"] as const;
+
+const DOCUMENT_MIME_TYPE_BY_EXTENSION = new Map([
+  [".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  [".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  [".xls", "application/vnd.ms-excel"],
+  [".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+]);
+
 export const WORKSPACE_IMAGE_PREVIEW_EXTENSIONS = [
   ".avif",
   ".gif",
@@ -128,13 +137,14 @@ export function mediaMimeTypeFromExtension(extension: string): string | null {
   );
 }
 
-/** Files the server serves in place from anywhere on its host: media, audio and browser documents. */
+/** Files the server serves in place from anywhere on its host: media, audio, browser documents and office documents. */
 export function hostPreviewMimeTypeFromExtension(extension: string): string | null {
   if (!/^\.[a-z0-9]+$/i.test(extension)) return null;
   return (
     mediaMimeTypeFromExtension(extension) ??
     audioMimeTypeFromExtension(extension) ??
     BROWSER_MIME_TYPE_BY_EXTENSION.get(extension.toLowerCase()) ??
+    DOCUMENT_MIME_TYPE_BY_EXTENSION.get(extension.toLowerCase()) ??
     null
   );
 }
@@ -193,6 +203,14 @@ export function isWorkspaceAudioPreviewPath(path: string): boolean {
   return extensionIndex >= 0 && audioMimeTypeFromExtension(path.slice(extensionIndex)) !== null;
 }
 
+export function isWorkspaceDocumentPreviewPath(path: string): boolean {
+  return hasPreviewExtension(path, WORKSPACE_DOCUMENT_PREVIEW_EXTENSIONS);
+}
+
 export function isWorkspacePreviewEntryPath(path: string): boolean {
-  return isWorkspaceBrowserPreviewPath(path) || isWorkspaceImagePreviewPath(path);
+  return (
+    isWorkspaceBrowserPreviewPath(path) ||
+    isWorkspaceImagePreviewPath(path) ||
+    isWorkspaceDocumentPreviewPath(path)
+  );
 }

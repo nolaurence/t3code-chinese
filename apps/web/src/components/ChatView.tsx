@@ -201,6 +201,7 @@ import { closePreviewSession } from "./preview/closePreviewSession";
 import { ThreadPreviewMiniPlayer } from "./preview/ThreadPreviewMiniPlayer";
 import { subscribePreviewAction } from "./preview/previewActionBus";
 import { getConfiguredPreviewUrls } from "./preview/previewEmptyStateLogic";
+import { useRightPanelSide } from "./preview/rightPanelSide";
 import { makeWorkspaceFileDropHandlers } from "./chat/workspaceFileDrop";
 import {
   isSameSidebarThreadRef,
@@ -2079,6 +2080,7 @@ export default function ChatView(props: ChatViewProps) {
     panelAnimationDurationMs,
   );
   const rightPanelPresent = rightPanelPresence.present;
+  const [rightPanelSide, setRightPanelSide] = useRightPanelSide();
   const rightPanelControlsInPanel = shouldUseRightPanelSheet && rightPanelPresent && rightPanelOpen;
   const rightPanelControlsAtRoot = rightPanelPresent && !shouldUseRightPanelSheet;
   const renderedRightPanelSurface = rightPanelPresence.value?.activeSurface ?? null;
@@ -9496,8 +9498,13 @@ export default function ChatView(props: ChatViewProps) {
       liveAgentCount={
         rightPanelOpen && activeRightPanelSurface?.kind === "agents" ? 0 : agentPanelModel.liveCount
       }
+      rightPanelSide={rightPanelSide}
+      showPanelSideSwap={!shouldUseRightPanelSheet}
       onToggleTerminal={toggleTerminalVisibility}
       onToggleRightPanel={toggleRightPanel}
+      onToggleRightPanelSide={() =>
+        setRightPanelSide(rightPanelSide === "right" ? "left" : "right")
+      }
     />
   );
   const panelLayoutControls = (
@@ -9505,7 +9512,11 @@ export default function ChatView(props: ChatViewProps) {
       className={cn(
         // Keep one viewport anchor inside the header's no-drag region. The
         // header can shrink behind the right panel without moving the controls.
-        "pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] z-50 mr-px flex h-[var(--workspace-topbar-height)] items-center gap-1 [-webkit-app-region:no-drag]",
+        // Mirrored when the panel docks left.
+        "pointer-events-none fixed top-[var(--workspace-controls-top)] z-50 mr-px flex h-[var(--workspace-topbar-height)] items-center gap-1 [-webkit-app-region:no-drag]",
+        rightPanelSide === "left"
+          ? "left-[var(--workspace-controls-left)]"
+          : "right-[var(--workspace-controls-right)]",
       )}
       data-workspace-titlebar-controls
     >
@@ -9517,11 +9528,13 @@ export default function ChatView(props: ChatViewProps) {
             panelAnimationsActive &&
               "motion-safe:transition-opacity motion-safe:duration-(--panel-animation-duration) motion-safe:ease-out",
             // Closed, the control leaves the flex flow so the cluster is only as wide as the two
-            // toggles the header reserves room for; anchored to the cluster's left edge, it fades
-            // out where it stood rather than over the terminal toggle.
+            // toggles the header reserves room for; anchored away from the panel's outer edge, it
+            // fades out where it stood rather than over the terminal toggle.
             rightPanelOpen
               ? "pointer-events-auto opacity-100"
-              : "pointer-events-none absolute right-full mr-1 opacity-0",
+              : rightPanelSide === "left"
+                ? "pointer-events-none absolute left-full ml-1 opacity-0"
+                : "pointer-events-none absolute right-full mr-1 opacity-0",
           )}
           inert={!rightPanelOpen}
         >
@@ -9705,7 +9718,15 @@ export default function ChatView(props: ChatViewProps) {
   });
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
+    <div
+      className={cn(
+        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background",
+        // The panel docks left by flipping the row order; the sheet layout is
+        // an overlay and keeps its own placement.
+        rightPanelSide === "left" && !shouldUseRightPanelSheet && "flex-row-reverse",
+      )}
+      data-chat-panel-side={rightPanelSide}
+    >
       <Dialog
         open={
           deviceSetupThread !== null &&
@@ -9747,7 +9768,12 @@ export default function ChatView(props: ChatViewProps) {
           {isElectron && rightPanelControlsAtRoot ? (
             <span
               aria-hidden
-              className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]"
+              className={cn(
+                "pointer-events-none fixed top-[var(--workspace-controls-top)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]",
+                rightPanelSide === "left"
+                  ? "left-[var(--workspace-controls-left)]"
+                  : "right-[var(--workspace-controls-right)]",
+              )}
             />
           ) : null}
           {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}
@@ -10263,6 +10289,7 @@ export default function ChatView(props: ChatViewProps) {
       {rightPanelPresent && !shouldUseRightPanelSheet && activeThreadRef ? (
         <RightPanelTabs
           mode="inline"
+          side={rightPanelSide}
           widthStorageKey={`t3code:preview-panel-width:${activeThreadKey}`}
           open={rightPanelOpen}
           maximized={rightPanelMaximized}

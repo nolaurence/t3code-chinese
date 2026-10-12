@@ -7,6 +7,7 @@ import {
   hostPreviewMimeTypeFromExtension,
   isWorkspaceAudioPreviewPath,
   isWorkspaceBrowserPreviewPath,
+  isWorkspaceDocumentPreviewPath,
   isWorkspaceImagePreviewPath,
   isWorkspacePreviewEntryPath,
   isWorkspaceVideoPreviewPath,
@@ -41,12 +42,42 @@ describe("workspace file previews", () => {
     },
   );
 
+  it.each(["report.docx", "deck.PPTX", "table.xlsx?download=1"])(
+    "recognizes document preview path %s",
+    (path) => {
+      expect(isWorkspaceDocumentPreviewPath(path)).toBe(true);
+      expect(isWorkspacePreviewEntryPath(path)).toBe(true);
+    },
+  );
+
+  it.each(["report.doc", "deck.ppt", "notes.txt.xlsx.ts", "xlsx"])(
+    "rejects non-document preview path %s",
+    (path) => {
+      expect(isWorkspaceDocumentPreviewPath(path)).toBe(false);
+    },
+  );
+
   it("serves audio in place from the host like video and browser documents", () => {
     expect(isWorkspaceAudioPreviewPath("notes/recording.WAV")).toBe(true);
     expect(isWorkspaceAudioPreviewPath("recording.wav.ts")).toBe(false);
     expect(hostPreviewMimeTypeFromExtension(".m4a")).toBe("audio/mp4");
     expect(hostPreviewMimeTypeFromExtension(".mp4")).toBe("video/mp4");
     expect(hostPreviewMimeTypeFromExtension(".txt")).toBeNull();
+  });
+
+  it("serves office documents from the host with their office mime types", () => {
+    expect(hostPreviewMimeTypeFromExtension(".docx")).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    expect(hostPreviewMimeTypeFromExtension(".xlsx")).toBe(
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    expect(hostPreviewMimeTypeFromExtension(".pptx")).toBe(
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    );
+    expect(hostPreviewMimeTypeFromExtension(".xls")).toBe("application/vnd.ms-excel");
+    expect(hostPreviewMimeTypeFromExtension(".doc")).toBeNull();
+    expect(hostPreviewMimeTypeFromExtension(".ppt")).toBeNull();
   });
 });
 
