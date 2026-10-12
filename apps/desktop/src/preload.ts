@@ -6,7 +6,6 @@ import type {
   DesktopPreviewTabState,
   DesktopSnapShotEvent,
 } from "@t3tools/contracts";
-import { PREVIEW_AUTOMATION_FEATURES } from "@t3tools/contracts/preview-automation-features";
 import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 
@@ -368,7 +367,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       },
     },
     automation: {
-      supportedFeatures: [...PREVIEW_AUTOMATION_FEATURES],
       status: (tabId) =>
         ipcRenderer.invoke(IpcChannels.PREVIEW_AUTOMATION_STATUS_CHANNEL, { tabId }),
       snapshot: (tabId) =>

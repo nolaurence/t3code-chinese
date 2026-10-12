@@ -797,7 +797,8 @@ function useKeybindingRowEditor({
   };
 
   const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Tab") return;
+    // Tab is recorded like any key while recording; after that it moves focus on.
+    if (event.key === "Tab" && !isRecording) return;
     event.preventDefault();
     if (event.key === "Escape") {
       setDraft({ keyDraft: row.key, isRecording: false });
@@ -832,7 +833,11 @@ interface KeybindingRowActions {
   onRemove: (row: KeybindingRow) => void;
 }
 
-type KeybindingRowProps = KeybindingRowActions & { row: KeybindingRow; isSaving: boolean };
+type KeybindingRowProps = KeybindingRowActions & {
+  row: KeybindingRow;
+  isSaving: boolean;
+  searchAnchorId?: string | undefined;
+};
 
 /** Shortcut pill that turns into a capture input when clicked, plus Save once the draft changes. */
 function KeybindingKeyControl({
@@ -1059,6 +1064,7 @@ function KeybindingSettingsRow(props: KeybindingRowProps) {
 
   return (
     <SettingsRow
+      id={props.searchAnchorId}
       className="group/row rounded-none"
       title={<KeybindingRowTitle row={row} />}
       description={<KeybindingRowWhen row={row} editor={editor} variables={variables} />}
@@ -1125,7 +1131,8 @@ function useNewKeybindingDraft({
   };
 
   const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Tab") return;
+    // Tab is recorded like any key while recording; after that it moves focus on.
+    if (event.key === "Tab" && !isRecording) return;
     event.preventDefault();
     if (event.key === "Escape") {
       setDraft({ keyDraft: "", isRecording: false });
@@ -1322,6 +1329,10 @@ function KeybindingsList(props: KeybindingsListProps) {
   const { t } = useI18n();
   const { rows, commandOptions, savingCommand, isAddingBinding, onCancelAdd, ...rowActions } =
     props;
+  const firstRowByCommand = new Map<KeybindingCommand, string>();
+  for (const row of rows) {
+    if (!firstRowByCommand.has(row.command)) firstRowByCommand.set(row.command, row.id);
+  }
   const newProps: NewKeybindingProps = {
     commandOptions,
     allRows: rows,
@@ -1337,6 +1348,9 @@ function KeybindingsList(props: KeybindingsListProps) {
         <KeybindingSettingsRow
           key={row.id}
           row={row}
+          searchAnchorId={
+            firstRowByCommand.get(row.command) === row.id ? `keybinding-${row.command}` : undefined
+          }
           isSaving={savingCommand === row.command}
           {...rowActions}
         />

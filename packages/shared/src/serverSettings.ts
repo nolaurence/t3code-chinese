@@ -324,6 +324,13 @@ export function applyServerSettingsPatch(
   const next = deepMerge(current, patchForMerge);
   const nextWithReplacementsBase = {
     ...next,
+    midscene: {
+      ...next.midscene,
+      modelApiKey: patch.midscene?.modelApiKeyRedacted
+        ? current.midscene.modelApiKey
+        : next.midscene.modelApiKey,
+      modelApiKeyRedacted: false,
+    },
     ...(worktreeCleanupPatch === undefined
       ? {}
       : {

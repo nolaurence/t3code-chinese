@@ -32,4 +32,10 @@ describe("localizedConnectionStatusText", () => {
       localizedConnectionStatusText({ phase: "error", error: "Access denied", traceId: null }, t),
     ).toBe("连接失败。原因：Access denied");
   });
+
+  it("labels an unsupported client", () => {
+    expect(
+      localizedConnectionStatusText({ phase: "unsupported", error: null, traceId: null }, t),
+    ).toBe("此客户端不受支持");
+  });
 });

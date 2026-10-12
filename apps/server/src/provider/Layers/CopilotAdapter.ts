@@ -350,6 +350,12 @@ function toApprovalResult(decision: ProviderApprovalDecision): PermissionRequest
       return { kind: "approve-once", approvedInteractively: true };
     case "acceptForSession":
       return { kind: "approve-for-session" };
+    case "acceptAlways":
+      return {
+        kind: "reject",
+        feedback:
+          "Persistent approvals are not supported by this Copilot integration. Approve for this session instead.",
+      };
     case "decline":
       return { kind: "reject", feedback: "Declined by the user." };
     case "cancel":
@@ -1299,15 +1305,13 @@ export const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
 
   const readThread: CopilotAdapter["readThread"] = (threadId) =>
     requireContext(threadId).pipe(
-      Effect.map(
-        (ctx): ProviderThreadSnapshot => ({
-          threadId,
-          turns: [
-            ...ctx.turns,
-            ...(ctx.activeTurn ? [{ id: ctx.activeTurn.id, items: ctx.activeTurn.items }] : []),
-          ],
-        }),
-      ),
+      Effect.map((ctx): ProviderThreadSnapshot => ({
+        threadId,
+        turns: [
+          ...ctx.turns,
+          ...(ctx.activeTurn ? [{ id: ctx.activeTurn.id, items: ctx.activeTurn.items }] : []),
+        ],
+      })),
     );
 
   const rollbackThread: CopilotAdapter["rollbackThread"] = (threadId, numTurns) =>

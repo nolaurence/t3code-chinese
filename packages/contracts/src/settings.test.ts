@@ -24,6 +24,28 @@ const decodeClaudeSettings = Schema.decodeUnknownSync(ClaudeSettings);
 const decodePiAgentSettings = Schema.decodeUnknownSync(PiAgentSettings);
 const decodeOmpSettings = Schema.decodeUnknownSync(OmpSettings);
 
+describe("Midscene settings", () => {
+  it("keeps old installations unconfigured and round-trips saved model configuration", () => {
+    expect(decodeServerSettings({}).midscene).toEqual({
+      modelApiKey: "",
+      modelApiKeyRedacted: false,
+      modelName: "",
+      modelFamily: "",
+      modelBaseUrl: "",
+    });
+    const midscene = {
+      modelApiKey: "model-key",
+      modelName: "vision-model",
+      modelFamily: "gpt-4o",
+      modelBaseUrl: "https://model.example.test/v1",
+    };
+    expect(encodeServerSettings(decodeServerSettings({ midscene }))).toMatchObject({ midscene });
+    expect(decodeServerSettingsPatch({ midscene: { modelName: "updated-model" } })).toEqual({
+      midscene: { modelName: "updated-model" },
+    });
+  });
+});
+
 describe("PiAgentSettings", () => {
   it("defaults to the system pi binary and standard agent home", () => {
     expect(decodePiAgentSettings({})).toEqual({
@@ -388,13 +410,16 @@ describe("ClientSettings assistant reasoning", () => {
     expect(decodeClientSettings({}).showAssistantReasoning).toBe(true);
   });
 
-  it.each([true, false])("preserves a saved thinking preference of %s", (showAssistantReasoning) => {
-    const settings = decodeClientSettings({ showAssistantReasoning });
-    expect(encodeClientSettings(settings).showAssistantReasoning).toBe(showAssistantReasoning);
-    expect(decodeClientSettingsPatch({ showAssistantReasoning }).showAssistantReasoning).toBe(
-      showAssistantReasoning,
-    );
-  });
+  it.each([true, false])(
+    "preserves a saved thinking preference of %s",
+    (showAssistantReasoning) => {
+      const settings = decodeClientSettings({ showAssistantReasoning });
+      expect(encodeClientSettings(settings).showAssistantReasoning).toBe(showAssistantReasoning);
+      expect(decodeClientSettingsPatch({ showAssistantReasoning }).showAssistantReasoning).toBe(
+        showAssistantReasoning,
+      );
+    },
+  );
 });
 
 describe("ClientSettings word wrap", () => {

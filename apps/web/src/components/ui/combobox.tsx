@@ -30,6 +30,7 @@ function Combobox<Value, Multiple extends boolean | undefined = false>(
 
 function ComboboxInput({
   className,
+  inputClassName,
   showTrigger = true,
   showClear = false,
   startAddon,
@@ -38,6 +39,7 @@ function ComboboxInput({
   ...props
 }: Omit<ComboboxPrimitive.Input.Props, "size"> & {
   showTrigger?: boolean;
+  inputClassName?: string;
   showClear?: boolean;
   startAddon?: React.ReactNode;
   size?: "sm" | "default" | "lg" | number;
@@ -72,6 +74,7 @@ function ComboboxInput({
             className={cn(
               "has-disabled:opacity-100",
               unstyled && "rounded-none bg-transparent text-sm",
+              inputClassName,
             )}
             nativeInput
             size={sizeValue}

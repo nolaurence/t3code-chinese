@@ -1103,6 +1103,7 @@ export function createServerEnvironmentAtoms<R, E>(
             environmentId,
             input.instanceId ?? null,
             input.cwd ?? null,
+            input.fresh ?? false,
             input.refreshModels ?? false,
           ]),
       },
@@ -1112,7 +1113,7 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.providerDiscoverCopilotLlmModels,
       concurrency: {
         mode: "singleFlight",
-        key: ({ environmentId }) => environmentId,
+        key: ({ environmentId, input }) => JSON.stringify([environmentId, input]),
       },
     }),
     updateProvider: createEnvironmentRpcCommand(runtime, {

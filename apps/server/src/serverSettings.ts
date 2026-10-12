@@ -199,7 +199,12 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
     accessToken: redactSecret(settings.bitbucket.accessToken),
     apiToken: redactSecret(settings.bitbucket.apiToken),
   };
-  return { ...settings, providerInstances, usageLimitSources, bitbucket };
+  const midscene = {
+    ...settings.midscene,
+    modelApiKey: "",
+    modelApiKeyRedacted: settings.midscene.modelApiKey.length > 0,
+  };
+  return { ...settings, providerInstances, usageLimitSources, bitbucket, midscene };
 }
 
 export class ServerSettingsService extends Context.Service<

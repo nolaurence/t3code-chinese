@@ -25,6 +25,7 @@ import type { ServerProviderDraft } from "../providerSnapshot.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
 import {
   enrichProviderSnapshotWithVersionAdvisory,
+  makeCachedProviderMaintenanceResolution,
   makePackageManagedProviderMaintenanceResolver,
   resolveProviderMaintenanceCapabilitiesEffect,
 } from "../providerMaintenance.ts";
@@ -39,7 +40,6 @@ const DRIVER_KIND = ProviderDriverKind.make("piAgent");
 const UPDATE = makePackageManagedProviderMaintenanceResolver({
   provider: DRIVER_KIND,
   npmPackageName: "@earendil-works/pi-coding-agent",
-  homebrewFormula: null,
   nativeUpdate: null,
 });
 
@@ -82,6 +82,8 @@ export const PiDriver: ProviderDriver<PiAgentSettings, PiDriverEnv> = {
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const httpClient = yield* HttpClient.HttpClient;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
       const serverConfig = yield* ServerConfig;
       const serverSettings = yield* ServerSettingsService;
       const eventLoggers = yield* ProviderEventLoggers;
@@ -97,10 +99,16 @@ export const PiDriver: ProviderDriver<PiAgentSettings, PiDriverEnv> = {
         accentColor,
         continuationGroupKey: continuationIdentity.continuationKey,
       });
-      const maintenanceCapabilities = yield* resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
-        binaryPath: effectiveConfig.binaryPath,
-        env: processEnv,
-      });
+      const resolveMaintenance = yield* makeCachedProviderMaintenanceResolution(
+        resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
+          binaryPath: effectiveConfig.binaryPath,
+          env: processEnv,
+        }).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+        ),
+      );
       const adapter = yield* makePiAdapter(effectiveConfig, {
         instanceId,
         environment: processEnv,
@@ -117,7 +125,7 @@ export const PiDriver: ProviderDriver<PiAgentSettings, PiDriverEnv> = {
       );
       const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
       const snapshot = yield* makeManagedServerProvider<ProviderSnapshotSettings<PiAgentSettings>>({
-        maintenanceCapabilities,
+        resolveMaintenance,
         getSettings: snapshotSettings.getSettings,
         streamSettings: snapshotSettings.streamSettings,
         haveSettingsChanged: haveProviderSnapshotSettingsChanged,
@@ -125,9 +133,12 @@ export const PiDriver: ProviderDriver<PiAgentSettings, PiDriverEnv> = {
           buildInitialPiProviderSnapshot(settings.provider).pipe(Effect.map(stampIdentity)),
         checkProvider,
         enrichSnapshot: ({ settings, snapshot, publishSnapshot }) =>
-          enrichProviderSnapshotWithVersionAdvisory(snapshot, maintenanceCapabilities, {
-            enableProviderUpdateChecks: settings.enableProviderUpdateChecks,
-          }).pipe(
+          resolveMaintenance().pipe(
+            Effect.flatMap((maintenanceCapabilities) =>
+              enrichProviderSnapshotWithVersionAdvisory(snapshot, maintenanceCapabilities, {
+                enableProviderUpdateChecks: settings.enableProviderUpdateChecks,
+              }),
+            ),
             Effect.provideService(HttpClient.HttpClient, httpClient),
             Effect.flatMap(publishSnapshot),
           ),

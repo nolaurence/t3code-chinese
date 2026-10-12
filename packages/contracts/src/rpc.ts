@@ -159,6 +159,9 @@ import {
   RelayClientStatusSchema,
 } from "./relayClient.ts";
 import {
+  ProjectCreateNewInput,
+  ProjectCreateNewResult,
+  ProjectEnsureScratchResult,
   ProjectListEntriesError,
   ProjectListEntriesInput,
   ProjectListEntriesResult,
@@ -262,7 +265,14 @@ import {
   ProviderConsumeResetCreditResult,
 } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
-import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
+import {
+  CopilotLlmProviderModel,
+  CopilotLlmProviderModelDiscoveryError,
+  CopilotLlmProviderModelDiscoveryRequest,
+  ServerSettings,
+  ServerSettingsError,
+  ServerSettingsPatch,
+} from "./settings.ts";
 import {
   ProjectCloneActionInput,
   ProjectCloneActionResult,
@@ -293,6 +303,8 @@ export const WS_METHODS = {
   projectsSearchContents: "projects.searchContents",
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
+  projectsEnsureScratch: "projects.ensureScratch",
+  projectsCreateNew: "projects.createNew",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -306,6 +318,7 @@ export const WS_METHODS = {
   attachmentsDelete: "attachments.delete",
 
   // Provider methods
+  providerDiscoverCopilotLlmModels: "provider.discoverCopilotLlmModels",
   providerUploadFeedback: "provider.uploadFeedback",
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
@@ -492,6 +505,9 @@ const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProviders, 
      */
     instanceId: Schema.optional(ProviderInstanceId),
     cwd: Schema.optional(TrimmedNonEmptyString),
+    /** With `instanceId` and `cwd`: rescan the workspace's skills and slash
+     * commands even when a snapshot for that cwd already exists. */
+    fresh: Schema.optional(Schema.Boolean),
     /** Explicit user request: bypass T3-owned caches and rediscover models.
      * Background status refreshes must not open agent sessions. */
     refreshModels: Schema.optional(Schema.Boolean),
@@ -991,6 +1007,20 @@ const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   error: Schema.Union([ProjectWriteFileError, EnvironmentAuthorizationError]),
 });
 
+// Finds or creates the Scratch project rooted at ServerConfig.scratchWorkspaceRoot.
+const WsProjectsEnsureScratchRpc = Rpc.make(WS_METHODS.projectsEnsureScratch, {
+  payload: Schema.Struct({}),
+  success: ProjectEnsureScratchResult,
+  error: Schema.Union([OrchestrationDispatchCommandError, EnvironmentAuthorizationError]),
+});
+
+// Makes a folder under ServerConfig.newProjectsRoot with a first commit, then the project.
+const WsProjectsCreateNewRpc = Rpc.make(WS_METHODS.projectsCreateNew, {
+  payload: ProjectCreateNewInput,
+  success: ProjectCreateNewResult,
+  error: Schema.Union([OrchestrationDispatchCommandError, EnvironmentAuthorizationError]),
+});
+
 const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -1035,6 +1065,15 @@ const WsAttachmentsDeleteRpc = Rpc.make(WS_METHODS.attachmentsDelete, {
   payload: AttachmentDeleteInput,
   error: EnvironmentAuthorizationError,
 });
+
+const WsProviderDiscoverCopilotLlmModelsRpc = Rpc.make(
+  WS_METHODS.providerDiscoverCopilotLlmModels,
+  {
+    payload: CopilotLlmProviderModelDiscoveryRequest,
+    success: Schema.Array(CopilotLlmProviderModel),
+    error: Schema.Union([CopilotLlmProviderModelDiscoveryError, EnvironmentAuthorizationError]),
+  },
+);
 
 const WsProviderUploadFeedbackRpc = Rpc.make(WS_METHODS.providerUploadFeedback, {
   payload: ProviderUploadFeedbackInput,
@@ -1508,6 +1547,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsReadFileRpc,
   WsProjectsSearchContentsRpc,
   WsProjectsSearchEntriesRpc,
+  WsProjectsEnsureScratchRpc,
+  WsProjectsCreateNewRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
@@ -1516,6 +1557,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsAssetsCreateUrlRpc,
   WsAttachmentsCreateUploadUrlRpc,
   WsAttachmentsDeleteRpc,
+  WsProviderDiscoverCopilotLlmModelsRpc,
   WsProviderUploadFeedbackRpc,
   WsSubscribeVcsStatusRpc,
   WsSubscribeWorktreeSetupRpc,

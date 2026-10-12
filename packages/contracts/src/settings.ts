@@ -460,6 +460,12 @@ export const ClientSettingsSchema = Schema.Struct({
   // old keys, so everyone, including prior beta opt-outs, resets to the new
   // default sidebar.
   legacySidebarEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  // Beta: working and monitoring threads fold into a Working shelf and return
+  // to the top of the inbox once they need the user. The inbox then orders by
+  // time, so manual placement there is ignored (and kept) while it is on.
+  sidebarWorkingShelfEnabled: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
   sidebarProjectGroupingMode: SidebarProjectGroupingMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE)),
   ),
@@ -1330,7 +1336,17 @@ export const StorageCleanupSettings = Schema.Struct({
 });
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
+export const MidsceneSettings = Schema.Struct({
+  modelApiKey: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  modelApiKeyRedacted: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  modelName: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  modelFamily: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  modelBaseUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+});
+export type MidsceneSettings = typeof MidsceneSettings.Type;
+
 export const ServerSettings = Schema.Struct({
+  midscene: MidsceneSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   worktreeCleanup: WorktreeCleanup.pipe(Schema.withDecodingDefault(Effect.succeed(null))),
   storageCleanup: StorageCleanupSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(Schema.decodeSync(StorageCleanupSettings)({}))),
@@ -1721,6 +1737,15 @@ const OmpSettingsPatch = Schema.Struct({
 });
 
 export const ServerSettingsPatch = Schema.Struct({
+  midscene: Schema.optionalKey(
+    Schema.Struct({
+      modelApiKey: Schema.optionalKey(TrimmedString),
+      modelApiKeyRedacted: Schema.optionalKey(Schema.Boolean),
+      modelName: Schema.optionalKey(TrimmedString),
+      modelFamily: Schema.optionalKey(TrimmedString),
+      modelBaseUrl: Schema.optionalKey(TrimmedString),
+    }),
+  ),
   worktreeCleanup: Schema.optionalKey(
     Schema.NullOr(
       Schema.Union([
@@ -1925,6 +1950,7 @@ export const ClientSettingsPatch = Schema.Struct({
   proactivePanelsEnabled: Schema.optionalKey(Schema.Boolean),
   showSkillsInSlashMenu: Schema.optionalKey(Schema.Boolean),
   legacySidebarEnabled: Schema.optionalKey(Schema.Boolean),
+  sidebarWorkingShelfEnabled: Schema.optionalKey(Schema.Boolean),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
   sidebarProjectGroupingOverrides: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, SidebarProjectGroupingMode),

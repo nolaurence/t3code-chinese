@@ -1,7 +1,13 @@
 import { isElectron } from "~/env";
 import type { MessageKey, Translate } from "~/i18n/messages";
 import { isMacPlatform, isWindowsPlatform, normalizeSearchText } from "~/lib/utils";
-import type { EnvironmentId } from "@t3tools/contracts";
+import {
+  STATIC_KEYBINDING_COMMANDS,
+  type EnvironmentId,
+  type KeybindingCommand,
+} from "@t3tools/contracts";
+import { DEFAULT_KEYBINDINGS } from "@t3tools/shared/keybindings";
+import { commandLabel, localizedCommandLabel } from "./KeybindingsSettings.logic";
 import type { EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
 import {
   validateSettingsScopeSearch,
@@ -56,6 +62,9 @@ export interface SettingsSearchItem {
   readonly localEnvironmentOnly?: boolean;
   readonly wslAvailableOnly?: boolean;
   readonly requiresThreadAutoSettlement?: boolean;
+  readonly macProviderSettingsOnly?: boolean;
+  readonly keybindingCommand?: KeybindingCommand;
+  readonly secondary?: boolean;
 }
 
 export interface SettingsSearchAvailability {
@@ -63,6 +72,7 @@ export interface SettingsSearchAvailability {
   readonly hasCloudPublicConfig: boolean;
   readonly hasEnvironment: boolean;
   readonly hasProviderSettingsEnvironment: boolean;
+  readonly hasMacProviderSettingsEnvironment: boolean;
   readonly canManageLocalBackend: boolean;
   readonly isWslSettingsRowVisible: boolean;
   readonly hasThreadAutoSettlement: boolean;
@@ -103,7 +113,7 @@ export const SETTINGS_SECTION_LABEL_KEYS: Readonly<Record<SettingsPath, MessageK
  * dedicated anchor render their id and title via `searchableSetting`; items
  * that may not be mounted point at their nearest stable section instead.
  */
-export const SETTINGS_SEARCH_ITEMS = [
+const SETTINGS_ROW_SEARCH_ITEMS = [
   {
     id: "project-defaults",
     title: "Project defaults and overrides",
@@ -233,6 +243,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["combine matching repositories environments sidebar"],
   },
   {
+    id: "working-shelf",
+    title: "Working section (beta)",
+    to: "/settings/general",
+    searchTerms: ["hide fold running monitoring threads inbox sidebar shelf"],
+  },
+  {
     id: "auto-settle-inactive-threads",
     title: "Auto-settle inactive threads",
     to: "/settings/general",
@@ -323,6 +339,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Collapse composer on scroll",
     to: "/settings/general",
     searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"],
+  },
+  {
+    id: "send-shortcut",
+    title: "Send shortcut",
+    to: "/settings/general",
+    searchTerms: ["enter mod ctrl command multiline new line composer submit"],
   },
   {
     id: "follow-up-behavior",
@@ -498,6 +520,13 @@ export const SETTINGS_SEARCH_ITEMS = [
       "usage sources CLIProxyAPI CLI proxy hub quota subscription limits management key add remove",
     ],
     providerSettingsOnly: true,
+  },
+  {
+    id: "cursor-keychain-usage",
+    title: "Cursor Keychain usage",
+    to: "/settings/providers",
+    searchTerms: ["macOS account usage login credentials"],
+    macProviderSettingsOnly: true,
   },
   {
     id: "provider-health-check-interval",
@@ -752,7 +781,27 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
 ] as const satisfies ReadonlyArray<SettingsSearchItem>;
 
-export type SettingsSearchItemId = (typeof SETTINGS_SEARCH_ITEMS)[number]["id"];
+export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<SettingsSearchItem> = [
+  ...SETTINGS_ROW_SEARCH_ITEMS,
+  ...STATIC_KEYBINDING_COMMANDS.map((command) => ({
+    id: `keybinding-${command}`,
+    title: commandLabel(command),
+    to: "/settings/keybindings" as const,
+    ...(DEFAULT_KEYBINDINGS.some((binding) => binding.command === command)
+      ? {}
+      : { targetId: "keybindings" }),
+    keybindingCommand: command,
+    secondary: true,
+    searchTerms: [
+      command,
+      ...DEFAULT_KEYBINDINGS.filter((binding) => binding.command === command).map(
+        (binding) => binding.key,
+      ),
+    ],
+  })),
+];
+
+export type SettingsSearchItemId = (typeof SETTINGS_ROW_SEARCH_ITEMS)[number]["id"];
 
 export const SETTINGS_SEARCH_TITLE_KEYS: Readonly<Record<SettingsSearchItemId, MessageKey>> = {
   "project-defaults": "settings.search.projectDefaults",
@@ -774,6 +823,7 @@ export const SETTINGS_SEARCH_TITLE_KEYS: Readonly<Record<SettingsSearchItemId, M
   "word-wrap": "settings.search.wordWrap",
   "interface-language": "settings.search.interfaceLanguage",
   "project-grouping": "settings.search.projectGrouping",
+  "working-shelf": "settings.workingShelf.title",
   "auto-settle-inactive-threads": "settings.search.autoSettleInactive",
   "auto-settle-merged-threads": "settings.search.autoSettleMerged",
   "days-before-auto-settle": "settings.search.daysBeforeAutoSettle",
@@ -788,6 +838,7 @@ export const SETTINGS_SEARCH_TITLE_KEYS: Readonly<Record<SettingsSearchItemId, M
   "skills-in-slash-menu": "settings.search.skillsInSlashMenu",
   "show-assistant-reasoning": "settings.search.showAssistantReasoning",
   "composer-collapse": "settings.search.composerCollapse",
+  "send-shortcut": "settings.search.sendShortcut",
   "follow-up-behavior": "settings.search.followUpBehavior",
   "provider-update-checks": "settings.search.providerUpdateChecks",
   "continue-threads-after-server-update": "settings.search.continueThreadsAfterRestarts",
@@ -814,6 +865,7 @@ export const SETTINGS_SEARCH_TITLE_KEYS: Readonly<Record<SettingsSearchItemId, M
   "snap-shot-animations": "settings.search.snapShotAnimations",
   providers: "settings.search.providers",
   "usage-providers": "settings.search.usageProviders",
+  "cursor-keychain-usage": "settings.search.cursorKeychainUsage",
   "provider-health-check-interval": "settings.search.providerHealthCheckInterval",
   "agent-browser-access": "settings.search.agentBrowserAccess",
   "device-hosts": "settings.search.deviceHosts",
@@ -979,12 +1031,10 @@ export function localizeSettingsSearchItems(
 ): ReadonlyArray<SettingsSearchItem> {
   return items.map((item) => ({
     ...item,
-    title: t(SETTINGS_SEARCH_TITLE_KEYS[item.id as SettingsSearchItemId]),
-    searchTerms: [
-      item.title,
-      t(SETTINGS_SECTION_LABEL_KEYS[item.to]),
-      ...(item.searchTerms ?? []),
-    ],
+    title: item.keybindingCommand
+      ? localizedCommandLabel(item.keybindingCommand, t)
+      : t(SETTINGS_SEARCH_TITLE_KEYS[item.id as SettingsSearchItemId]),
+    searchTerms: [item.title, t(SETTINGS_SECTION_LABEL_KEYS[item.to]), ...(item.searchTerms ?? [])],
   }));
 }
 
@@ -997,6 +1047,7 @@ export function filterAvailableSettingsSearchItems(
       (!item.cloudOnly || availability.hasCloudPublicConfig) &&
       (!item.environmentOnly || availability.hasEnvironment) &&
       (!item.providerSettingsOnly || availability.hasProviderSettingsEnvironment) &&
+      (!item.macProviderSettingsOnly || availability.hasMacProviderSettingsEnvironment) &&
       (!item.localBackendManagementOnly || availability.canManageLocalBackend) &&
       (!item.localEnvironmentOnly || !availability.localEnvironmentDisabled) &&
       (!item.wslAvailableOnly || availability.isWslSettingsRowVisible) &&
@@ -1042,6 +1093,11 @@ export function searchSettings(
                   : 0;
       return [{ item, index, rank }];
     })
-    .toSorted((left, right) => right.rank - left.rank || left.index - right.index)
+    .toSorted(
+      (left, right) =>
+        Number(Boolean(left.item.secondary)) - Number(Boolean(right.item.secondary)) ||
+        right.rank - left.rank ||
+        left.index - right.index,
+    )
     .map(({ item }) => item);
 }

@@ -1,9 +1,8 @@
 import type { DesktopPreviewBridge, PreviewAutomationFeature } from "@t3tools/contracts";
 
-type CompatiblePreviewAutomationBridge = Pick<
-  DesktopPreviewBridge["automation"],
-  "supportedFeatures"
->;
+type CompatiblePreviewAutomationBridge = Partial<DesktopPreviewBridge["automation"]> & {
+  readonly supportedFeatures?: ReadonlyArray<PreviewAutomationFeature>;
+};
 
 export const readPreviewAutomationSupportedFeatures = (
   automation: CompatiblePreviewAutomationBridge | null | undefined,

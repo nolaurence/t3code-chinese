@@ -1503,6 +1503,8 @@ function savedBackendStatus(
   switch (connection.phase) {
     case "connected":
       return { text: t("connections.status.connected"), tone: "muted" };
+    case "unsupported":
+      return { text: t("connections.status.unsupported"), tone: "error" };
     case "connecting":
       return { text: t("connections.status.connectingShort"), tone: "muted" };
     case "reconnecting":

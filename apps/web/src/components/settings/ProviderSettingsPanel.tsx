@@ -58,6 +58,7 @@ import {
   isProviderUpdateActive,
   type ProviderSettingsUpdateCandidate,
 } from "../ProviderUpdateLaunchNotification.logic";
+import { ProviderUpdatesAction } from "../ProviderUpdatesAction";
 import { Button } from "../ui/button";
 import {
   Empty,
@@ -75,6 +76,7 @@ import {
   NumberFieldInput,
 } from "../ui/number-field";
 import { ScrollArea } from "../ui/scroll-area";
+import { Switch } from "../ui/switch";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -317,24 +319,32 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
       connectionPhase: selectedEnvironment.connection.phase,
       hasServerConfig: selectedEnvironment.serverConfig !== null,
     });
-  const searchableEnvironmentId = options.find((environment) =>
-    isProviderSettingsEnvironmentAvailable({
-      connectionPhase: environment.connection.phase,
-      hasServerConfig: environment.serverConfig !== null,
-    }),
+  const isCursorKeychainTarget = searchTargetId === "cursor-keychain-usage";
+  const searchableEnvironmentId = options.find(
+    (environment) =>
+      (!isCursorKeychainTarget || environment.serverConfig?.environment.platform.os === "darwin") &&
+      isProviderSettingsEnvironmentAvailable({
+        connectionPhase: environment.connection.phase,
+        hasServerConfig: environment.serverConfig !== null,
+      }),
   )?.environmentId;
   useEffect(() => {
     if (
       !target.scoped &&
       (searchTargetId === searchableSetting("provider-health-check-interval", t).id ||
-        searchTargetId === searchableSetting("usage-providers", t).id) &&
-      !selectedEnvironmentCanRenderSettings &&
+        searchTargetId === searchableSetting("usage-providers", t).id ||
+        isCursorKeychainTarget) &&
+      (!selectedEnvironmentCanRenderSettings ||
+        (isCursorKeychainTarget &&
+          selectedEnvironment?.serverConfig?.environment.platform.os !== "darwin")) &&
       searchableEnvironmentId !== undefined
     ) {
       setSelectedEnvironmentId(searchableEnvironmentId);
     }
   }, [
     searchTargetId,
+    isCursorKeychainTarget,
+    selectedEnvironment,
     searchableEnvironmentId,
     selectedEnvironmentCanRenderSettings,
     target.scoped,
@@ -550,6 +560,7 @@ function AccessGatedProviderSettings({
       environmentId={environment.environmentId}
       environmentLabel={environment.label}
       readOnly={access.kind === "read-only"}
+      isMacEnvironment={environment.serverConfig?.environment.platform.os === "darwin"}
       deviceTabs={deviceTabs}
       targetInstanceId={targetInstanceId}
     />
@@ -559,12 +570,14 @@ function AccessGatedProviderSettings({
 export function EnvironmentProviderSettings({
   environmentId,
   environmentLabel,
+  isMacEnvironment = false,
   readOnly = false,
   deviceTabs,
   targetInstanceId,
 }: {
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;
+  readonly isMacEnvironment?: boolean;
   readonly deviceTabs?: ReactNode;
   readonly targetInstanceId?: ProviderInstanceId | undefined;
   /**
@@ -988,6 +1001,19 @@ export function EnvironmentProviderSettings({
         isUpdating={
           mode === "editor" && showInlineUpdateButton ? isInstanceUpdateRunning : undefined
         }
+        onRetryStatusCheck={async () => {
+          const result = await refreshServerProviders({
+            environmentId,
+            input: { instanceId: row.instanceId },
+          });
+          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+            console.warn("Failed to refresh provider status", {
+              environmentId,
+              instanceId: row.instanceId,
+              ...safeErrorLogAttributes(squashAtomCommandFailure(result)),
+            });
+          }
+        }}
       />
     );
   };
@@ -998,6 +1024,7 @@ export function EnvironmentProviderSettings({
         <div className="flex min-h-11 min-w-0 items-center gap-2 px-3 sm:px-4">
           {deviceTabs}
           <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
+            <ProviderUpdatesAction />
             {readOnly ? (
               <span className="min-w-0 truncate text-xs text-muted-foreground">
                 <ProviderLastChecked lastCheckedAt={lastCheckedAt} />
@@ -1095,6 +1122,37 @@ export function EnvironmentProviderSettings({
       />
 
       <SettingsSection title={t("providers.advanced")}>
+        {isMacEnvironment ? (
+          <SettingsRow
+            {...searchableSetting("cursor-keychain-usage", t)}
+            description={t("settings.cursorKeychainUsage.description")}
+            resetAction={
+              settings.cursorKeychainUsageEnabled !==
+              DEFAULT_UNIFIED_SETTINGS.cursorKeychainUsageEnabled ? (
+                <SettingResetButton
+                  label={t("settings.search.cursorKeychainUsage")}
+                  disabled={readOnly}
+                  onClick={() =>
+                    updateSettings({
+                      cursorKeychainUsageEnabled:
+                        DEFAULT_UNIFIED_SETTINGS.cursorKeychainUsageEnabled,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <Switch
+                checked={settings.cursorKeychainUsageEnabled}
+                disabled={readOnly}
+                onCheckedChange={(checked) =>
+                  updateSettings({ cursorKeychainUsageEnabled: Boolean(checked) })
+                }
+                aria-label={t("settings.search.cursorKeychainUsage")}
+              />
+            }
+          />
+        ) : null}
         <SettingsRow
           id={searchableSetting("provider-health-check-interval", t).id}
           title={

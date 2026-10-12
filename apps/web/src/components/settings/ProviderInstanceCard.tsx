@@ -9,6 +9,7 @@ import {
   LockIcon,
   LockOpenIcon,
   PlusIcon,
+  RefreshCwIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -392,6 +393,7 @@ interface ProviderInstanceCardProps {
   readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
   readonly onRunUpdate?: (() => void) | undefined;
   readonly isUpdating?: boolean | undefined;
+  readonly onRetryStatusCheck?: (() => Promise<void>) | undefined;
 }
 
 /**
@@ -434,8 +436,10 @@ export function ProviderInstanceCard({
   onModelOrderChange,
   onRunUpdate,
   isUpdating = false,
+  onRetryStatusCheck,
 }: ProviderInstanceCardProps) {
   const { t } = useI18n();
+  const [isRetryingStatus, setIsRetryingStatus] = useState(false);
   const enabled = resolveProviderInstanceEnabled(instance);
   // A locally disabled provider reads "Disabled" with a muted dot even if its
   // last server status is stale. Enabled providers use the server status.
@@ -706,6 +710,37 @@ export function ProviderInstanceCard({
         </Badge>
       ) : null}
       {versionCodeNode}
+      {needsAttention && onRetryStatusCheck ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost-muted"
+                disabled={readOnly || isRetryingStatus}
+                aria-label={t(
+                  isRetryingStatus ? "providers.retryingStatus" : "providers.retryStatus",
+                  { provider: displayName },
+                )}
+                onClick={async () => {
+                  setIsRetryingStatus(true);
+                  try {
+                    await onRetryStatusCheck();
+                  } finally {
+                    setIsRetryingStatus(false);
+                  }
+                }}
+              >
+                {isRetryingStatus ? <Spinner /> : <RefreshCwIcon />}
+              </Button>
+            }
+          />
+          <TooltipPopup side="top">
+            {t("providers.retryStatus", { provider: displayName })}
+          </TooltipPopup>
+        </Tooltip>
+      ) : null}
       <span
         inert={readOnly}
         aria-disabled={readOnly || undefined}

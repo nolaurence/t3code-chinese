@@ -92,6 +92,37 @@ const recordProviderUsage = (provider: string, instanceId: string | null = provi
   });
 
 it.layer(NodeServices.layer)("server settings", (it) => {
+  it.effect(
+    "persists Midscene configuration and preserves its secret on a redacted client save",
+    () =>
+      Effect.gen(function* () {
+        const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+        const saved = yield* serverSettings.updateSettings({
+          midscene: {
+            modelApiKey: "midscene-key",
+            modelName: "vision-model",
+            modelFamily: "gpt-4o",
+            modelBaseUrl: "https://model.example.test/v1",
+          },
+        });
+        const forClient = ServerSettingsModule.redactServerSettingsForClient(saved).midscene;
+        assert.equal(forClient.modelApiKey, "");
+        assert.isTrue(forClient.modelApiKeyRedacted);
+        const edited = yield* serverSettings.updateSettings({
+          midscene: { ...forClient, modelName: "updated-model" },
+        });
+        assert.equal(edited.midscene.modelApiKey, "midscene-key");
+        assert.equal(edited.midscene.modelName, "updated-model");
+        const cleared = yield* serverSettings.updateSettings({
+          midscene: { modelApiKey: "", modelApiKeyRedacted: false },
+        });
+        assert.equal(cleared.midscene.modelApiKey, "");
+        assert.isFalse(
+          ServerSettingsModule.redactServerSettingsForClient(cleared).midscene.modelApiKeyRedacted,
+        );
+      }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
   it.effect("preserves context when reading a provider environment secret fails", () => {
     const platformCause = PlatformError.systemError({
       _tag: "PermissionDenied",

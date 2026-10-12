@@ -47,6 +47,12 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("requires operate scope before discovering models with provider credentials", () => {
+    expect(requiredScopeForRpcMethod(WS_METHODS.providerDiscoverCopilotLlmModels)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
+
   it("requires write access to import agent session history", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.agentSessionsScan)).toBe(
       AuthOrchestrationReadScope,

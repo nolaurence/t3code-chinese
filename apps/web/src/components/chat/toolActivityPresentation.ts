@@ -35,6 +35,7 @@ const REQUEST_KIND_KEYS: Readonly<Record<NonNullable<WorkLogEntry["requestKind"]
   "file-read": "chat.toolActivity.readFile",
   "file-change": "chat.toolActivity.editFile",
   "mcp-elicitation": "chat.toolActivity.toolCall",
+  permission: "chat.toolActivity.toolCall",
 };
 
 const ITEM_TYPE_KEYS: Partial<Record<NonNullable<WorkLogEntry["itemType"]>, MessageKey>> = {

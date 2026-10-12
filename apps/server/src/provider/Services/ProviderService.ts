@@ -12,6 +12,9 @@
  * @module ProviderService
  */
 import type {
+  CopilotLlmProviderModel,
+  CopilotLlmProviderModelDiscoveryError,
+  CopilotLlmProviderModelDiscoveryRequest,
   ProviderInterruptTurnInput,
   ProviderInstanceId,
   ProviderRespondToRequestInput,
@@ -133,6 +136,11 @@ export interface ProviderServiceShape {
   readonly uploadFeedback: (
     input: ProviderUploadFeedbackInput,
   ) => Effect.Effect<ProviderUploadFeedbackResult, ProviderServiceError>;
+
+  /** Read the model catalog exposed by a configured Copilot LLM endpoint. */
+  readonly discoverCopilotLlmModels: (
+    input: CopilotLlmProviderModelDiscoveryRequest,
+  ) => Effect.Effect<ReadonlyArray<CopilotLlmProviderModel>, CopilotLlmProviderModelDiscoveryError>;
 
   /**
    * Canonical provider runtime event stream.

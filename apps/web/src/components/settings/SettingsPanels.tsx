@@ -597,6 +597,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode
         ? [t("settings.projectGrouping.title")]
         : []),
+      ...(settings.sidebarWorkingShelfEnabled !==
+      DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled
+        ? [t("settings.workingShelf.title")]
+        : []),
       ...(settings.sidebarAutoSettleAfterDays !==
       DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays
         ? [t("settings.autoSettle.inactiveTitle")]
@@ -628,6 +632,9 @@ export function useSettingsRestore(onRestored?: () => void) {
         : []),
       ...(settings.composerCollapseOnScroll !== DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll
         ? [t("settings.search.composerCollapse")]
+        : []),
+      ...(settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut
+        ? [t("settings.search.sendShortcut")]
         : []),
       ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
         ? [t("settings.search.followUpBehavior")]
@@ -682,6 +689,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.browserDefaultZoomFactor,
       settings.browserDefaultAppearance,
       settings.browserRecordingFrameRate,
+      settings.browserRecordingShowKeyPresses,
+      settings.browserRecordingShowMousePresses,
       settings.browserLinkTarget,
       settings.browserAutoShowFloatingPreview,
       settings.appearanceContrast,
@@ -692,6 +701,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmThreadDelete,
       settings.confirmThreadUnpin,
       settings.composerCollapseOnScroll,
+      settings.sendShortcut,
       settings.followUpBehavior,
       settings.addProjectBaseDirectory,
       settings.defaultThreadEnvMode,
@@ -718,6 +728,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.sidebarAutoSettleAfterDays,
       settings.sidebarAutoSettleOnMerge,
       settings.sidebarProjectGroupingMode,
+      settings.sidebarWorkingShelfEnabled,
       settings.sidebarThreadPreviewCount,
       settings.showSkillsInSlashMenu,
       settings.showAssistantReasoning,
@@ -810,6 +821,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
       showAssistantReasoning: DEFAULT_UNIFIED_SETTINGS.showAssistantReasoning,
       composerCollapseOnScroll: DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll,
+      sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
@@ -817,6 +829,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
+      sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
       sidebarAutoSettleAfterDays: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleAfterDays,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
       responseStreamingMode: DEFAULT_UNIFIED_SETTINGS.responseStreamingMode,
@@ -846,6 +859,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       browserDefaultZoomFactor: DEFAULT_UNIFIED_SETTINGS.browserDefaultZoomFactor,
       browserDefaultAppearance: DEFAULT_UNIFIED_SETTINGS.browserDefaultAppearance,
       browserRecordingFrameRate: DEFAULT_UNIFIED_SETTINGS.browserRecordingFrameRate,
+      browserRecordingShowKeyPresses: DEFAULT_UNIFIED_SETTINGS.browserRecordingShowKeyPresses,
+      browserRecordingShowMousePresses: DEFAULT_UNIFIED_SETTINGS.browserRecordingShowMousePresses,
       browserLinkTarget: DEFAULT_UNIFIED_SETTINGS.browserLinkTarget,
       browserAutoShowFloatingPreview: DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
       // Re-granted like any other default. The confirmation dialog lists it by
@@ -2314,6 +2329,33 @@ export function GeneralSettingsPanel() {
           }
         />
 
+        <SettingsRow
+          {...searchableSetting("working-shelf", t)}
+          description={t("settings.workingShelf.description")}
+          resetAction={
+            settings.sidebarWorkingShelfEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled ? (
+              <SettingResetButton
+                label={t("settings.workingShelf.resetLabel")}
+                onClick={() =>
+                  updateSettings({
+                    sidebarWorkingShelfEnabled: DEFAULT_UNIFIED_SETTINGS.sidebarWorkingShelfEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.sidebarWorkingShelfEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ sidebarWorkingShelfEnabled: Boolean(checked) })
+              }
+              aria-label={t("settings.workingShelf.title")}
+            />
+          }
+        />
+
         {supportsAutoSettlement ? (
           <>
             <SettingsRow
@@ -2750,6 +2792,54 @@ export function GeneralSettingsPanel() {
         />
 
         <SettingsRow
+          {...searchableSetting("send-shortcut", t)}
+          description={t("settings.sendShortcut.description")}
+          resetAction={
+            settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut ? (
+              <SettingResetButton
+                label={t("settings.search.sendShortcut")}
+                onClick={() =>
+                  updateSettings({ sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.sendShortcut}
+              onValueChange={(value) => {
+                if (value === "enter" || value === "mod-enter-multiline" || value === "mod-enter") {
+                  updateSettings({ sendShortcut: value });
+                }
+              }}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-full sm:w-64"
+                aria-label={t("settings.search.sendShortcut")}
+              >
+                <SelectValue>
+                  {t(
+                    settings.sendShortcut === "enter"
+                      ? "settings.sendShortcut.enter"
+                      : settings.sendShortcut === "mod-enter-multiline"
+                        ? "settings.sendShortcut.multiline"
+                        : "settings.sendShortcut.modEnter",
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem value="enter">{t("settings.sendShortcut.enter")}</SelectItem>
+                <SelectItem value="mod-enter-multiline">
+                  {t("settings.sendShortcut.multiline")}
+                </SelectItem>
+                <SelectItem value="mod-enter">{t("settings.sendShortcut.modEnter")}</SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
           {...searchableSetting("follow-up-behavior", t)}
           description={t("settings.followUp.description")}
           resetAction={
@@ -2758,6 +2848,7 @@ export function GeneralSettingsPanel() {
                 label={t("settings.followUp.resetLabel")}
                 onClick={() =>
                   updateSettings({
+                    sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
                     followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
                   })
                 }

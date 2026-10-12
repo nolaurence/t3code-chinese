@@ -66,12 +66,13 @@ function SelectTrigger({
 function SelectButton({
   className,
   size = "default",
+  variant = "default",
   children,
   render,
   ...props
-}: useRender.ComponentProps<"button"> & Pick<VariantProps<typeof selectTriggerVariants>, "size">) {
+}: useRender.ComponentProps<"button"> & VariantProps<typeof selectTriggerVariants>) {
   const defaultProps = {
-    className: cn(selectTriggerVariants({ size }), className),
+    className: cn(selectTriggerVariants({ size, variant }), className),
     "data-slot": "select-trigger",
     type: render ? undefined : ("button" as const),
   };
@@ -102,6 +103,7 @@ function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
 
 function SelectPopup({
   className,
+  popupClassName,
   children,
   side = "bottom",
   sideOffset = 4,
@@ -118,6 +120,7 @@ function SelectPopup({
   alignOffset?: SelectPrimitive.Positioner.Props["alignOffset"];
   alignItemWithTrigger?: SelectPrimitive.Positioner.Props["alignItemWithTrigger"];
   matchTriggerWidth?: boolean;
+  popupClassName?: string;
   anchor?: SelectPrimitive.Positioner.Props["anchor"];
 }) {
   return (
@@ -147,6 +150,7 @@ function SelectPopup({
             className={cn(
               "dropdown-glass relative h-full rounded-lg shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]",
               matchTriggerWidth && "min-w-(--anchor-width)",
+              popupClassName,
             )}
           >
             <SelectPrimitive.List
@@ -210,6 +214,7 @@ function SelectGroupLabel(props: SelectPrimitive.GroupLabel.Props) {
 }
 
 export {
+  selectTriggerVariants,
   Select,
   SelectTrigger,
   SelectButton,

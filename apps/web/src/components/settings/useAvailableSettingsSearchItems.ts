@@ -46,6 +46,14 @@ export function useAvailableSettingsSearchItems() {
               hasServerConfig: environment.serverConfig !== null,
             }),
           ),
+          hasMacProviderSettingsEnvironment: environments.some(
+            (environment) =>
+              environment.serverConfig?.environment.platform.os === "darwin" &&
+              isProviderSettingsEnvironmentAvailable({
+                connectionPhase: environment.connection.phase,
+                hasServerConfig: environment.serverConfig !== null,
+              }),
+          ),
           canManageLocalBackend,
           isWslSettingsRowVisible: isWslSettingsRowVisible({
             state: desktopWsl.data,

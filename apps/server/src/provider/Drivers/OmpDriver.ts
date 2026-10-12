@@ -25,6 +25,7 @@ import type { ServerProviderDraft } from "../providerSnapshot.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
 import {
   enrichProviderSnapshotWithVersionAdvisory,
+  makeCachedProviderMaintenanceResolution,
   makePackageManagedProviderMaintenanceResolver,
   resolveProviderMaintenanceCapabilitiesEffect,
 } from "../providerMaintenance.ts";
@@ -51,7 +52,6 @@ const TEXT_GENERATION_ARGS = [
 const UPDATE = makePackageManagedProviderMaintenanceResolver({
   provider: DRIVER_KIND,
   npmPackageName: "@oh-my-pi/pi-coding-agent",
-  homebrewFormula: null,
   nativeUpdate: null,
 });
 
@@ -94,6 +94,8 @@ export const OmpDriver: ProviderDriver<OmpSettings, OmpDriverEnv> = {
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const httpClient = yield* HttpClient.HttpClient;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
       const serverConfig = yield* ServerConfig;
       const serverSettings = yield* ServerSettingsService;
       const eventLoggers = yield* ProviderEventLoggers;
@@ -109,10 +111,16 @@ export const OmpDriver: ProviderDriver<OmpSettings, OmpDriverEnv> = {
         accentColor,
         continuationGroupKey: continuationIdentity.continuationKey,
       });
-      const maintenanceCapabilities = yield* resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
-        binaryPath: effectiveConfig.binaryPath,
-        env: processEnv,
-      });
+      const resolveMaintenance = yield* makeCachedProviderMaintenanceResolution(
+        resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
+          binaryPath: effectiveConfig.binaryPath,
+          env: processEnv,
+        }).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+        ),
+      );
       const adapter = yield* makePiAdapter(effectiveConfig, {
         provider: DRIVER_KIND,
         providerName: PROVIDER_NAME,
@@ -139,7 +147,7 @@ export const OmpDriver: ProviderDriver<OmpSettings, OmpDriverEnv> = {
       );
       const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
       const snapshot = yield* makeManagedServerProvider<ProviderSnapshotSettings<OmpSettings>>({
-        maintenanceCapabilities,
+        resolveMaintenance,
         getSettings: snapshotSettings.getSettings,
         streamSettings: snapshotSettings.streamSettings,
         haveSettingsChanged: haveProviderSnapshotSettingsChanged,
@@ -149,9 +157,12 @@ export const OmpDriver: ProviderDriver<OmpSettings, OmpDriverEnv> = {
           ),
         checkProvider,
         enrichSnapshot: ({ settings, snapshot, publishSnapshot }) =>
-          enrichProviderSnapshotWithVersionAdvisory(snapshot, maintenanceCapabilities, {
-            enableProviderUpdateChecks: settings.enableProviderUpdateChecks,
-          }).pipe(
+          resolveMaintenance().pipe(
+            Effect.flatMap((maintenanceCapabilities) =>
+              enrichProviderSnapshotWithVersionAdvisory(snapshot, maintenanceCapabilities, {
+                enableProviderUpdateChecks: settings.enableProviderUpdateChecks,
+              }),
+            ),
             Effect.provideService(HttpClient.HttpClient, httpClient),
             Effect.flatMap(publishSnapshot),
           ),

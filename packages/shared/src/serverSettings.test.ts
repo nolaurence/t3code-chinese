@@ -24,6 +24,29 @@ import {
 const FOLDED_SERVER_SETTINGS = { ...DEFAULT_SERVER_SETTINGS, projectSettingsFolded: true };
 
 describe("serverSettings helpers", () => {
+  it("preserves a redacted Midscene API key while editing a model and permits replacing or clearing it", () => {
+    const saved = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      midscene: { modelApiKey: "saved-key", modelName: "vision-model" },
+    });
+    const edited = applyServerSettingsPatch(saved, {
+      midscene: { modelApiKey: "", modelApiKeyRedacted: true, modelName: "updated-model" },
+    });
+    expect(edited.midscene).toMatchObject({
+      modelApiKey: "saved-key",
+      modelApiKeyRedacted: false,
+      modelName: "updated-model",
+    });
+    const replaced = applyServerSettingsPatch(edited, {
+      midscene: { modelApiKey: "replacement-key", modelApiKeyRedacted: false },
+    });
+    expect(replaced.midscene.modelApiKey).toBe("replacement-key");
+    expect(
+      applyServerSettingsPatch(replaced, {
+        midscene: { modelApiKey: "", modelApiKeyRedacted: false },
+      }).midscene.modelApiKey,
+    ).toBe("");
+  });
+
   it("changes a cleanup rule without replacing the machine's other rules", () => {
     const enabled = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
       storageCleanup: { worktreeAfterDays: 8, worktreeOnMerge: true, logsAfterDays: 30 },

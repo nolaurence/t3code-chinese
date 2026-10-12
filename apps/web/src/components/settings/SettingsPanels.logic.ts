@@ -119,6 +119,8 @@ export type BrowserDefaultSettings = Pick<
   | "browserDefaultZoomFactor"
   | "browserDefaultAppearance"
   | "browserRecordingFrameRate"
+  | "browserRecordingShowKeyPresses"
+  | "browserRecordingShowMousePresses"
   | "browserLinkTarget"
   | "browserAutoShowFloatingPreview"
 >;
@@ -159,14 +161,22 @@ export function getChangedBrowserSettingLabels(
       : []),
     ...(settings.browserDefaultAppearance !== DEFAULT_UNIFIED_SETTINGS.browserDefaultAppearance
       ? [t?.("settings.restore.browserAppearance") ?? "Browser appearance"]
-        : []),
-      ...(settings.browserRecordingFrameRate !== DEFAULT_UNIFIED_SETTINGS.browserRecordingFrameRate
-        ? [t?.("settings.restore.recordingFrameRate") ?? "Recording frame rate"]
-        : []),
-      ...(settings.browserLinkTarget !== DEFAULT_UNIFIED_SETTINGS.browserLinkTarget
-        ? [t?.("settings.restore.openLinksIn") ?? "Open links in"]
-        : []),
-      ...(settings.browserAutoShowFloatingPreview !==
+      : []),
+    ...(settings.browserRecordingFrameRate !== DEFAULT_UNIFIED_SETTINGS.browserRecordingFrameRate
+      ? [t?.("settings.restore.recordingFrameRate") ?? "Recording frame rate"]
+      : []),
+    ...(settings.browserRecordingShowKeyPresses !==
+    DEFAULT_UNIFIED_SETTINGS.browserRecordingShowKeyPresses
+      ? [t?.("settings.restore.recordingKeyPresses") ?? "Recording key presses"]
+      : []),
+    ...(settings.browserRecordingShowMousePresses !==
+    DEFAULT_UNIFIED_SETTINGS.browserRecordingShowMousePresses
+      ? [t?.("settings.restore.recordingMousePresses") ?? "Recording mouse presses"]
+      : []),
+    ...(settings.browserLinkTarget !== DEFAULT_UNIFIED_SETTINGS.browserLinkTarget
+      ? [t?.("settings.restore.openLinksIn") ?? "Open links in"]
+      : []),
+    ...(settings.browserAutoShowFloatingPreview !==
     DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview
       ? [t?.("settings.restore.floatingPreview") ?? "Floating preview"]
       : []),
