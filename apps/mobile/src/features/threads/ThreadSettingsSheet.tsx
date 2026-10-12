@@ -97,7 +97,6 @@ const PRIMARY_PROVIDER_DRIVERS: ReadonlySet<string> = new Set([
   "claudeAgent",
   "codex",
   "antigravity",
-  "githubCopilot",
   "piAgent",
   "omp",
 ]);

@@ -2694,12 +2694,6 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "server" },
           ),
-        [WS_METHODS.providerDiscoverCopilotLlmModels]: (input) =>
-          observeRpcEffect(
-            WS_METHODS.providerDiscoverCopilotLlmModels,
-            providerService.discoverCopilotLlmModels(input),
-            { "rpc.aggregate": "provider" },
-          ),
         [WS_METHODS.providerUploadFeedback]: (input) =>
           observeRpcEffect(
             WS_METHODS.providerUploadFeedback,

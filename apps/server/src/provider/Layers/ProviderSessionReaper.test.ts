@@ -216,7 +216,6 @@ describe("ProviderSessionReaper", () => {
       rollbackConversation: () => unsupported(),
       readThreadContext: () => unsupported(),
       uploadFeedback: () => unsupported(),
-      discoverCopilotLlmModels: () => Effect.succeed([]),
       streamEvents: Stream.empty,
     };
 

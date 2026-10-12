@@ -126,7 +126,6 @@ const startupDependencies = Layer.mergeAll(
     rollbackConversation: () => Effect.die("unused"),
     readThreadContext: () => Effect.die("unused"),
     uploadFeedback: () => Effect.die("unused"),
-    discoverCopilotLlmModels: () => Effect.succeed([]),
     streamEvents: Stream.empty,
   }),
 );

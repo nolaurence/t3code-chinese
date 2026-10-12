@@ -16,7 +16,6 @@ import {
   ASSISTANT_CITATION_MAX_TEXT_LENGTH,
   AssistantCitation,
   ApprovalRequestId,
-  CopilotLlmProviderModelDiscoveryError,
   EnvironmentId,
   EventId,
   MessageId,
@@ -1620,74 +1619,6 @@ it.effect(
 );
 
 routing.layer("ProviderServiceLive routing", (it) => {
-  it.effect("discovers Copilot LLM models with their metadata and provider authentication", () =>
-    Effect.gen(function* () {
-      const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-        new Response(
-          encodeJson({
-            data: [
-              {
-                id: "custom-reasoner",
-                display_name: "Custom Reasoner",
-                context_window: 200_000,
-                supported_reasoning_efforts: ["low", "high"],
-                default_reasoning_effort: "high",
-              },
-              { id: "plain-model" },
-            ],
-          }),
-          { status: 200 },
-        ),
-      );
-      yield* Effect.addFinalizer(() => Effect.sync(() => fetch.mockRestore()));
-      const provider = yield* ProviderService.ProviderService;
-
-      const models = yield* provider.discoverCopilotLlmModels({
-        type: "openai",
-        baseUrl: "https://gateway.example.com/v1",
-        apiKey: "sk-test",
-        azureApiVersion: "",
-      });
-
-      assert.deepStrictEqual(models, [
-        {
-          id: "custom-reasoner",
-          displayName: "Custom Reasoner",
-          contextWindowTokens: 200_000,
-          reasoningEfforts: ["low", "high"],
-          defaultReasoningEffort: "high",
-        },
-        { id: "plain-model", contextWindowTokens: 128_000 },
-      ]);
-      assert.strictEqual(fetch.mock.calls.length, 1);
-      const [url, init] = fetch.mock.calls[0]!;
-      assert.strictEqual(String(url), "https://gateway.example.com/v1/models");
-      assert.strictEqual(new Headers(init?.headers).get("Authorization"), "Bearer sk-test");
-    }).pipe(Effect.scoped),
-  );
-
-  it.effect("returns a typed error when Copilot LLM model discovery fails", () =>
-    Effect.gen(function* () {
-      const fetch = vi
-        .spyOn(globalThis, "fetch")
-        .mockRejectedValue(new Error("Network unavailable for sk-test"));
-      yield* Effect.addFinalizer(() => Effect.sync(() => fetch.mockRestore()));
-      const provider = yield* ProviderService.ProviderService;
-
-      const error = yield* provider
-        .discoverCopilotLlmModels({
-          type: "openai",
-          baseUrl: "https://gateway.example.com/v1",
-          apiKey: "sk-test",
-          azureApiVersion: "",
-        })
-        .pipe(Effect.flip);
-
-      assert.instanceOf(error, CopilotLlmProviderModelDiscoveryError);
-      assert.strictEqual(error.message, "Failed to fetch models from the configured LLM provider.");
-    }).pipe(Effect.scoped),
-  );
-
   it.effect.each([CODEX_DRIVER, CLAUDE_AGENT_DRIVER, CURSOR_DRIVER])(
     "rejects missing, file, and saved workspace paths before starting %s",
     (driver) =>

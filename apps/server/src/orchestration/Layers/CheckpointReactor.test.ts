@@ -141,7 +141,6 @@ function createProviderServiceHarness(
     rollbackConversation,
     readThreadContext: () => unsupported(),
     uploadFeedback: () => unsupported(),
-    discoverCopilotLlmModels: () => Effect.succeed([]),
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
     },

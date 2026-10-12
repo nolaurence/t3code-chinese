@@ -70,7 +70,6 @@ const makeProviderService = (liveThreadIds: ReadonlyArray<ThreadId> = []) =>
     rollbackConversation: () => Effect.die("unused"),
     readThreadContext: () => Effect.die("unused"),
     uploadFeedback: () => Effect.die("unused"),
-    discoverCopilotLlmModels: () => Effect.succeed([]),
     streamEvents: Stream.empty,
   }) satisfies ProviderService.ProviderService["Service"];
 

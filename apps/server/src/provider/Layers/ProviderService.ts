@@ -10,7 +10,6 @@
  * @module ProviderServiceLive
  */
 import {
-  CopilotLlmProviderModelDiscoveryError,
   EventId,
   MessageId,
   ModelSelection,
@@ -55,7 +54,6 @@ import * as SchemaIssue from "effect/SchemaIssue";
 import * as Stream from "effect/Stream";
 
 import { appendUserInputAttachmentPaths } from "../userInputAttachments.ts";
-import { discoverCopilotLlmProviderModels } from "../copilotRuntime.ts";
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
 import * as ServerConfig from "../../config.ts";
 import * as DeviceService from "../../device/DeviceService.ts";
@@ -2484,18 +2482,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     ),
   );
 
-  const discoverCopilotLlmModels: ProviderServiceMethod<"discoverCopilotLlmModels"> = Effect.fn(
-    "ProviderService.discoverCopilotLlmModels",
-  )(function* (input) {
-    return yield* Effect.tryPromise({
-      try: () => discoverCopilotLlmProviderModels(input),
-      catch: () =>
-        new CopilotLlmProviderModelDiscoveryError({
-          message: "Failed to fetch models from the configured LLM provider.",
-        }),
-    });
-  });
-
   return {
     startSession,
     sendTurn,
@@ -2511,7 +2497,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     rollbackConversation,
     readThreadContext,
     uploadFeedback,
-    discoverCopilotLlmModels,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (ProviderRuntimeIngestion, CheckpointReactor, etc.) each
     // independently receive all runtime events.

@@ -6335,40 +6335,6 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("preserves custom provider model metadata through websocket discovery", () =>
-    Effect.gen(function* () {
-      const models = [
-        {
-          id: "custom-reasoning-model",
-          displayName: "Custom reasoning model",
-          contextWindowTokens: 256_000,
-          reasoningEfforts: ["low", "high"],
-          defaultReasoningEffort: "high",
-        },
-        { id: "plain-model" },
-      ] as const;
-      yield* buildAppUnderTest({
-        layers: {
-          providerService: {
-            discoverCopilotLlmModels: () => Effect.succeed(models),
-          },
-        },
-      });
-
-      const result = yield* Effect.scoped(
-        withWsRpcClient(yield* getWsServerUrl("/ws"), (client) =>
-          client[WS_METHODS.providerDiscoverCopilotLlmModels]({
-            type: "openai",
-            baseUrl: "https://provider.example/v1",
-            apiKey: "test-key",
-            azureApiVersion: "",
-          }),
-        ),
-      );
-      assert.deepStrictEqual(result, models);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
-  );
-
   it.effect("uploads Codex thread feedback through websocket rpc", () =>
     Effect.gen(function* () {
       const input = {

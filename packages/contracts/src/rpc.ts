@@ -265,14 +265,7 @@ import {
   ProviderConsumeResetCreditResult,
 } from "./providerUsageLimits.ts";
 import { UsagePricing, UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
-import {
-  CopilotLlmProviderModel,
-  CopilotLlmProviderModelDiscoveryError,
-  CopilotLlmProviderModelDiscoveryRequest,
-  ServerSettings,
-  ServerSettingsError,
-  ServerSettingsPatch,
-} from "./settings.ts";
+import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
 import {
   ProjectCloneActionInput,
   ProjectCloneActionResult,
@@ -318,7 +311,6 @@ export const WS_METHODS = {
   attachmentsDelete: "attachments.delete",
 
   // Provider methods
-  providerDiscoverCopilotLlmModels: "provider.discoverCopilotLlmModels",
   providerUploadFeedback: "provider.uploadFeedback",
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
@@ -1066,15 +1058,6 @@ const WsAttachmentsDeleteRpc = Rpc.make(WS_METHODS.attachmentsDelete, {
   error: EnvironmentAuthorizationError,
 });
 
-const WsProviderDiscoverCopilotLlmModelsRpc = Rpc.make(
-  WS_METHODS.providerDiscoverCopilotLlmModels,
-  {
-    payload: CopilotLlmProviderModelDiscoveryRequest,
-    success: Schema.Array(CopilotLlmProviderModel),
-    error: Schema.Union([CopilotLlmProviderModelDiscoveryError, EnvironmentAuthorizationError]),
-  },
-);
-
 const WsProviderUploadFeedbackRpc = Rpc.make(WS_METHODS.providerUploadFeedback, {
   payload: ProviderUploadFeedbackInput,
   success: ProviderUploadFeedbackResult,
@@ -1557,7 +1540,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsAssetsCreateUrlRpc,
   WsAttachmentsCreateUploadUrlRpc,
   WsAttachmentsDeleteRpc,
-  WsProviderDiscoverCopilotLlmModelsRpc,
   WsProviderUploadFeedbackRpc,
   WsSubscribeVcsStatusRpc,
   WsSubscribeWorktreeSetupRpc,

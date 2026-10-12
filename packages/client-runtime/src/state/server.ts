@@ -1108,14 +1108,6 @@ export function createServerEnvironmentAtoms<R, E>(
           ]),
       },
     }),
-    discoverCopilotLlmModels: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:discover-copilot-llm-models",
-      tag: WS_METHODS.providerDiscoverCopilotLlmModels,
-      concurrency: {
-        mode: "singleFlight",
-        key: ({ environmentId, input }) => JSON.stringify([environmentId, input]),
-      },
-    }),
     updateProvider: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:update-provider",
       tag: WS_METHODS.serverUpdateProvider,

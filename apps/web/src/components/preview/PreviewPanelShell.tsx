@@ -151,7 +151,9 @@ export function PreviewPanelShell(props: {
       data-preview-panel-mode={props.mode}
       data-preview-panel-maximized={maximized ? "true" : "false"}
     >
-      {isInline && !maximized ? <RightPanelResizeHandle handlers={handlers} side={side} /> : null}
+      {isInline && !maximized ? (
+        <RightPanelResizeHandle handlers={handlers} side={side === "left" ? "right" : "left"} />
+      ) : null}
       <div className={cn("h-full min-h-0 w-full", collapsible && "overflow-clip")}>
         <div
           className="flex h-full min-h-0 min-w-0 flex-col"

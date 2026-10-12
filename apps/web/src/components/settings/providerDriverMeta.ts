@@ -1,7 +1,6 @@
 import {
   AntigravitySettings,
   ClaudeSettings,
-  CopilotSettings,
   CodexSettings,
   CursorSettings,
   GrokSettings,
@@ -15,7 +14,6 @@ import {
   AntigravityIcon,
   ClaudeAI,
   CursorIcon,
-  GithubCopilotIcon,
   GrokIcon,
   type Icon,
   OpenAI,
@@ -61,13 +59,6 @@ const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
     label: "Claude",
     icon: ClaudeAI,
     settingsSchema: ClaudeSettings,
-  },
-  {
-    value: ProviderDriverKind.make("githubCopilot"),
-    label: "GitHub Copilot",
-    icon: GithubCopilotIcon,
-    badgeLabel: "SDK",
-    settingsSchema: CopilotSettings,
   },
   {
     value: ProviderDriverKind.make("cursor"),
