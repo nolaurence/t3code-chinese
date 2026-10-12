@@ -6394,7 +6394,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("serves absolute host media without a local thread and rejects relative media", () =>
+  it.effect("serves absolute host media and office documents without a local thread", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
       const fileSystem = yield* FileSystem.FileSystem;
@@ -6409,6 +6409,11 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             for (const [name, mimeType] of [
               ["screenshot.png", "image/png"],
               ["recording.mp4", "video/mp4"],
+              // Office renderers consume bytes without relying on an inline MIME type.
+              ["调研表.xlsx", null],
+              ["调研表.xls", null],
+              ["report.docx", null],
+              ["slides.pptx", null],
             ] as const) {
               const filePath = path.join(directory, name);
               yield* fileSystem.writeFileString(filePath, "host media bytes");
@@ -6417,7 +6422,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
               });
               const response = yield* HttpClient.get(issued.relativeUrl);
               assert.equal(response.status, 200);
-              assert.equal(response.headers["content-type"], mimeType);
+              if (mimeType !== null) assert.equal(response.headers["content-type"], mimeType);
               assert.equal(yield* response.text, "host media bytes");
 
               const error = yield* client[WS_METHODS.assetsCreateUrl]({
@@ -6450,6 +6455,18 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
             assert.equal(response.status, 200);
             assert.equal(response.headers["content-type"], "text/html; charset=utf-8");
             assert.equal(yield* response.text, "<p>draft</p>");
+            for (const name of ["调研表.xlsx", "调研表.xls", "report.docx", "slides.pptx"]) {
+              yield* fileSystem.writeFileString(
+                path.join(directory, name),
+                "office document bytes",
+              );
+              const document = yield* client[WS_METHODS.assetsCreateUrl]({
+                resource: { _tag: "draft-workspace-file", cwd: directory, path: name },
+              });
+              const documentResponse = yield* HttpClient.get(document.relativeUrl);
+              assert.equal(documentResponse.status, 200);
+              assert.equal(yield* documentResponse.text, "office document bytes");
+            }
           }),
         ),
       );

@@ -40,6 +40,7 @@ import {
 } from "react";
 
 import { isElectron } from "~/env";
+import { useI18n, type Translate } from "~/i18n";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
@@ -155,15 +156,15 @@ export function shouldOpenDefaultBrowserProfileFromMenuClick(
   return pointerType !== "touch";
 }
 
-const SURFACE_DISABLED_REASONS = {
-  browser: "Browser previews are only available in the T3 Code desktop app.",
-  terminal: "Terminal surfaces are only available from a project thread.",
-  files: "Files are only available when a project is open.",
-  diff: "Diff is only available for server threads in Git repositories.",
-  pullRequest: "This thread's branch has no pull request yet.",
-  pullRequests: "No linked pull requests are available for this thread.",
-  agents: "Agents are only available from a thread.",
-  device: "Devices are only available from a thread.",
+const SURFACE_DISABLED_REASON_KEYS = {
+  browser: "panel.browserUnavailable",
+  terminal: "panel.terminalUnavailable",
+  files: "panel.filesUnavailable",
+  diff: "panel.diffUnavailable",
+  pullRequest: "panel.pullRequestUnavailable",
+  pullRequests: "panel.linkedPullRequestsUnavailable",
+  agents: "panel.agentsUnavailable",
+  device: "panel.deviceUnavailable",
 } as const;
 
 /** Overlays that must win over the launcher's letter shortcuts. */
@@ -179,15 +180,15 @@ const LAUNCHER_SHORTCUT_BLOCKING_LAYERS = [
 ].join(",");
 
 /** One-line unavailability hints for the empty-state rows. */
-const SURFACE_UNAVAILABLE_HINTS = {
-  browser: "Only available in the desktop app.",
-  terminal: "Available when a project is open.",
-  files: "Available when a project is open.",
-  diff: "Available for Git repositories.",
-  pullRequest: "No pull request on this branch yet.",
-  pullRequests: "No linked pull requests available.",
-  agents: "Available from a thread.",
-  device: "Available from a thread.",
+const SURFACE_UNAVAILABLE_HINT_KEYS = {
+  browser: "panel.browserUnavailableShort",
+  terminal: "panel.terminalUnavailableShort",
+  files: "panel.filesUnavailableShort",
+  diff: "panel.diffUnavailableShort",
+  pullRequest: "panel.pullRequestUnavailableShort",
+  pullRequests: "panel.linkedPullRequestsUnavailableShort",
+  agents: "panel.agentsUnavailableShort",
+  device: "panel.deviceUnavailableShort",
 } as const;
 
 type TabContextMenuAction =
@@ -226,10 +227,11 @@ function previewTabIdOf(
 export function tabMuteMenuItem(input: {
   overlay: DesktopPreviewOverlay | null;
   canResolveRuntimeTabId: boolean;
+  t: Translate;
 }): { label: string; disabled: boolean } {
   const muted = input.overlay?.audioMuted ?? false;
   return {
-    label: muted ? "Unmute tab" : "Mute tab",
+    label: input.t(muted ? "panel.unmuteTab" : "panel.muteTab"),
     disabled: input.overlay === null || !input.canResolveRuntimeTabId,
   };
 }
@@ -338,80 +340,81 @@ function RightPanelEmptyState(props: {
   deviceAvailable: boolean;
   liveAgentCount: number;
 }) {
+  const { t } = useI18n();
   // -1 means no highlight: it only appears on hover or arrow use.
   const [highlight, setHighlight] = useState(-1);
 
   const actions = [
     {
-      label: "Browser",
+      label: t("panel.browser"),
       icon: Globe2,
       shortcut: "B",
       available: props.browserAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.browser,
+      disabledReason: t(SURFACE_UNAVAILABLE_HINT_KEYS.browser),
       onClick: props.onAddBrowser,
       badgeCount: 0,
     },
     {
-      label: "Terminal",
+      label: t("panel.terminal"),
       icon: TerminalSquare,
       shortcut: "T",
       available: props.terminalAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.terminal,
+      disabledReason: t(SURFACE_UNAVAILABLE_HINT_KEYS.terminal),
       onClick: props.onAddTerminal,
       badgeCount: 0,
     },
     {
-      label: "Files",
+      label: t("panel.files"),
       icon: Files,
       shortcut: "F",
       available: props.filesAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.files,
+      disabledReason: t(SURFACE_UNAVAILABLE_HINT_KEYS.files),
       onClick: props.onAddFiles,
       badgeCount: 0,
     },
     {
-      label: "Diff",
+      label: t("panel.diff"),
       icon: FileDiff,
       shortcut: "D",
       available: props.diffAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.diff,
+      disabledReason: t(SURFACE_UNAVAILABLE_HINT_KEYS.diff),
       onClick: props.onAddDiff,
       badgeCount: 0,
     },
     {
-      label: "Pull request",
+      label: t("panel.pullRequest"),
       icon: PullRequestGlyph.pullRequest,
       shortcut: "P",
       available: props.pullRequestAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequest,
+      disabledReason: t(SURFACE_UNAVAILABLE_HINT_KEYS.pullRequest),
       onClick: props.onAddPullRequest,
       badgeCount: 0,
     },
     {
-      label: "Linked pull requests",
+      label: t("panel.linkedPullRequests"),
       icon: PullRequestGlyph.link,
       shortcut: "L",
       available: props.pullRequestsAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequests,
+      disabledReason: t(SURFACE_UNAVAILABLE_HINT_KEYS.pullRequests),
       onClick: props.onAddPullRequests,
       badgeCount: 0,
     },
     {
-      label: "Agents",
+      label: t("panel.agents"),
       icon: Bot,
       shortcut: "A",
       available: props.agentsAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.agents,
+      disabledReason: t(SURFACE_UNAVAILABLE_HINT_KEYS.agents),
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
     },
     {
-      label: "Device",
-      description: "Watch an iOS Simulator or Android Emulator.",
+      label: t("panel.device"),
+      description: t("panel.deviceDescription"),
       icon: Smartphone,
       shortcut: "M",
       available: props.deviceAvailable,
-      disabledReason: SURFACE_UNAVAILABLE_HINTS.device,
+      disabledReason: t(SURFACE_UNAVAILABLE_HINT_KEYS.device),
       onClick: props.onAddDevice,
       badgeCount: 0,
     },
@@ -504,7 +507,7 @@ function RightPanelEmptyState(props: {
       ref={focusOnMount}
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      aria-label="Open a surface"
+      aria-label={t("panel.openSurface")}
       data-surface-launcher-keys={availableActions.map((action) => action.shortcut).join("")}
       className={cn(
         "flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 outline-none",
@@ -514,7 +517,9 @@ function RightPanelEmptyState(props: {
       )}
     >
       <div className="w-full max-w-xs py-6">
-        <h3 className="mb-3 text-center font-medium text-foreground text-sm">Open a surface</h3>
+        <h3 className="mb-3 text-center font-medium text-foreground text-sm">
+          {t("panel.openSurface")}
+        </h3>
         <div className="flex flex-col gap-0.5">
           {actions.map((action) =>
             action.available ? (
@@ -523,7 +528,7 @@ function RightPanelEmptyState(props: {
               // wrapper: the chooser overlays the row, and a pointer moving
               // onto it must not read as leaving the row.
               <div
-                key={action.label}
+                key={action.shortcut}
                 className="group relative"
                 onMouseEnter={() => setHighlight(availableActions.indexOf(action))}
                 onMouseLeave={() =>
@@ -544,7 +549,7 @@ function RightPanelEmptyState(props: {
                   <span
                     className={cn(
                       "min-w-0 flex-1 truncate",
-                      action.label === "Browser" && props.browserProfiles.length > 1 && "pr-7",
+                      action.shortcut === "B" && props.browserProfiles.length > 1 && "pr-7",
                     )}
                   >
                     {action.label}
@@ -556,12 +561,12 @@ function RightPanelEmptyState(props: {
                   default profile, the chevron picks another. Only worth showing
                   once there is something to choose between.
                 */}
-                {action.label === "Browser" && props.browserProfiles.length > 1 ? (
+                {action.shortcut === "B" && props.browserProfiles.length > 1 ? (
                   <Menu>
                     <MenuTrigger
                       render={
                         <Button
-                          aria-label="Open browser in a profile"
+                          aria-label={t("panel.openBrowserProfile")}
                           className="absolute top-1/2 right-8 -translate-y-1/2"
                           size="icon-xs"
                           variant="ghost-muted"
@@ -585,7 +590,7 @@ function RightPanelEmptyState(props: {
               </div>
             ) : (
               <DisabledReasonTooltip
-                key={action.label}
+                key={action.shortcut}
                 reason={action.disabledReason}
                 trigger={
                   <div
@@ -611,12 +616,13 @@ function surfaceTitle(
   surface: RightPanelSurface,
   sessions: Readonly<Record<string, PreviewSessionSnapshot>>,
   terminalLabelsById: ReadonlyMap<string, string>,
+  t: Translate,
 ): string {
   switch (surface.kind) {
     case "diff":
-      return "Diff";
+      return t("panel.diff");
     case "files":
-      return "Files";
+      return t("panel.files");
     case "file":
       return surface.relativePath.slice(
         Math.max(surface.relativePath.lastIndexOf("/"), surface.relativePath.lastIndexOf("\\")) + 1,
@@ -629,19 +635,19 @@ function surfaceTitle(
     case "pull-request":
       return `#${surface.number}`;
     case "pull-requests":
-      return "Pull requests";
+      return t("panel.pullRequests");
     case "agents":
-      return "Agents";
+      return t("panel.agents");
     case "device":
-      return surface.title ?? surface.target?.name ?? "Device";
+      return surface.title ?? surface.target?.name ?? t("panel.device");
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
-      if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
+      if (!snapshot || snapshot.navStatus._tag === "Idle") return t("panel.browser");
       if (snapshot.navStatus.title.trim().length > 0) return snapshot.navStatus.title;
       try {
-        return new URL(snapshot.navStatus.url).host || "Browser";
+        return new URL(snapshot.navStatus.url).host || t("panel.browser");
       } catch {
-        return "Browser";
+        return t("panel.browser");
       }
     }
   }
@@ -827,6 +833,7 @@ function PullRequestSurfaceIcon({
 }
 
 export function RightPanelTabs(props: RightPanelTabsProps) {
+  const { t } = useI18n();
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
   const browserProfiles = useBrowserDefaults().profiles;
   const { resolvedTheme } = useTheme();
@@ -872,67 +879,67 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
 
   const addSurfaceActions = [
     {
-      label: "Browser",
+      label: t("panel.browser"),
       icon: Globe2,
       shortcut: "B",
       available: props.browserAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.browser,
+      disabledReason: t(SURFACE_DISABLED_REASON_KEYS.browser),
       onClick: props.onAddBrowser,
     },
     {
-      label: "Terminal",
+      label: t("panel.terminal"),
       icon: TerminalSquare,
       shortcut: "T",
       available: props.terminalAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.terminal,
+      disabledReason: t(SURFACE_DISABLED_REASON_KEYS.terminal),
       onClick: props.onAddTerminal,
     },
     {
-      label: "Files",
+      label: t("panel.files"),
       icon: Files,
       shortcut: "F",
       available: props.filesAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.files,
+      disabledReason: t(SURFACE_DISABLED_REASON_KEYS.files),
       onClick: props.onAddFiles,
     },
     {
-      label: "Diff",
+      label: t("panel.diff"),
       icon: FileDiff,
       shortcut: "D",
       available: props.diffAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.diff,
+      disabledReason: t(SURFACE_DISABLED_REASON_KEYS.diff),
       onClick: props.onAddDiff,
     },
     {
-      label: "Pull request",
+      label: t("panel.pullRequest"),
       icon: PullRequestGlyph.pullRequest,
       shortcut: "P",
       available: props.pullRequestAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.pullRequest,
+      disabledReason: t(SURFACE_DISABLED_REASON_KEYS.pullRequest),
       onClick: props.onAddPullRequest,
     },
     {
-      label: "Linked pull requests",
+      label: t("panel.linkedPullRequests"),
       icon: PullRequestGlyph.link,
       shortcut: "L",
       available: props.pullRequestsAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.pullRequests,
+      disabledReason: t(SURFACE_DISABLED_REASON_KEYS.pullRequests),
       onClick: props.onAddPullRequests,
     },
     {
-      label: "Agents",
+      label: t("panel.agents"),
       icon: Bot,
       shortcut: "A",
       available: props.agentsAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.agents,
+      disabledReason: t(SURFACE_DISABLED_REASON_KEYS.agents),
       onClick: props.onAddAgents,
     },
     {
-      label: "Device",
+      label: t("panel.device"),
       icon: Smartphone,
       shortcut: "M",
       available: props.deviceAvailable,
-      disabledReason: SURFACE_DISABLED_REASONS.device,
+      disabledReason: t(SURFACE_DISABLED_REASON_KEYS.device),
       onClick: props.onAddDevice,
     },
   ] as const;
@@ -959,9 +966,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
 
       const items: ContextMenuItem<TabContextMenuAction>[] = [];
       if (surface.kind === "device" && props.onRenameDevice)
-        items.push({ id: "rename", label: "Rename" });
+        items.push({ id: "rename", label: t("panel.rename") });
       if (surface.kind === "file" && surface.attachment === undefined) {
-        items.push({ id: "copy-path", label: "Copy path" });
+        items.push({ id: "copy-path", label: t("panel.copyPath") });
       }
       const menuPreviewTabId = previewTabIdOf(surface, props.previewSessions);
       // Desktop overlay state only arrives once the preview manager has created
@@ -979,24 +986,25 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           ...tabMuteMenuItem({
             overlay: menuOverlay,
             canResolveRuntimeTabId: props.previewRuntimeTabId !== undefined,
+            t,
           }),
         });
       }
       items.push(
-        { id: "close", label: "Close" },
+        { id: "close", label: t("panel.close") },
         {
           id: "close-others",
-          label: "Close others",
+          label: t("panel.closeOthers"),
           disabled: props.surfaces.length <= 1,
         },
         {
           id: "close-to-right",
-          label: "Close to the right",
+          label: t("panel.closeRight"),
           disabled: surfaceIndex >= props.surfaces.length - 1,
         },
         {
           id: "close-all",
-          label: "Close all",
+          label: t("panel.closeAll"),
           disabled: props.surfaces.length === 0,
         },
       );
@@ -1039,7 +1047,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           break;
       }
     },
-    [props],
+    [props, t],
   );
   const handleTabMouseDown = useCallback((event: ReactMouseEvent) => {
     if (event.button !== 1) return;
@@ -1113,20 +1121,31 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
         className={cn(
           "flex h-[var(--workspace-topbar-height)] min-h-[var(--workspace-topbar-height)] shrink-0 items-center gap-1",
           // The fixed titlebar control cluster overlays the panel's top corner
-          // on its outer side, so the tabs reserve room there.
-          props.side === "left" ? "pl-28" : "pl-2",
+          // on its outer side, so the tabs reserve room there. Left-docked
+          // panels host the cluster in flow at the bar's start instead.
+          "pl-2",
           // The sheet overlays from the viewport top, so its tab bar keeps
           // the titlebar's height: a compact row re-centers the layout
           // controls a few pixels higher and the cluster jumps on open.
           props.mode === "inline" && !props.layoutControls && props.side !== "left"
-            ? "pr-28"
+            ? "pr-36"
             : "pr-3",
+          ownsDesktopTitleBar &&
+            // Native window controls sit at the top-right over the chat header
+            // while a left-docked panel occupies the top-left, unless the
+            // panel is maximized and covers the whole width.
+            (props.side !== "left" || props.maximized) &&
+            "wco:pr-(--workspace-native-controls-inset)",
           ownsDesktopTitleBar && "drag-region",
-          ownsDesktopTitleBar && "wco:pr-(--workspace-native-controls-inset)",
-          props.mode === "inline" && props.maximized && COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
+          // A maximized panel or a left-docked one must clear the collapsed
+          // sidebar rail's titlebar controls at viewport-left.
+          props.mode === "inline" &&
+            (props.maximized || props.side === "left") &&
+            COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
         )}
         data-right-panel-tabbar
       >
+        {props.side === "left" ? props.layoutControls : null}
         <ScrollArea
           radius="none"
           ref={tabListRef}
@@ -1139,7 +1158,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             {props.surfaces.map((surface) => {
               const active = surface.id === props.activeSurfaceId;
               const pending = props.pendingSurfaceIds.has(surface.id);
-              const title = surfaceTitle(surface, props.previewSessions, props.terminalLabelsById);
+              const title = surfaceTitle(
+                surface,
+                props.previewSessions,
+                props.terminalLabelsById,
+                t,
+              );
               const previewTabId = previewTabIdOf(surface, props.previewSessions);
               // Desktop state is keyed by the session id, but desktop actions
               // must be addressed with the runtime id.
@@ -1165,7 +1189,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   )}
                 >
                   <PanelTabCloseButton
-                    label={`Close ${title}`}
+                    label={t("panel.closeNamed", { title })}
                     onClick={() => props.onCloseSurface(surface)}
                   >
                     <SurfaceIcon
@@ -1190,7 +1214,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                           <button
                             type="button"
                             className="cursor-pointer flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-muted"
-                            aria-label={audio === "muted" ? `Unmute ${title}` : `Mute ${title}`}
+                            aria-label={t(
+                              audio === "muted" ? "panel.unmuteNamed" : "panel.muteNamed",
+                              { title },
+                            )}
                             onClick={(event) => {
                               // Sibling of the close button, inside a tab that
                               // activates on click: keep this to the toggle.
@@ -1208,12 +1235,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                           </button>
                         }
                       />
-                      <TooltipPopup>{audio === "muted" ? "Unmute tab" : "Mute tab"}</TooltipPopup>
+                      <TooltipPopup>
+                        {t(audio === "muted" ? "panel.unmuteTab" : "panel.muteTab")}
+                      </TooltipPopup>
                     </Tooltip>
                   )}
                   {renamingDevice === surface.id ? (
                     <input
-                      aria-label="Device tab name"
+                      aria-label={t("panel.deviceTabName")}
                       className="w-24 min-w-0 rounded-sm bg-background px-1 outline-none ring-1 ring-ring"
                       defaultValue={title}
                       ref={(element) => {
@@ -1271,7 +1300,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                 <MenuTrigger
                   render={
                     <Button
-                      aria-label="Add panel surface"
+                      aria-label={t("panel.addSurface")}
                       className="shrink-0"
                       size="icon-xs"
                       variant="ghost-muted"
@@ -1293,9 +1322,9 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     // while hover or arrow reveals the profiles. The choice
                     // lives at open time because a tab's profile is fixed then —
                     // Electron only honours a partition before attach.
-                    if (action.label === "Browser" && action.available) {
+                    if (action.shortcut === "B" && action.available) {
                       return (
-                        <MenuSub key={action.label}>
+                        <MenuSub key={action.shortcut}>
                           <MenuSubTrigger
                             className="[&>svg:last-child]:ms-0"
                             aria-keyshortcuts={action.shortcut}
@@ -1339,7 +1368,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     }
                     return (
                       <SurfaceMenuItem
-                        key={action.label}
+                        key={action.shortcut}
                         available={action.available}
                         disabledReason={action.disabledReason}
                         shortcut={action.shortcut}
@@ -1359,14 +1388,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           <div
             className="flex shrink-0 items-center gap-0.5 [-webkit-app-region:no-drag]"
             role="group"
-            aria-label="Scroll panel tabs"
+            aria-label={t("panel.scrollTabs")}
           >
             <Tooltip>
               <TooltipTrigger
                 render={
                   <span className="inline-flex">
                     <Button
-                      aria-label="Scroll tabs left"
+                      aria-label={t("panel.scrollTabsLeft")}
                       disabled={!tabScrollState.canScrollLeft}
                       onClick={() => scrollTabs(-1)}
                       size="icon-xs"
@@ -1377,14 +1406,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   </span>
                 }
               />
-              <TooltipPopup>Scroll tabs left</TooltipPopup>
+              <TooltipPopup>{t("panel.scrollTabsLeft")}</TooltipPopup>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger
                 render={
                   <span className="inline-flex">
                     <Button
-                      aria-label="Scroll tabs right"
+                      aria-label={t("panel.scrollTabsRight")}
                       disabled={!tabScrollState.canScrollRight}
                       onClick={() => scrollTabs(1)}
                       size="icon-xs"
@@ -1395,24 +1424,23 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                   </span>
                 }
               />
-              <TooltipPopup>Scroll tabs right</TooltipPopup>
+              <TooltipPopup>{t("panel.scrollTabsRight")}</TooltipPopup>
             </Tooltip>
           </div>
         ) : null}
-        {props.layoutControls}
-        {ownsDesktopTitleBar && !props.layoutControls ? (
+        {props.side === "left" ? null : props.layoutControls}
+        {ownsDesktopTitleBar &&
+        !props.layoutControls &&
+        (props.side !== "left" || props.maximized) ? (
           // Keeps the tabs clear of the window controls when the layout toggles live elsewhere.
           <span aria-hidden className="hidden w-24 shrink-0 wco:block" />
         ) : null}
-        {ownsDesktopTitleBar ? (
+        {ownsDesktopTitleBar && props.side !== "left" ? (
+          // Only the right-docked panel hosts the fixed control cluster over
+          // its corner; a left-docked one must not reach the app sidebar.
           <span
             aria-hidden
-            className={cn(
-              "pointer-events-none fixed top-[var(--workspace-controls-top)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]",
-              props.side === "left"
-                ? "left-[var(--workspace-controls-left)]"
-                : "right-[var(--workspace-controls-right)]",
-            )}
+            className="pointer-events-none fixed top-[var(--workspace-controls-top)] h-[var(--workspace-topbar-height)] w-36 right-[var(--workspace-controls-right)] [-webkit-app-region:no-drag]"
           />
         ) : null}
       </div>

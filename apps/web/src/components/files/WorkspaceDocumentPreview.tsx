@@ -161,15 +161,23 @@ export function WorkspaceDocumentPreview(props: {
   readonly workspaceMutationId: string | null;
 }) {
   const type = documentPreviewType(props.absolutePath);
-  const insideWorkspace =
-    mediaFileReference(props.absolutePath, props.workspaceRoot).relativePath !== undefined;
+  const relativePath = mediaFileReference(props.absolutePath, props.workspaceRoot).relativePath;
+  // The panel already knows its workspace root. Naming it directly lets
+  // documents load before a draft's thread has been created on the server.
   const resource = useMemo(
-    () => ({
-      _tag: insideWorkspace ? ("workspace-file" as const) : ("media-file" as const),
-      threadId: props.threadRef.threadId,
-      path: props.absolutePath,
-    }),
-    [insideWorkspace, props.threadRef.threadId, props.absolutePath],
+    () =>
+      relativePath !== undefined
+        ? {
+            _tag: "draft-workspace-file" as const,
+            cwd: props.workspaceRoot,
+            path: relativePath,
+          }
+        : {
+            _tag: "media-file" as const,
+            threadId: props.threadRef.threadId,
+            path: props.absolutePath,
+          },
+    [relativePath, props.workspaceRoot, props.threadRef.threadId, props.absolutePath],
   );
   const assetUrl = useAssetUrlState(props.environmentId, resource);
   const revisionSuffix =

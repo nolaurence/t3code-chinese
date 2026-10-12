@@ -9499,7 +9499,10 @@ export default function ChatView(props: ChatViewProps) {
         rightPanelOpen && activeRightPanelSurface?.kind === "agents" ? 0 : agentPanelModel.liveCount
       }
       rightPanelSide={rightPanelSide}
-      showPanelSideSwap={!shouldUseRightPanelSheet}
+      // Closed, the cluster must stay as wide as the two toggles the chat
+      // header reserves room for, so the swap only exists while the panel can
+      // actually change sides.
+      showPanelSideSwap={rightPanelOpen && !shouldUseRightPanelSheet}
       onToggleTerminal={toggleTerminalVisibility}
       onToggleRightPanel={toggleRightPanel}
       onToggleRightPanelSide={() =>
@@ -9512,11 +9515,10 @@ export default function ChatView(props: ChatViewProps) {
       className={cn(
         // Keep one viewport anchor inside the header's no-drag region. The
         // header can shrink behind the right panel without moving the controls.
-        // Mirrored when the panel docks left.
-        "pointer-events-none fixed top-[var(--workspace-controls-top)] z-50 mr-px flex h-[var(--workspace-topbar-height)] items-center gap-1 [-webkit-app-region:no-drag]",
-        rightPanelSide === "left"
-          ? "left-[var(--workspace-controls-left)]"
-          : "right-[var(--workspace-controls-right)]",
+        // Only used while the panel docks right or is closed; a left-docked
+        // open panel hosts the cluster in its tab bar instead, because the
+        // viewport-left corner belongs to the app sidebar's titlebar controls.
+        "pointer-events-none fixed top-[var(--workspace-controls-top)] z-50 mr-px right-[var(--workspace-controls-right)] flex h-[var(--workspace-topbar-height)] items-center gap-1 [-webkit-app-region:no-drag]",
       )}
       data-workspace-titlebar-controls
     >
@@ -9532,9 +9534,7 @@ export default function ChatView(props: ChatViewProps) {
             // fades out where it stood rather than over the terminal toggle.
             rightPanelOpen
               ? "pointer-events-auto opacity-100"
-              : rightPanelSide === "left"
-                ? "pointer-events-none absolute left-full ml-1 opacity-0"
-                : "pointer-events-none absolute right-full mr-1 opacity-0",
+              : "pointer-events-none absolute right-full mr-1 opacity-0",
           )}
           inert={!rightPanelOpen}
         >
@@ -9547,6 +9547,18 @@ export default function ChatView(props: ChatViewProps) {
       <div className="pointer-events-auto flex h-full items-center">{panelToggleControls}</div>
     </div>
   );
+  // In-tabbar cluster for the left-docked open panel: in flow, so it never
+  // reaches the app sidebar's corner at viewport-left.
+  const panelLayoutControlsInPanel =
+    rightPanelSide === "left" && !shouldUseRightPanelSheet && rightPanelOpen ? (
+      <div className="mr-px flex items-center gap-1 [-webkit-app-region:no-drag]">
+        <RightPanelMaximizeControl
+          maximized={rightPanelMaximized}
+          onToggle={toggleRightPanelMaximized}
+        />
+        {panelToggleControls}
+      </div>
+    ) : null;
   const rightPanelContent = activeThreadRef ? (
     renderedRightPanelSurface?.kind === "preview" ? (
       <Suspense fallback={null}>
@@ -9750,7 +9762,7 @@ export default function ChatView(props: ChatViewProps) {
           ) : null}
         </WizardPopup>
       </Dialog>
-      {rightPanelControlsAtRoot ? panelLayoutControls : null}
+      {rightPanelControlsAtRoot && rightPanelSide !== "left" ? panelLayoutControls : null}
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-x-hidden",
@@ -9762,18 +9774,19 @@ export default function ChatView(props: ChatViewProps) {
         <WorkspacePageHeader
           data-chat-header
           electron={isElectron}
-          reserveNativeControls={reserveTitleBarControlInset && !inlineRightPanelOwnsTitleBar}
+          // A right-docked inline panel puts its tab bar under the native
+          // window controls, so the header does not need the inset then; a
+          // left-docked panel keeps the header at the top-right corner.
+          reserveNativeControls={
+            reserveTitleBarControlInset &&
+            !(inlineRightPanelOwnsTitleBar && rightPanelSide === "right")
+          }
           className="relative bg-background"
         >
-          {isElectron && rightPanelControlsAtRoot ? (
+          {isElectron && rightPanelControlsAtRoot && rightPanelSide !== "left" ? (
             <span
               aria-hidden
-              className={cn(
-                "pointer-events-none fixed top-[var(--workspace-controls-top)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]",
-                rightPanelSide === "left"
-                  ? "left-[var(--workspace-controls-left)]"
-                  : "right-[var(--workspace-controls-right)]",
-              )}
+              className="pointer-events-none fixed top-[var(--workspace-controls-top)] h-[var(--workspace-topbar-height)] w-36 right-[var(--workspace-controls-right)] [-webkit-app-region:no-drag]"
             />
           ) : null}
           {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}
@@ -10290,6 +10303,7 @@ export default function ChatView(props: ChatViewProps) {
         <RightPanelTabs
           mode="inline"
           side={rightPanelSide}
+          layoutControls={panelLayoutControlsInPanel}
           widthStorageKey={`t3code:preview-panel-width:${activeThreadKey}`}
           open={rightPanelOpen}
           maximized={rightPanelMaximized}
