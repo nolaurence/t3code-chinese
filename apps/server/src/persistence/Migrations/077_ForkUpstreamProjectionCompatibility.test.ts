@@ -1,12 +1,11 @@
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import { runMigrations } from "../Migrations.ts";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
-const layer = it.layer(Layer.mergeAll(NodeSqliteClient.layerMemory()));
+const layer = it.layer(NodeSqliteClient.layer({ filename: ":memory:" }));
 
 layer("reasoning-text fork upgrade", (it) => {
   it.effect("upgrades the reasoning-text fork without losing conversations", () =>
@@ -50,7 +49,7 @@ layer("reasoning-text fork upgrade", (it) => {
   );
 });
 
-layer("053_ForkUpstreamProjectionCompatibility", (it) => {
+layer("077_ForkUpstreamProjectionCompatibility", (it) => {
   it.effect("repairs a fork database that reused upstream 42/43 ids", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
