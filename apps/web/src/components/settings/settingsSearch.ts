@@ -418,6 +418,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["long lines code blocks diffs file previews"],
   },
   {
+    id: "interface-language",
+    title: "Interface language",
+    to: "/settings/appearance",
+    searchTerms: ["locale translation chinese english i18n 中文"],
+  },
+  {
     id: "composer-context",
     title: "Composer context",
     to: "/settings/appearance",
@@ -1344,6 +1350,7 @@ const SETTINGS_SEARCH_TITLE_KEYS: Partial<Record<SettingsSearchItemId, MessageKe
   "terminal-font": "settings.search.terminalFont",
   "font-smoothing": "settings.search.fontSmoothing",
   "word-wrap": "settings.search.wordWrap",
+  "interface-language": "settings.search.interfaceLanguage",
   "project-grouping": "settings.search.projectGrouping",
   "auto-settle-inactive-threads": "settings.search.autoSettleInactive",
   "auto-settle-merged-threads": "settings.search.autoSettleMerged",
