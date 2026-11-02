@@ -8,7 +8,8 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { cn } from "../../lib/utils";
 import { ensureLocalApi } from "../../localApi";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
-import { useI18n } from "../../i18n";
+import { createTranslator, useI18n } from "../../i18n";
+import { readLocalePreference } from "../../i18n/locale";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
   canCheckForUpdate,
@@ -116,6 +117,7 @@ export function SidebarUpdateArchitectureWarning() {
 }
 
 function SidebarUpdateArchitectureWarningContent() {
+  const { t } = useI18n();
   const state = useDesktopUpdateState();
   const visible = shouldShowArm64IntelBuildWarning(state);
   const description = state && visible ? getArm64IntelBuildWarningDescription(state) : null;
@@ -125,7 +127,7 @@ function SidebarUpdateArchitectureWarningContent() {
   return (
     <Alert variant="warning">
       <TriangleAlertIcon />
-      <AlertTitle>Intel build on Apple Silicon</AlertTitle>
+      <AlertTitle>{t("update.intelOnApple")}</AlertTitle>
       <AlertDescription>{description}</AlertDescription>
     </Alert>
   );
@@ -134,6 +136,10 @@ function SidebarUpdateArchitectureWarningContent() {
 const toastUpdateError: ReportLocalUpdateError = (title, description) => {
   toastManager.add(stackedThreadToast({ type: "error", title, description }));
 };
+
+function updateCopy() {
+  return createTranslator(readLocalePreference());
+}
 
 export async function downloadLocalUpdate(
   bridge: DesktopBridge,
@@ -150,12 +156,14 @@ export async function downloadLocalUpdate(
     const actionError = shouldToastDesktopUpdateActionResult(result)
       ? getDesktopUpdateActionError(result)
       : null;
-    if (actionError) reportError("Could not download update", actionError);
+    const t = updateCopy();
+    if (actionError) reportError(t("update.downloadFailed"), actionError);
     return result.completed;
   } catch (error) {
+    const t = updateCopy();
     reportError(
-      "Could not start update download",
-      error instanceof Error ? error.message : "An unexpected error occurred.",
+      t("update.downloadStartFailed"),
+      error instanceof Error ? error.message : t("update.unexpectedError"),
     );
     return false;
   }
@@ -175,13 +183,15 @@ export async function installLocalUpdate(
     const actionError = shouldToastDesktopUpdateActionResult(result)
       ? getDesktopUpdateActionError(result)
       : null;
+    const t = updateCopy();
     if (!actionError) return true;
-    reportError("Could not install update", actionError);
+    reportError(t("update.installFailed"), actionError);
     return false;
   } catch (error) {
+    const t = updateCopy();
     reportError(
-      "Could not install update",
-      error instanceof Error ? error.message : "An unexpected error occurred.",
+      t("update.installFailed"),
+      error instanceof Error ? error.message : t("update.unexpectedError"),
     );
     return false;
   }
@@ -302,8 +312,8 @@ function SidebarUpdateControl() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not confirm update",
-            description: error instanceof Error ? error.message : "Update confirmation failed.",
+            title: t("update.confirmFailed"),
+            description: error instanceof Error ? error.message : t("update.confirmFailedDescription"),
           }),
         );
         return;
@@ -327,9 +337,8 @@ function SidebarUpdateControl() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not check for updates",
-            description:
-              result.state.message ?? "Automatic updates are not available in this build.",
+            title: t("update.checkFailed"),
+            description: result.state.message ?? t("update.automaticUnavailable"),
           }),
         );
       })
@@ -337,8 +346,8 @@ function SidebarUpdateControl() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not check for updates",
-            description: error instanceof Error ? error.message : "Update check failed.",
+            title: t("update.checkFailed"),
+            description: error instanceof Error ? error.message : t("update.checkFailedDescription"),
           }),
         );
       })
@@ -368,7 +377,7 @@ function SidebarUpdateControl() {
         stackedThreadToast({
           type: "error",
           title: "Could not update everything",
-          description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          description: error instanceof Error ? error.message : t("update.unexpectedError"),
         }),
       );
     }

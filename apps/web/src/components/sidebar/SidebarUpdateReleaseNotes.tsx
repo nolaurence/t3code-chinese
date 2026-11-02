@@ -79,7 +79,7 @@ export function SidebarUpdateReleaseNotes({
         {state.status === "available" ? (
           <div>
             <div className="whitespace-nowrap text-sm leading-5 font-medium">
-              Update ready to download
+              {t("update.readyToDownload")}
             </div>
             {state.availableVersion ? (
               <div className="mt-0.5 text-xs leading-4 text-muted-foreground">
@@ -131,7 +131,9 @@ export function SidebarUpdateReleaseNotes({
             <div className={index > 0 ? "mt-4" : undefined} key={releaseNote.version}>
               <section>
                 <h3 className="text-foreground text-xs leading-4 font-semibold">
-                  {index === 0 ? "What's changed" : `Changes in ${releaseNote.version}`}
+                  {index === 0
+                    ? t("update.whatsChanged")
+                    : t("update.changesIn", { version: releaseNote.version })}
                 </h3>
                 <ul className="mt-2 space-y-1.5 pl-4 text-xs leading-5 text-popover-foreground/90">
                   {keyReleaseNoteItems(releaseNote.items).map(({ item, key }) => (
@@ -152,7 +154,12 @@ export function SidebarUpdateReleaseNotes({
         {state.omittedReleaseCount > 0 ? (
           <div className="mt-3">
             <ReleaseLink releaseUrl={getDesktopUpdateReleaseHistoryUrl()} shell={shell}>
-              {`${state.omittedReleaseCount} older ${state.omittedReleaseCount === 1 ? "release" : "releases"} on GitHub`}
+              {t(
+                state.omittedReleaseCount === 1
+                  ? "update.olderReleasesOne"
+                  : "update.olderReleasesMany",
+                { count: state.omittedReleaseCount },
+              )}
             </ReleaseLink>
           </div>
         ) : null}
