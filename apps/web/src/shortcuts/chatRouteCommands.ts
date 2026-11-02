@@ -2,6 +2,7 @@ import { AuthPreviewOperateScope, type EnvironmentId } from "@t3tools/contracts"
 import type { AnyRouter } from "@tanstack/react-router";
 
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
+import { createTranslator, readLocalePreference, type MessageKey, type TranslateValues } from "~/i18n";
 import { isPreviewAvailableFor } from "../browser/previewRuntime";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { useComposerDraftStore } from "../composerDraftStore";
@@ -27,6 +28,10 @@ import { useUiStateStore } from "../uiStateStore";
 import { type CommandHandler, registerCommands } from "./dispatcher";
 
 const CHAT_ROUTE_ID = "/_chat";
+
+function t(key: MessageKey, values?: TranslateValues): string {
+  return createTranslator(readLocalePreference())(key, values);
+}
 
 /**
  * New-thread and preview commands, live while a chat route is showing and no
@@ -152,8 +157,8 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
           toastManager.add(
             stackedThreadToast({
               type: "info",
-              title: "Preview is desktop-only",
-              description: "Open T3 Code in the desktop app to use the in-app preview.",
+              title: t("preview.desktopOnly"),
+              description: t("preview.desktopOnlyDescription"),
             }),
           );
           return;
