@@ -34,12 +34,17 @@ import {
   DialogFooter,
 } from "./ui/dialog";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 type SnoozeChoice = { readonly snoozedUntil: string };
 type Request = { readonly resolve: (choice: SnoozeChoice | null) => void };
@@ -120,7 +125,7 @@ function CustomSnoozeDialog() {
           <DialogPanel>
             <div className="flex flex-col gap-4">
               <ToggleGroup
-                aria-label=t("sidebar.customSnooze.scheduleType")
+                aria-label={t("sidebar.customSnooze.scheduleType")}
                 className="w-full *:flex-1"
                 value={[mode]}
                 onValueChange={(next) => {
@@ -154,7 +159,10 @@ function CustomSnoozeDialog() {
                           })}
                           <CalendarIcon className="size-4 text-muted-foreground" />
                         </PopoverTrigger>
-                        <PopoverPopup align="start" aria-label=t("sidebar.customSnooze.chooseDate")>
+                        <PopoverPopup
+                          align="start"
+                          aria-label={t("sidebar.customSnooze.chooseDate")}
+                        >
                           <Calendar
                             mode="single"
                             required
@@ -201,16 +209,24 @@ function CustomSnoozeDialog() {
                     >
                       <Label htmlFor={`${id}-amount`}>{t("sidebar.customSnooze.snoozeFor")}</Label>
                       <NumberFieldGroup>
-                        <NumberFieldDecrement aria-label=t("sidebar.customSnooze.decreaseDuration") />
+                        <NumberFieldDecrement
+                          aria-label={t("sidebar.customSnooze.decreaseDuration")}
+                        />
                         <NumberFieldInput required />
-                        <NumberFieldIncrement aria-label=t("sidebar.customSnooze.increaseDuration") />
+                        <NumberFieldIncrement
+                          aria-label={t("sidebar.customSnooze.increaseDuration")}
+                        />
                       </NumberFieldGroup>
                     </NumberField>
                     <Label className="flex min-w-0 flex-col items-stretch" htmlFor={`${id}-unit`}>
                       Unit
                       <Select
                         value={unit}
-                        items={{ minutes: t("sidebar.customSnooze.minutes"), hours: t("sidebar.customSnooze.hours"), days: t("sidebar.customSnooze.days") }}
+                        items={{
+                          minutes: t("sidebar.customSnooze.minutes"),
+                          hours: t("sidebar.customSnooze.hours"),
+                          days: t("sidebar.customSnooze.days"),
+                        }}
                         onValueChange={(value) => {
                           if (value === "minutes" || value === "hours" || value === "days")
                             setUnit(value);
@@ -221,7 +237,9 @@ function CustomSnoozeDialog() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectPopup>
-                          <SelectItem value="minutes">{t("sidebar.customSnooze.minutes")}</SelectItem>
+                          <SelectItem value="minutes">
+                            {t("sidebar.customSnooze.minutes")}
+                          </SelectItem>
                           <SelectItem value="hours">{t("sidebar.customSnooze.hours")}</SelectItem>
                           <SelectItem value="days">{t("sidebar.customSnooze.days")}</SelectItem>
                         </SelectPopup>

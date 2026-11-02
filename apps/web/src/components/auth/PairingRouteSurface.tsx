@@ -15,12 +15,17 @@ import { Input } from "../ui/input";
 import { StandalonePage, StandalonePageHeader } from "../ui/standalone-page";
 import { useAtomCommand } from "../../state/use-atom-command";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 export function PairingPendingSurface() {
   useI18n();
@@ -28,8 +33,8 @@ export function PairingPendingSurface() {
   return (
     <StandalonePage>
       <StandalonePageHeader
-        title=t("auth.pairingPending")
-        description=t("auth.pairingPendingDescription")
+        title={t("auth.pairingPending")}
+        description={t("auth.pairingPendingDescription")}
       />
     </StandalonePage>
   );
@@ -96,7 +101,7 @@ export function PairingRouteSurface({
   return (
     <StandalonePage>
       <StandalonePageHeader
-        title=t("auth.pairTitle")
+        title={t("auth.pairTitle")}
         description={describeAuthGate(auth.bootstrapMethods)}
       />
 
@@ -113,7 +118,7 @@ export function PairingRouteSurface({
             disabled={isSubmitting}
             nativeInput
             onChange={(event) => setCredential(event.currentTarget.value)}
-            placeholder=t("auth.pairingPlaceholder")
+            placeholder={t("auth.pairingPlaceholder")}
             spellCheck={false}
             value={credential}
           />
@@ -158,9 +163,7 @@ export function HostedPairingRouteSurface() {
     request ? "pairing" : "error",
   );
   const [message, setMessage] = useState(
-    request
-      ? t("auth.connectingBackend")
-      : t("auth.pairingMissing"),
+    request ? t("auth.connectingBackend") : t("auth.pairingMissing"),
   );
   const [canRetry, setCanRetry] = useState(false);
   const submitAttemptedRef = useRef(false);

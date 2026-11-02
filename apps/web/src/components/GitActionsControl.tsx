@@ -112,12 +112,17 @@ import { sourceControlClients } from "@t3tools/client-runtime/source-control-cli
 import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 import { useOpenLink } from "~/browser/useOpenLink";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 interface GitActionsControlProps {
   gitCwd: string | null;
@@ -590,7 +595,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
     <Dialog open={props.open} onOpenChange={handleOpenChange}>
       <WizardPopup>
         <WizardHeader
-          title=t("git.publishRepository")
+          title={t("git.publishRepository")}
           description="Pick where to host it, then point us at a repo to push to."
         >
           <WizardSteps
@@ -1509,7 +1514,7 @@ export default function GitActionsControl({
       ) : quietEmptyDraft || (compact && !gitActionProgress && !visibleInlineSuccess) ? null : (
         <div
           role="group"
-          aria-label=t("git.actions")
+          aria-label={t("git.actions")}
           ref={panelAnchorRef}
           className={cn(
             "shrink-0",
@@ -1611,7 +1616,7 @@ export default function GitActionsControl({
                 <MenuTrigger
                   render={
                     <ThreadDetailsControl
-                      aria-label=t("git.actionOptions")
+                      aria-label={t("git.actionOptions")}
                       size="sm"
                       variant="ghost"
                       part="secondary"

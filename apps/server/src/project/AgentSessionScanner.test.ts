@@ -569,7 +569,7 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
       }),
     );
 
-    it.effect("honors provider instance home directory environment variables", () =>
+    it.effect("honors provider homes while ignoring retired Pi instances", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const claudeHomePath = yield* makeTempDir("t3code-claude-legacy-");
@@ -657,8 +657,6 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         });
 
         expect(result.candidates.map((candidate) => [candidate.path, candidate.sources])).toEqual([
-          [piFlatWorkspace, ["pi"]],
-          [piWorkspace, ["pi"]],
           [codexWorkspace, ["codex"]],
           [claudeWorkspace, ["claudeAgent"]],
         ]);
@@ -1040,7 +1038,7 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
   });
 
   describe("recentThreads", () => {
-    it.effect("imports recent Claude, Codex, and Pi sessions for the selected project only", () =>
+    it.effect("imports recent Claude and Codex sessions while ignoring retired Pi history", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
         const nowMs = Date.parse("2026-08-24T12:00:00.000Z");
@@ -1189,18 +1187,13 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
         });
 
         expect(threads.map((thread) => thread.providerSessionId)).toEqual([
-          "pi-recent",
           "codex-recent",
           "claude-recent",
-          "pi-v1",
         ]);
         expect(threads.map((thread) => thread.messages.map((message) => message.text))).toEqual([
-          ["Plan the change", "Active answer"],
           ["Review this code", "Looks good"],
           ["Fix the project", "Done"],
-          ["Legacy prompt", "Legacy answer"],
         ]);
-        expect(threads[0]).toMatchObject({ source: "pi", title: "Pi refactor" });
       }),
     );
 

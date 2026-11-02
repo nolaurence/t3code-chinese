@@ -1,11 +1,5 @@
-import { ProviderDriverKind } from "@t3tools/contracts";
+import type { ProviderDriverKind } from "@t3tools/contracts";
 import { resolveModelShortName } from "@t3tools/client-runtime/provider-clients";
-
-import { OmpIcon, type Icon } from "../Icons";
-
-export const PROVIDER_ICON_BY_PROVIDER: Partial<Record<ProviderDriverKind, Icon>> = {
-  [ProviderDriverKind.make("omp")]: OmpIcon,
-};
 
 export type ModelEsque = {
   slug: string;

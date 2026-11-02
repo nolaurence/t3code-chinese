@@ -111,9 +111,8 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/archived": "Archive",
 };
 
-
 /** Section labels whose existing message English matches the upstream label. */
-const SETTINGS_SECTION_LABEL_KEYS: Partial<Record<SettingsPath, MessageKey>> = {
+export const SETTINGS_SECTION_LABEL_KEYS: Partial<Record<SettingsPath, MessageKey>> = {
   "/settings/diagnostics": "settings.nav.diagnostics",
   "/settings/general": "settings.nav.general",
   "/settings/appearance": "settings.nav.appearance",
@@ -1448,7 +1447,12 @@ export function localizeSettingsSearchItems(
     return {
       ...item,
       title: titleKey ? t(titleKey) : item.title,
-      searchTerms: [item.title, SETTINGS_SECTION_LABELS[item.to], sectionLabel, ...(item.searchTerms ?? [])],
+      searchTerms: [
+        item.title,
+        SETTINGS_SECTION_LABELS[item.to],
+        sectionLabel,
+        ...(item.searchTerms ?? []),
+      ],
     };
   });
 }

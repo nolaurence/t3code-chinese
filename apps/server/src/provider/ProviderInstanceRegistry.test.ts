@@ -752,7 +752,7 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
     () =>
       Effect.gen(function* () {
         const codexId = ProviderInstanceId.make("codex_main");
-        const ghostId = ProviderInstanceId.make("ghost_main");
+        const unavailableDrivers = ["ghostDriver", "omp", "pi"] as const;
 
         const configMap: ProviderInstanceConfigMap = {
           [codexId]: {
@@ -760,12 +760,17 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
             enabled: false,
             config: makeCodexConfig({}),
           },
-          [ghostId]: {
-            driver: ProviderDriverKind.make("ghostDriver"),
-            displayName: "A fork-only driver we don't ship",
-            enabled: false,
-            config: { arbitrary: "payload", preserved: true },
-          },
+          ...Object.fromEntries(
+            unavailableDrivers.map((driver) => [
+              ProviderInstanceId.make(`${driver}_main`),
+              {
+                driver: ProviderDriverKind.make(driver),
+                displayName: "A driver we don't ship",
+                enabled: true,
+                config: { arbitrary: "payload", preserved: true },
+              },
+            ]),
+          ),
         };
 
         const { registry } = yield* makeProviderInstanceRegistry<CodexDriverEnv>({
@@ -778,12 +783,18 @@ describe("ProviderInstanceRegistry — multi-instance codex slice", () => {
         expect(instances[0]!.instanceId).toBe(codexId);
 
         const unavailable = yield* registry.listUnavailable;
-        expect(unavailable).toHaveLength(1);
-        const ghost = unavailable[0]!;
-        expect(ghost.instanceId).toBe(ghostId);
-        expect(ghost.driver).toBe("ghostDriver");
-        expect(ghost.availability).toBe("unavailable");
-        expect(ghost.unavailableReason).toMatch(/ghostDriver/);
+        expect(unavailable).toHaveLength(unavailableDrivers.length);
+        for (const driver of unavailableDrivers) {
+          const instanceId = ProviderInstanceId.make(`${driver}_main`);
+          const snapshot = unavailable.find((entry) => entry.instanceId === instanceId);
+          expect(snapshot?.driver).toBe(driver);
+          expect(snapshot?.availability).toBe("unavailable");
+          expect(snapshot?.unavailableReason).toContain(driver);
+          expect(configMap[instanceId]?.config).toEqual({
+            arbitrary: "payload",
+            preserved: true,
+          });
+        }
       }).pipe(Effect.provide(layerTest)),
   );
 });

@@ -54,12 +54,17 @@ import {
   THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS,
 } from "./chat/threadDetailsPanelStyles";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 export type { NewProjectScriptInput, ProjectScriptActionResult };
 
@@ -174,7 +179,7 @@ export default function ProjectScriptsControl({
             <ScriptIcon icon={fileScript.icon ?? "play"} className="size-4" />
             <MenuItemLabel>{fileScript.name}</MenuItemLabel>
             <MenuShortcut>
-              <DownloadIcon className="size-3.5" aria-label=t("scripts.import") />
+              <DownloadIcon className="size-3.5" aria-label={t("scripts.import")} />
             </MenuShortcut>
           </MenuItem>
         ))}
@@ -285,7 +290,7 @@ export default function ProjectScriptsControl({
       ) : primaryScript ? (
         <ActionGroup
           role="group"
-          aria-label=t("scripts.projectActions")
+          aria-label={t("scripts.projectActions")}
           {...(isPanel
             ? { className: THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS, ref: panelAnchorRef }
             : {})}
@@ -344,7 +349,7 @@ export default function ProjectScriptsControl({
                   variant={isPanel ? "ghost" : "outline"}
                   part="secondary"
                   panel={isPanel}
-                  aria-label=t("scripts.actions")
+                  aria-label={t("scripts.actions")}
                 />
               }
             >
@@ -365,7 +370,7 @@ export default function ProjectScriptsControl({
         isPanel ? (
           <div
             role="group"
-            aria-label=t("scripts.projectActionsMenu")
+            aria-label={t("scripts.projectActionsMenu")}
             className={THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS}
             ref={panelAnchorRef}
           >
@@ -373,7 +378,7 @@ export default function ProjectScriptsControl({
               size="sm"
               variant="ghost"
               part="primary"
-              aria-label=t("scripts.projectActionsMenu")
+              aria-label={t("scripts.projectActionsMenu")}
               onClick={() => setActionsMenuOpen({ presentation, scripts: false, imports: true })}
             >
               <WrenchIcon className={THREAD_DETAILS_PANEL_ICON_CLASS} />
@@ -415,7 +420,9 @@ export default function ProjectScriptsControl({
             }
           >
             <MenuTrigger
-              render={<Button size="xs" variant="outline" aria-label=t("scripts.projectActionsMenu") />}
+              render={
+                <Button size="xs" variant="outline" aria-label={t("scripts.projectActionsMenu")} />
+              }
             >
               <WrenchIcon className="size-3.5" />
               <span className="sr-only @3xl/header-actions:not-sr-only @3xl/header-actions:ml-0.5">
@@ -452,7 +459,9 @@ export default function ProjectScriptsControl({
               {isPanel ? "Add project script" : t("scripts.add")}
             </span>
           </TooltipTrigger>
-          <TooltipPopup side="top">{isPanel ? "Add project script" : t("scripts.add")}</TooltipPopup>
+          <TooltipPopup side="top">
+            {isPanel ? "Add project script" : t("scripts.add")}
+          </TooltipPopup>
         </Tooltip>
       )}
 

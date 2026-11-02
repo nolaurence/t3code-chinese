@@ -55,7 +55,6 @@ import {
   filterKeybindingRows,
   buildKeybindingCommandOptions,
   buildWhenVariableOptions,
-  commandLabel,
   localizedCommandLabel,
   DEFAULT_WHEN_VARIABLE,
   isKnownWhenVariable,
@@ -77,7 +76,6 @@ import { keybindingSearchAnchorId, searchableSetting } from "./settingsSearch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useI18n } from "../../i18n";
-
 
 function KeybindingPill({ value }: { value: string }) {
   // Keys dedupe repeated parts; a literal "+" in a shortcut splits into empty strings.
@@ -839,7 +837,9 @@ function KeybindingKeyControl({
         <Input
           data-keybinding-capture=""
           autoFocus={isRecording}
-          aria-label={t("keybindings.bindingFor", { command: localizedCommandLabel(row.command, t) })}
+          aria-label={t("keybindings.bindingFor", {
+            command: localizedCommandLabel(row.command, t),
+          })}
           value={isRecording ? "" : keyDraft}
           placeholder={isRecording ? t("keybindings.pressShortcut") : t("keybindings.unassigned")}
           size="sm"
@@ -928,7 +928,9 @@ function KeybindingRowMenu({
             variant="ghost-muted"
             size="icon-sm"
             disabled={isSaving}
-            aria-label={t("keybindings.actions", { command: localizedCommandLabel(row.command, t) })}
+            aria-label={t("keybindings.actions", {
+              command: localizedCommandLabel(row.command, t),
+            })}
           />
         }
       >
@@ -960,6 +962,7 @@ function KeybindingSourceBadge({ source }: { source: KeybindingRow["source"] }) 
 }
 
 function KeybindingRowTitle({ row }: { row: KeybindingRow }) {
+  const { t } = useI18n();
   return (
     <Tooltip>
       <TooltipTrigger render={<span className="flex items-center gap-2" />}>
@@ -1047,6 +1050,7 @@ function useNewKeybindingDraft({
   allRows: ReadonlyArray<KeybindingRow>;
   onSave: (input: ServerUpsertKeybindingInput) => void;
 }) {
+  const { t } = useI18n();
   const [commandDraft, setCommandDraft] = useState<KeybindingCommand | "">("");
   const [draft, setDraft] = useReducer(keybindingRowDraftReducer, {
     keyDraft: "",
@@ -1237,7 +1241,9 @@ function NewKeybindingSettingsRow(props: NewKeybindingProps) {
       title="New keybinding"
       description={
         <span className="flex h-6 items-center gap-1.5">
-          <span className="text-xs leading-none text-muted-foreground/70">{t("keybindings.when")}</span>
+          <span className="text-xs leading-none text-muted-foreground/70">
+            {t("keybindings.when")}
+          </span>
           <NewKeybindingWhen draft={draft} variables={variables} />
         </span>
       }
@@ -1417,7 +1423,8 @@ export function KeybindingsSettingsPanel() {
         const error = squashAtomCommandFailure(failed);
         toastManager.add({
           title: t("keybindings.saveFailed"),
-          description: error instanceof Error ? error.message : t("keybindings.saveFailedDescription"),
+          description:
+            error instanceof Error ? error.message : t("keybindings.saveFailedDescription"),
           type: "error",
         });
       }
@@ -1448,7 +1455,8 @@ export function KeybindingsSettingsPanel() {
         const error = squashAtomCommandFailure(result);
         toastManager.add({
           title: t("keybindings.removeFailed"),
-          description: error instanceof Error ? error.message : t("keybindings.removeFailedDescription"),
+          description:
+            error instanceof Error ? error.message : t("keybindings.removeFailedDescription"),
           type: "error",
         });
       }

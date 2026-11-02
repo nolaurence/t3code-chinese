@@ -134,10 +134,6 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
       completeWhen: (result) => result.complete !== false,
       idleTtlMs: 0,
     }),
-    threadContext: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:orchestration:thread-context",
-      tag: ORCHESTRATION_WS_METHODS.getThreadContext,
-    }),
     threadSearch: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:orchestration:thread-search",
       tag: ORCHESTRATION_V2_WS_METHODS.searchThreads,

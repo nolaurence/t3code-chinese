@@ -3,12 +3,12 @@
 [简体中文](./README.md) | [English](./README.en.md)
 
 T3 Code is a minimal web GUI for coding agents, including Codex, Claude, Cursor,
-OpenCode, and Pi.
+and OpenCode.
 
 ## Installation
 
 > [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, OpenCode, and Pi.
+> T3 Code currently supports Codex, Claude, Cursor, and OpenCode.
 > Install and authenticate at least one provider before use:
 >
 > - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
