@@ -1,28 +1,28 @@
+import { InlineButton } from "../ui/button";
 import { useId, useState } from "react";
 
-import { useI18n } from "../../i18n";
 import { cn } from "../../lib/utils";
+import { useI18n } from "../../i18n";
 
-/**
- * Long error text clamped to a few lines with a toggle to reveal the rest.
- * Short single-line text renders as-is without the toggle.
- */
+
 export function ExpandableText({
   text,
+  collapsedText = text,
   className,
   collapsedClassName = "line-clamp-3",
   expandLabel,
 }: {
   text: string;
+  collapsedText?: string;
   className?: string;
   collapsedClassName?: string;
   expandLabel?: string;
 }) {
   const { t } = useI18n();
+  const revealLabel = expandLabel ?? t("diagnostics.showFullError");
   const textId = useId();
   const [expanded, setExpanded] = useState(false);
-  const canExpand = text.length > 180 || text.includes("\n");
-  const revealLabel = expandLabel ?? t("diagnostics.showFullError");
+  const canExpand = collapsedText !== text || text.length > 180 || text.includes("\n");
 
   return (
     <div className={cn("min-w-0", className)}>
@@ -33,18 +33,18 @@ export function ExpandableText({
           !expanded && canExpand ? collapsedClassName : null,
         )}
       >
-        {text}
+        {expanded ? text : collapsedText}
       </div>
       {canExpand ? (
-        <button
-          type="button"
+        <InlineButton
           aria-expanded={expanded}
           aria-controls={textId}
-          className="cursor-pointer mt-1 text-[11px] font-medium text-foreground/70 underline-offset-2 hover:text-foreground hover:underline"
+          tone="muted"
+          className="mt-1"
           onClick={() => setExpanded((value) => !value)}
         >
           {expanded ? t("diagnostics.showLess") : revealLabel}
-        </button>
+        </InlineButton>
       ) : null}
     </div>
   );

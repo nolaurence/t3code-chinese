@@ -4,10 +4,8 @@ import {
   type ProviderOptionDescriptor,
 } from "@t3tools/contracts";
 import { type CustomModelDefinition, createModelCapabilities } from "@t3tools/shared/model";
-
 import type { Translate } from "../../i18n";
 
-/** Editable mirror of a `ProviderOptionChoice`. `key` is only a React key. */
 export interface EditorChoice {
   readonly key: string;
   readonly id: string;
@@ -16,7 +14,6 @@ export interface EditorChoice {
   readonly description?: string;
 }
 
-/** Editable mirror of a `ProviderOptionDescriptor`. `key` is only a React key. */
 export interface EditorDescriptor {
   readonly key: string;
   readonly type: "select" | "boolean";
@@ -47,11 +44,6 @@ const EFFORT_CHOICES = [
   { id: "xhigh", label: "Extra High" },
 ] as const;
 
-/**
- * Option ids each adapter actually reads off a turn's model selection, with
- * the usual choices pre-filled. Anything else the user types is stored
- * verbatim but will be ignored by the driver.
- */
 export const DESCRIPTOR_PRESETS_BY_KIND: Partial<
   Record<ProviderDriverKind, ReadonlyArray<DescriptorPreset>>
 > = {
@@ -90,6 +82,22 @@ export const DESCRIPTOR_PRESETS_BY_KIND: Partial<
   ],
   [ProviderDriverKind.make("grok")]: [
     { id: "reasoningEffort", label: "Reasoning", type: "select", choices: EFFORT_CHOICES },
+  ],
+  [ProviderDriverKind.make("pi")]: [
+    {
+      id: "thinking",
+      label: "Thinking",
+      type: "select",
+      choices: [
+        { id: "off", label: "Off" },
+        { id: "minimal", label: "Minimal" },
+        { id: "low", label: "Low" },
+        { id: "medium", label: "Medium", isDefault: true },
+        { id: "high", label: "High" },
+        { id: "xhigh", label: "Extra High" },
+        { id: "max", label: "Max" },
+      ],
+    },
   ],
   [ProviderDriverKind.make("opencode")]: [
     { id: "variant", label: "Reasoning", type: "select", choices: EFFORT_CHOICES },
@@ -137,11 +145,8 @@ export function emptyEditorChoice(): EditorChoice {
   return { key: newEditorKey(), id: "", label: "", isDefault: false };
 }
 
-/**
- * Prompt-injected choices (Claude's `ultrathink`) are delivered as prompt text
- * by built-in runtime profiles a custom entry does not have, so they are
- * dropped rather than stored as a plain option value.
- */
+/** Custom entries lack runtime profiles for prompt-injected choices, so do not store them as ordinary
+ * options. */
 function descriptorToEditor(descriptor: ProviderOptionDescriptor): EditorDescriptor {
   const promptInjected = new Set(
     descriptor.type === "select" ? (descriptor.promptInjectedValues ?? []) : [],
@@ -190,47 +195,44 @@ export function descriptorsFromCapabilities(
     .map(descriptorToEditor);
 }
 
-/**
- * Validate the draft before saving. Returns the first problem in reading
- * order so the message is actionable, or `null` when the draft is sound.
- */
 export function validateDraft(draft: CustomModelDraft, t?: Translate): string | null {
   const seenIds = new Set<string>();
   for (const [index, descriptor] of draft.descriptors.entries()) {
     const number = index + 1;
+    const position = `Option ${number}`;
     const id = descriptor.id.trim();
-    if (!id) {
-      return t ? t("providers.modelOptionNeedsId", { number }) : `Option ${number} needs an id.`;
-    }
+    if (!id) return t?.("providers.modelOptionNeedsId", { number }) ?? `${position} needs an id.`;
     if (seenIds.has(id)) {
-      return t
-        ? t("providers.modelOptionIdUsedTwice", { number, id })
-        : `Option ${number}: id "${id}" is used twice.`;
+      return (
+        t?.("providers.modelOptionIdUsedTwice", { number, id }) ??
+        `${position}: id "${id}" is used twice.`
+      );
     }
     seenIds.add(id);
     if (!descriptor.label.trim()) {
-      return t
-        ? t("providers.modelOptionNeedsLabel", { number })
-        : `Option ${number} needs a label.`;
+      return t?.("providers.modelOptionNeedsLabel", { number }) ?? `${position} needs a label.`;
     }
     if (descriptor.type !== "select") continue;
     if (descriptor.choices.length === 0) {
-      return t
-        ? t("providers.modelOptionNeedsChoice", { number })
-        : `Option ${number} needs at least one choice.`;
+      return (
+        t?.("providers.modelOptionNeedsChoice", { number }) ??
+        `${position} needs at least one choice.`
+      );
     }
     const seenChoices = new Set<string>();
     for (const choice of descriptor.choices) {
       const choiceId = choice.id.trim();
       if (!choiceId) {
-        return t
-          ? t("providers.modelOptionChoiceNeedsValue", { number })
-          : `Option ${number} has a choice without a value.`;
+        return (
+          t?.("providers.modelOptionChoiceNeedsValue", { number }) ??
+          `${position} has a choice without a value.`
+        );
       }
       if (seenChoices.has(choiceId)) {
-        return t
-          ? t("providers.modelOptionChoiceUsedTwice", { number, id: choiceId })
-          : `Option ${number}: choice "${choiceId}" is used twice.`;
+        return (
+          t?.("providers.modelOptionChoiceUsedTwice", { number, id: choiceId }) ??
+          `${position}: choice "${choiceId}" is used twice.`
+        );
       }
       seenChoices.add(choiceId);
     }
@@ -238,7 +240,6 @@ export function validateDraft(draft: CustomModelDraft, t?: Translate): string | 
   return null;
 }
 
-/** Convert a validated draft back into a definition. Blank name → slug. */
 export function definitionFromDraft(draft: CustomModelDraft): CustomModelDefinition {
   const descriptors: ProviderOptionDescriptor[] = draft.descriptors.map((descriptor) => {
     const id = descriptor.id.trim();

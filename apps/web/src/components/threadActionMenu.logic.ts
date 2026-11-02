@@ -1,67 +1,137 @@
 import type { ContextMenuItem } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
-import type { Translate } from "../i18n";
 
-/**
- * Ids for the per-thread action menu. Snooze presets are dispatched as
- * `snooze:<presetId>` so the union stays closed while the preset list
- * remains data-driven.
- */
+import { createTranslator, readLocalePreference, type MessageKey, type TranslateValues } from "~/i18n";
+
+function t(key: MessageKey, values?: TranslateValues): string {
+  return createTranslator(readLocalePreference())(key, values);
+}
+
+
 export type ThreadActionMenuId =
+  | "find"
   | "new-thread-on-branch"
+  | "filter-by-project"
+  | "turn-into-project"
   | "project-settings"
   | "pin"
   | "unpin"
   | "settle"
   | "unsettle"
+  | "auto-settle"
+  | "auto-settle:enabled"
+  | "auto-settle:disabled"
   | "snooze"
   | `snooze:${string}`
   | "unsnooze"
   | "rename"
   | "regenerate-title"
   | "mark-unread"
+  | "share-guest"
   | "copy"
   | "copy-path"
   | "copy-branch"
+  | "copy-thread"
   | "copy-thread-id"
   | "archive"
   | "delete";
 
+export type DraftActionMenuId =
+  | "copy"
+  | "copy-path"
+  | "copy-branch"
+  | "project-settings"
+  | "discard";
+
+export function buildDraftActionMenuItems(options: {
+  readonly hasPath: boolean;
+  readonly hasBranch: boolean;
+  readonly hasProject: boolean;
+}): ReadonlyArray<ContextMenuItem<DraftActionMenuId>> {
+  return [
+    {
+      id: "copy",
+      label: t("sidebar.copy"),
+      icon: "copy",
+      disabled: !options.hasPath && !options.hasBranch,
+      children: [
+        ...(options.hasPath ? [{ id: "copy-path" as const, label: "Path", icon: "folder" }] : []),
+        ...(options.hasBranch
+          ? [{ id: "copy-branch" as const, label: t("sidebar.copyBranch"), icon: "git-branch" }]
+          : []),
+      ],
+    },
+    ...(options.hasProject
+      ? [{ id: "project-settings" as const, label: t("sidebar.projectSettings"), icon: "settings" }]
+      : []),
+    {
+      id: "discard",
+      label: "Discard draft",
+      icon: "trash",
+      destructive: true,
+      separatorBefore: true,
+    },
+  ];
+}
+
 export interface ThreadActionMenuState {
+  readonly canOperate: boolean;
+  readonly canFind?: boolean;
   readonly branch: string | null;
+  readonly projectFilter: {
+    readonly label: string;
+    readonly isActive: boolean;
+  } | null;
   readonly isPinned: boolean;
   readonly isSettled: boolean;
+  readonly autoSettleEnabled: boolean;
   readonly isSnoozed: boolean;
   readonly canSnoozeNow: boolean;
   readonly isRegeneratingTitle: boolean;
-  /** Archive rejects a thread with an active turn, so disable it here rather than let the action fail. */
+  /** Archive rejects attached providers, so disable it while running. */
   readonly isRunning: boolean;
   readonly supports: {
     readonly settlement: boolean;
+    readonly autoSettleOptOut: boolean;
     readonly snooze: boolean;
     readonly pinning: boolean;
     readonly titleRegeneration: boolean;
   };
   readonly snoozePresets: ReadonlyArray<SnoozePreset>;
+  /** Guest links need their own grant, so the caller checks it instead of `canOperate`. */
+  readonly canShareWithGuest?: boolean;
+  /** A No project thread with its own folder, on a server that can promote it. */
+  readonly canTurnIntoProject?: boolean;
 }
 
-/**
- * Single source for the per-thread action menu: the sidebar row's right-click
- * menu and the chat header menu both render exactly this list, so labels,
- * ordering, and capability gating cannot drift between the two surfaces.
- */
+/** Local navigation, read markers, and copying remain available to read-only clients. */
+export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
+  return ![
+    "find",
+    "new-thread-on-branch",
+    "project-settings",
+    "mark-unread",
+    "share-guest",
+    "copy",
+    "copy-path",
+    "copy-branch",
+    "copy-thread",
+    "copy-thread-id",
+  ].includes(action);
+}
+
 export function buildThreadActionMenuItems(
   state: ThreadActionMenuState,
-  t?: Translate,
 ): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
-  return [
+  const items: ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> = [
+    ...(state.canFind
+      ? [{ id: "find" as const, label: "Find in thread", icon: "text-search" }]
+      : []),
     ...(state.branch
       ? [
           {
             id: "new-thread-on-branch" as const,
-            label:
-              t?.("sidebar.newThreadOnBranch", { branch: state.branch }) ??
-              `New thread on ${state.branch}`,
+            label: `New thread on ${state.branch}`,
             icon: "message-square-plus",
           },
         ]
@@ -69,131 +139,137 @@ export function buildThreadActionMenuItems(
     ...(state.supports.pinning
       ? [
           state.isPinned
-            ? {
-                id: "unpin" as const,
-                label: t?.("sidebar.unpinThread") ?? "Unpin thread",
-                icon: "pin-off",
-              }
-            : {
-                id: "pin" as const,
-                label: t?.("sidebar.pinThread") ?? "Pin thread",
-                icon: "pin",
-              },
+            ? { id: "unpin" as const, label: t("sidebar.unpinThread"), icon: "pin-off" }
+            : { id: "pin" as const, label: t("sidebar.pinThread"), icon: "pin" },
         ]
       : []),
-    // Both lifecycle actions stay available on pinned threads: settling
-    // clears the pin ("done" beats "keep on top"), and snoozing hides the
-    // card until wake with the pin intact.
     ...(state.supports.settlement
       ? [
           state.isSettled
-            ? {
-                id: "unsettle" as const,
-                label: t?.("sidebar.unsettleThread") ?? "Un-settle thread",
-                icon: "circle-check",
-              }
-            : {
-                id: "settle" as const,
-                label: t?.("sidebar.settleThread") ?? "Settle thread",
-                icon: "circle-check",
-              },
+            ? { id: "unsettle" as const, label: t("sidebar.unsettleThread"), icon: "circle-check" }
+            : { id: "settle" as const, label: t("sidebar.settleThread"), icon: "circle-check" },
         ]
       : []),
     ...(state.supports.snooze
       ? [
           state.isSnoozed
-            ? {
-                id: "unsnooze" as const,
-                label: t?.("sidebar.wakeThread") ?? "Wake thread",
-                icon: "clock",
-              }
+            ? { id: "unsnooze" as const, label: t("sidebar.wakeThread"), icon: "clock" }
             : {
                 id: "snooze" as const,
-                label: t?.("sidebar.snooze") ?? "Snooze",
+                label: t("sidebar.snooze"),
                 icon: "clock",
                 disabled: !state.canSnoozeNow,
                 children: [
                   ...state.snoozePresets.map((preset) => ({
                     id: `snooze:${preset.id}` as const,
-                    label:
-                      t?.("sidebar.snoozePresetWhen", {
-                        preset: preset.label,
-                        when: preset.whenLabel,
-                      }) ?? `${preset.label} (${preset.whenLabel})`,
+                    label: `${preset.label} (${preset.whenLabel})`,
                   })),
                   {
                     id: "snooze:custom" as const,
-                    label: t?.("sidebar.snoozeCustom") ?? "Custom…",
-                    separatorBefore: true,
+                    label: t("sidebar.snoozeCustom"),
+                    separatorBefore: state.snoozePresets.length > 0,
                   },
                 ],
               },
         ]
       : []),
-    {
-      id: "rename",
-      label: t?.("sidebar.renameThread") ?? "Rename thread",
-      icon: "pencil",
-      separatorBefore: true,
-    },
+    { id: "rename", label: t("sidebar.renameThread"), icon: "pencil", separatorBefore: true },
     ...(state.supports.titleRegeneration
       ? [
           {
             id: "regenerate-title" as const,
-            label: state.isRegeneratingTitle
-              ? (t?.("sidebar.regeneratingTitle") ?? "Regenerating…")
-              : (t?.("sidebar.regenerateTitle") ?? "Regenerate title"),
+            label: state.isRegeneratingTitle ? "Regenerating…" : t("sidebar.regenerateTitle"),
             icon: "refresh-cw",
             disabled: state.isRegeneratingTitle,
           },
         ]
       : []),
-    { id: "mark-unread", label: t?.("sidebar.markUnread") ?? "Mark unread", icon: "mail-open" },
+    { id: "mark-unread", label: t("sidebar.markUnread"), icon: "mail-open" },
+    ...(state.canShareWithGuest
+      ? [{ id: "share-guest" as const, label: "Share with guest", icon: "user-plus" }]
+      : []),
+    ...(state.projectFilter
+      ? [
+          {
+            id: "filter-by-project" as const,
+            label: state.projectFilter.isActive
+              ? "Show all projects"
+              : `Filter by ${state.projectFilter.label}`,
+            icon: "folder-tree",
+          },
+        ]
+      : []),
+    ...(state.canTurnIntoProject
+      ? [
+          {
+            id: "turn-into-project" as const,
+            label: "Turn into project",
+            icon: "folder-plus",
+            disabled: state.isRunning,
+          },
+        ]
+      : []),
+    ...(state.supports.autoSettleOptOut
+      ? [
+          {
+            id: "auto-settle" as const,
+            label: "Auto-settle behavior",
+            icon: "timer",
+            children: [
+              {
+                id: "auto-settle:enabled" as const,
+                label: "Enabled",
+                checked: state.autoSettleEnabled,
+              },
+              {
+                id: "auto-settle:disabled" as const,
+                label: "Disabled",
+                checked: !state.autoSettleEnabled,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       id: "copy",
-      label: t?.("sidebar.copy") ?? "Copy",
+      label: t("sidebar.copy"),
       icon: "copy",
       separatorBefore: true,
       children: [
-        { id: "copy-path", label: t?.("sidebar.copyPath") ?? "Path", icon: "folder" },
+        { id: "copy-path", label: "Path", icon: "folder" },
         ...(state.branch
-          ? [
-              {
-                id: "copy-branch" as const,
-                label: t?.("sidebar.copyBranch") ?? "Branch",
-                icon: "git-branch",
-              },
-            ]
+          ? [{ id: "copy-branch" as const, label: t("sidebar.copyBranch"), icon: "git-branch" }]
           : []),
-        {
-          id: "copy-thread-id",
-          label: t?.("sidebar.copyThreadId") ?? "Thread ID",
-          icon: "hash",
-        },
+        { id: "copy-thread", label: "Thread", icon: "message-square" },
+        { id: "copy-thread-id", label: "Thread ID", icon: "hash" },
       ],
     },
-    {
-      id: "project-settings",
-      label: t?.("sidebar.projectSettings") ?? "Project settings",
-      icon: "settings",
-    },
-    // Archive removes the thread from the sidebar while keeping its
-    // conversation under Settings > Archived threads — distinct from Settle
-    // (stays visible in the Settled shelf) and Delete (clears history for
-    // good), so it sits beside Delete without borrowing its destructive
-    // styling.
+    { id: "project-settings", label: t("sidebar.projectSettings"), icon: "settings" },
     {
       id: "archive",
-      label: t?.("sidebar.archiveThread") ?? "Archive thread",
+      label: t("sidebar.archiveThread"),
       icon: "archive",
       disabled: state.isRunning,
       separatorBefore: true,
     },
     {
       id: "delete",
-      label: t?.("common.delete") ?? "Delete",
+      label: t("common.delete"),
       destructive: true,
       icon: "trash",
     },
   ];
+  return state.canOperate
+    ? items
+    : items.map((item) =>
+        threadActionRequiresOperate(item.id)
+          ? {
+              ...item,
+              disabled: true,
+              ...(item.children
+                ? { children: item.children.map((child) => ({ ...child, disabled: true })) }
+                : {}),
+            }
+          : item,
+      );
 }

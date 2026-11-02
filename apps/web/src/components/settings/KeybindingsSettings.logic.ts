@@ -8,25 +8,27 @@ import {
 } from "@t3tools/contracts";
 import {
   DEFAULT_RESOLVED_KEYBINDINGS,
+  parseKeybindingShortcut,
   parseKeybindingWhenExpression,
+  US_SHIFTED_TO_UNSHIFTED_KEYS,
 } from "@t3tools/shared/keybindings";
 
-import { shortcutKeyFromEvent } from "../../keybindings";
+import { shortcutConflictKey, shortcutKeyFromEvent } from "../../keybindings";
 import { isMacPlatform } from "../../lib/utils";
-import type { MessageKey, Translate } from "../../i18n";
 import { METRIC_OPTIONS, WINDOW_OPTIONS } from "../usage/usageShortcuts";
+import { type MessageKey, type Translate } from "../../i18n";
 
+
+// Rank every usage command; mixing rank and alphabetical comparisons makes order input-dependent.
 const usageCommandOrder = new Map<KeybindingCommand, number>(
-  [...METRIC_OPTIONS, ...WINDOW_OPTIONS].map((option, index) => [option.command, index]),
+  [
+    "usage.open" as const,
+    ...[...METRIC_OPTIONS, ...WINDOW_OPTIONS].map((option) => option.command),
+  ].map((command, index) => [command, index]),
 );
 
 const firstUsageCommand = METRIC_OPTIONS[0].command;
 
-/**
- * Orders commands by `key`, except Usage page commands, which sort as one
- * block in page order where the first of them would sort. A total order, so
- * adding a binding elsewhere cannot reshuffle the Usage rows.
- */
 function compareCommands(
   left: KeybindingCommand,
   right: KeybindingCommand,
@@ -102,11 +104,7 @@ export function whenAstToExpression(node: KeybindingWhenNode | undefined): strin
   }
 }
 
-export function whenNodeRemoveLabel(
-  node: KeybindingWhenNode,
-  depth: number,
-  t?: Translate,
-): string {
+export function whenNodeRemoveLabel(node: KeybindingWhenNode, depth: number, t?: Translate): string {
   if (depth === 0) return t?.("keybindings.clearAllConditions") ?? "Clear all conditions";
   if (node.type === "identifier" || (node.type === "not" && node.node.type === "identifier")) {
     return t?.("keybindings.removeCondition") ?? "Remove condition";
@@ -120,8 +118,7 @@ function wrapWhenExpression(node: KeybindingWhenNode): string {
 }
 
 export function parseWhenExpressionDraft(
-  expression: string,
-  t?: Translate,
+  expression: string, t?: Translate,
 ): { ok: true; value: KeybindingWhenNode | undefined } | { ok: false; message: string } {
   const trimmed = expression.trim();
   if (trimmed.length === 0) return { ok: true, value: undefined };
@@ -186,34 +183,84 @@ function conflictsWithWhen(leftWhen: string, rightWhen: string): boolean {
 export function keybindingConflictLabels(
   rows: ReadonlyArray<KeybindingRow>,
   input: { readonly rowId: string; readonly key: string; readonly when: string },
-  formatCommand: (command: KeybindingCommand) => string = commandLabel,
+  platform = navigator.platform,
+  t?: Translate,
 ): ReadonlyArray<string> {
   if (input.key.trim().length === 0) return [];
+  const shortcut = parseKeybindingShortcut(input.key);
+  if (!shortcut) return [];
+  // Compare resolved chords so mod+k and ctrl+k collide where mod is Ctrl.
+  const conflictKey = shortcutConflictKey(shortcut, platform);
   const conflicts: Array<string> = [];
   for (const candidate of rows) {
     if (
       candidate.id !== input.rowId &&
-      candidate.key === input.key &&
+      shortcutConflictKey(candidate.binding.shortcut, platform) === conflictKey &&
       conflictsWithWhen(candidate.when, input.when)
     ) {
-      conflicts.push(formatCommand(candidate.command));
+      conflicts.push(t ? localizedCommandLabel(candidate.command, t) : commandLabel(candidate.command));
     }
   }
   return [...new Set(conflicts)].toSorted();
 }
 
+export interface KeybindingGroup {
+  readonly id: string;
+  readonly title: string;
+  readonly rows: ReadonlyArray<KeybindingRow>;
+}
+
+const KEYBINDING_GROUPS = [
+  {
+    id: "navigation",
+    title: "Navigation",
+    prefixes: ["sidebar", "rightPanel", "commandPalette", "filePicker", "projectSearch", "editor"],
+  },
+  { id: "threads", title: "Threads", prefixes: ["thread", "chat", "pullRequest"] },
+  { id: "composer", title: "Composer", prefixes: ["composer", "modelPicker"] },
+  { id: "terminal", title: "Terminal", prefixes: ["terminal"] },
+  { id: "preview", title: "Preview & diff", prefixes: ["preview", "diff"] },
+  { id: "appearance", title: "Appearance", prefixes: ["theme", "appearance", "themeEditor"] },
+  { id: "scripts", title: "Project scripts", prefixes: ["script"] },
+] as const;
+const OTHER_KEYBINDING_GROUP = { id: "other", title: "Other" } as const;
+
+function keybindingGroupFor(command: KeybindingCommand): { id: string; title: string } {
+  const prefix = String(command).split(".")[0] ?? "";
+  return (
+    KEYBINDING_GROUPS.find((group) => (group.prefixes as ReadonlyArray<string>).includes(prefix)) ??
+    OTHER_KEYBINDING_GROUP
+  );
+}
+
+export function groupKeybindingRows(
+  rows: ReadonlyArray<KeybindingRow>,
+): ReadonlyArray<KeybindingGroup> {
+  const rowsByGroup = new Map<string, Array<KeybindingRow>>();
+  for (const row of rows) {
+    const group = keybindingGroupFor(row.command);
+    const bucket = rowsByGroup.get(group.id);
+    if (bucket) bucket.push(row);
+    else rowsByGroup.set(group.id, [row]);
+  }
+  return [...KEYBINDING_GROUPS, OTHER_KEYBINDING_GROUP].flatMap((group) => {
+    const groupRows = rowsByGroup.get(group.id);
+    return groupRows ? [{ id: group.id, title: group.title, rows: groupRows }] : [];
+  });
+}
+
 export function buildKeybindingRows(
   keybindings: ResolvedKeybindingsConfig,
-  query: string,
-  t?: Translate,
+  platform = navigator.platform,
 ): ReadonlyArray<KeybindingRow> {
-  const normalizedQuery = query.trim().toLowerCase();
-  const rows = keybindings.map((binding, index) => {
+  const rowsById = new Map<string, KeybindingRow>();
+  for (const binding of keybindings) {
     const defaultBinding = defaultBindingForBinding(binding);
     const key = shortcutToKeybindingInput(binding.shortcut);
     const when = whenAstToExpression(binding.whenAst);
-    return {
-      id: `${keybindingRowId(binding.command, key, when)}\u0000${index}`,
+    const id = keybindingRowId(binding.command, key, when);
+    rowsById.set(id, {
+      id,
       command: binding.command,
       key,
       when,
@@ -222,15 +269,20 @@ export function buildKeybindingRows(
       defaultWhen: whenAstToExpression(defaultBinding?.whenAst),
       binding,
       conflicts: [],
-    } satisfies KeybindingRow;
-  });
+    });
+  }
+  const rows = [...rowsById.values()];
 
   const rowsWithConflicts = rows.map((row) => {
-    const conflicts = keybindingConflictLabels(rows, {
-      rowId: row.id,
-      key: row.key,
-      when: row.when,
-    });
+    const conflicts = keybindingConflictLabels(
+      rows,
+      {
+        rowId: row.id,
+        key: row.key,
+        when: row.when,
+      },
+      platform,
+    );
     return conflicts.length > 0
       ? Object.assign({}, row, { conflicts: [...new Set(conflicts)].toSorted() })
       : row;
@@ -242,21 +294,27 @@ export function buildKeybindingRows(
     return left.key.localeCompare(right.key);
   });
 
-  if (normalizedQuery.length === 0) {
-    return rowsWithConflicts;
-  }
+  return rowsWithConflicts;
+}
 
-  return rowsWithConflicts.filter((row) => {
+export function filterKeybindingRows(
+  rows: ReadonlyArray<KeybindingRow>,
+  query: string,
+  t?: Translate,
+): ReadonlyArray<KeybindingRow> {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.length === 0) return rows;
+  return rows.filter((row) => {
     const sourceLabel =
       row.source === "Custom"
         ? (t?.("keybindings.source.custom") ?? "Custom")
         : row.source === "Project"
           ? (t?.("keybindings.source.project") ?? "Project")
           : row.source;
+    const label = (t ? localizedCommandLabel(row.command, t) : commandLabel(row.command)).toLowerCase();
     return (
       row.command.toLowerCase().includes(normalizedQuery) ||
-      commandLabel(row.command).toLowerCase().includes(normalizedQuery) ||
-      (t ? localizedCommandLabel(row.command, t).toLowerCase().includes(normalizedQuery) : false) ||
+      label.includes(normalizedQuery) ||
       row.key.toLowerCase().includes(normalizedQuery) ||
       row.when.toLowerCase().includes(normalizedQuery) ||
       row.source.toLowerCase().includes(normalizedQuery) ||
@@ -325,11 +383,20 @@ export function buildKeybindingCommandOptions(
 }
 
 export function commandLabel(command: KeybindingCommand): string {
-  if (command === "thread.copyReference") return "Pull Request: Copy Link or Thread ID";
+  if (command === "workspace.focusNext") return "Focus Next Workspace Area";
+  if (command === "workspace.focusPrevious") return "Focus Previous Workspace Area";
+  if (command === "composer.sendAlternate") return "Composer: Opposite Queue or Steer Action";
+  if (command === "composer.sendBackground") return "Composer: Start in Background";
+  if (command === "composer.sendAndNewThread") return "Composer: Send and Start New Thread";
+  if (command === "thread.steerQueuedMessage") return "Queue: Send First Queued Message";
+  if (command === "thread.editQueuedMessage") return "Queue: Edit Last Queued Message";
+  if (command === "thread.copyReference") return "Pull Request: Copy Link or Thread";
   const usageMetric = METRIC_OPTIONS.find((option) => option.command === command);
   if (usageMetric) return `Usage: ${usageMetric.label}`;
   const usagePeriod = WINDOW_OPTIONS.find((option) => option.command === command);
   if (usagePeriod) return `Usage: Period: ${usagePeriod.label}`;
+  if (command === "view.reopenClosed") return "Reopen Closed Tab";
+  if (command === "preview.focusUrl") return "Preview: Focus URL";
   const raw = String(command);
   if (raw.startsWith("script.") && raw.endsWith(".run")) {
     return `Run Script: ${titleCaseCommandSegment(raw.slice("script.".length, -".run".length))}`;
@@ -337,70 +404,79 @@ export function commandLabel(command: KeybindingCommand): string {
   return raw.split(".").map(titleCaseCommandSegment).join(": ");
 }
 
-const STATIC_COMMAND_LABEL_KEYS = {
-  "sidebar.toggle": "keybindings.command.sidebarToggle",
-  "terminal.toggle": "keybindings.command.terminalToggle",
-  "terminal.split": "keybindings.command.terminalSplit",
-  "terminal.splitVertical": "keybindings.command.terminalSplitVertical",
-  "terminal.new": "keybindings.command.terminalNew",
-  "terminal.close": "keybindings.command.terminalClose",
-  "rightPanel.toggle": "keybindings.command.rightPanelToggle",
-  "rightPanel.toggleMaximized": "keybindings.command.rightPanelToggleMaximized",
-  "rightPanel.close": "keybindings.command.rightPanelClose",
-  "pullRequest.copyNumber": "keybindings.command.pullRequestCopyNumber",
-  "diff.toggle": "keybindings.command.diffToggle",
-  "preview.toggle": "keybindings.command.previewToggle",
-  "preview.refresh": "keybindings.command.previewRefresh",
-  "preview.focusUrl": "keybindings.command.previewFocusUrl",
-  "preview.zoomIn": "keybindings.command.previewZoomIn",
-  "preview.zoomOut": "keybindings.command.previewZoomOut",
-  "preview.resetZoom": "keybindings.command.previewResetZoom",
-  "commandPalette.toggle": "keybindings.command.commandPaletteToggle",
-  "filePicker.toggle": "keybindings.command.filePickerToggle",
-  "projectSearch.toggle": "keybindings.command.projectSearchToggle",
-  "themeEditor.toggle": "keybindings.command.themeEditorToggle",
-  "composer.stash": "keybindings.command.composerStash",
-  "composer.host": "keybindings.command.composerHost",
-  "composer.effort": "keybindings.command.composerEffort",
-  "composer.mode": "keybindings.command.composerMode",
-  "composer.workspace": "keybindings.command.composerWorkspace",
-  "composer.previousWorktree": "keybindings.command.composerPreviousWorktree",
-  "composer.branch": "keybindings.command.composerBranch",
-  "chat.new": "keybindings.command.chatNew",
-  "chat.newLocal": "keybindings.command.chatNewLocal",
-  "editor.openFavorite": "keybindings.command.editorOpenFavorite",
-  "modelPicker.toggle": "keybindings.command.modelPickerToggle",
-  "modelPicker.previousProvider": "keybindings.command.modelPickerPreviousProvider",
-  "modelPicker.nextProvider": "keybindings.command.modelPickerNextProvider",
-  "thread.stop": "keybindings.command.threadStop",
-  "thread.steerQueuedMessage": "keybindings.command.threadSteerQueuedMessage",
-  "thread.previous": "keybindings.command.threadPrevious",
-  "thread.next": "keybindings.command.threadNext",
-  "thread.copyReference": "keybindings.command.threadCopyReference",
-  "thread.settle": "keybindings.command.threadSettle",
-  "thread.pin": "keybindings.command.threadPin",
-} as const satisfies Readonly<Record<string, MessageKey>>;
+const STATIC_COMMAND_LABELS = {
+  "sidebar.toggle": ["keybindings.command.sidebarToggle", "Sidebar: Toggle"],
+  "terminal.toggle": ["keybindings.command.terminalToggle", "Terminal: Toggle"],
+  "terminal.split": ["keybindings.command.terminalSplit", "Terminal: Split"],
+  "terminal.splitVertical": ["keybindings.command.terminalSplitVertical", "Terminal: Split Vertical"],
+  "terminal.new": ["keybindings.command.terminalNew", "Terminal: New"],
+  "terminal.close": ["keybindings.command.terminalClose", "Terminal: Close"],
+  "rightPanel.toggle": ["keybindings.command.rightPanelToggle", "Right Panel: Toggle"],
+  "rightPanel.toggleMaximized": [
+    "keybindings.command.rightPanelToggleMaximized",
+    "Right Panel: Toggle Maximized",
+  ],
+  "rightPanel.close": ["keybindings.command.rightPanelClose", "Right Panel: Close"],
+  "pullRequest.copyNumber": ["keybindings.command.pullRequestCopyNumber", "Pull Request: Copy Number"],
+  "diff.toggle": ["keybindings.command.diffToggle", "Diff: Toggle"],
+  "preview.toggle": ["keybindings.command.previewToggle", "Preview: Toggle"],
+  "preview.refresh": ["keybindings.command.previewRefresh", "Preview: Refresh"],
+  "preview.focusUrl": ["keybindings.command.previewFocusUrl", "Preview: Focus URL"],
+  "preview.zoomIn": ["keybindings.command.previewZoomIn", "Preview: Zoom In"],
+  "preview.zoomOut": ["keybindings.command.previewZoomOut", "Preview: Zoom Out"],
+  "preview.resetZoom": ["keybindings.command.previewResetZoom", "Preview: Reset Zoom"],
+  "commandPalette.toggle": ["keybindings.command.commandPaletteToggle", "Command Palette: Toggle"],
+  "filePicker.toggle": ["keybindings.command.filePickerToggle", "File Picker: Toggle"],
+  "projectSearch.toggle": ["keybindings.command.projectSearchToggle", "Project Search: Toggle"],
+  "themeEditor.toggle": ["keybindings.command.themeEditorToggle", "Theme Editor: Toggle"],
+  "composer.stash": ["keybindings.command.composerStash", "Composer: Stash"],
+  "composer.host": ["keybindings.command.composerHost", "Composer: Host"],
+  "composer.effort": ["keybindings.command.composerEffort", "Composer: Effort"],
+  "composer.mode": ["keybindings.command.composerMode", "Composer: Mode"],
+  "composer.workspace": ["keybindings.command.composerWorkspace", "Composer: Workspace"],
+  "composer.previousWorktree": [
+    "keybindings.command.composerPreviousWorktree",
+    "Composer: Previous Worktree",
+  ],
+  "composer.branch": ["keybindings.command.composerBranch", "Composer: Branch"],
+  "chat.new": ["keybindings.command.chatNew", "Chat: New"],
+  "chat.newLocal": ["keybindings.command.chatNewLocal", "Chat: New Local"],
+  "editor.openFavorite": ["keybindings.command.editorOpenFavorite", "Editor: Open Favorite"],
+  "modelPicker.toggle": ["keybindings.command.modelPickerToggle", "Model Picker: Toggle"],
+  "modelPicker.previousProvider": [
+    "keybindings.command.modelPickerPreviousProvider",
+    "Model Picker: Previous Provider",
+  ],
+  "modelPicker.nextProvider": [
+    "keybindings.command.modelPickerNextProvider",
+    "Model Picker: Next Provider",
+  ],
+  "thread.stop": ["keybindings.command.threadStop", "Thread: Stop"],
+  "thread.steerQueuedMessage": [
+    "keybindings.command.threadSteerQueuedMessage",
+    "Thread: Steer Queued Message",
+  ],
+  "thread.previous": ["keybindings.command.threadPrevious", "Thread: Previous"],
+  "thread.next": ["keybindings.command.threadNext", "Thread: Next"],
+  "thread.copyReference": [
+    "keybindings.command.threadCopyReference",
+    "Pull Request: Copy Link or Thread ID",
+  ],
+  "thread.settle": ["keybindings.command.threadSettle", "Thread: Settle"],
+  "thread.pin": ["keybindings.command.threadPin", "Thread: Pin"],
+} as const satisfies Readonly<Record<string, readonly [MessageKey, string]>>;
 
+/** Translate a command label when the catalog still matches the upstream English wording. */
 export function localizedCommandLabel(command: KeybindingCommand, t: Translate): string {
+  const english = commandLabel(command);
   const raw = String(command);
   if (raw.startsWith("script.") && raw.endsWith(".run")) {
-    return t("keybindings.command.runScript", {
-      name: titleCaseCommandSegment(raw.slice("script.".length, -".run".length)),
-    });
+    const name = titleCaseCommandSegment(raw.slice("script.".length, -".run".length));
+    if (english === `Run Script: ${name}`) return t("keybindings.command.runScript", { name });
   }
-
-  const threadJumpMatch = /^thread\.jump\.(\d+)$/u.exec(raw);
-  if (threadJumpMatch) {
-    return t("keybindings.command.threadJump", { number: threadJumpMatch[1] ?? "" });
-  }
-
-  const modelJumpMatch = /^modelPicker\.jump\.(\d+)$/u.exec(raw);
-  if (modelJumpMatch) {
-    return t("keybindings.command.modelPickerJump", { number: modelJumpMatch[1] ?? "" });
-  }
-
-  const key = STATIC_COMMAND_LABEL_KEYS[raw as keyof typeof STATIC_COMMAND_LABEL_KEYS];
-  return key ? t(key) : commandLabel(command);
+  const entry = STATIC_COMMAND_LABELS[raw as keyof typeof STATIC_COMMAND_LABELS];
+  if (entry && entry[1] === english) return t(entry[0]);
+  return english;
 }
 
 function titleCaseCommandSegment(segment: string): string {
@@ -411,6 +487,18 @@ function titleCaseCommandSegment(segment: string): string {
     }
   }
   return words.join(" ");
+}
+
+function recordedLayoutShortcutKey(
+  event: Pick<KeyboardEvent, "key" | "code" | "shiftKey" | "altKey">,
+): string {
+  const physicalKey = shortcutKeyFromEvent(event);
+  const layoutKey = event.key.toLowerCase();
+  if (event.altKey || layoutKey.length !== 1) return physicalKey;
+  // Normalize only US shifted glyphs at their US position. Other layouts can
+  // produce the same glyph without Shift or at a different position.
+  const unshiftedKey = event.shiftKey ? US_SHIFTED_TO_UNSHIFTED_KEYS.get(layoutKey) : undefined;
+  return unshiftedKey === physicalKey ? physicalKey : layoutKey;
 }
 
 function normalizeShortcutKeyToken(key: string): string | null {
@@ -443,12 +531,16 @@ function normalizeShortcutKeyToken(key: string): string | null {
   return null;
 }
 
-/** Turns a keydown into a binding such as `mod+shift+k` or `tab`. Null for modifier-only presses. */
 export function keybindingFromKeyboardEvent(
   event: Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
   platform: string,
+  options?: {
+    readonly layoutCharacter?: boolean;
+  },
 ): string | null {
-  const keyToken = normalizeShortcutKeyToken(shortcutKeyFromEvent(event));
+  const keyToken = normalizeShortcutKeyToken(
+    options?.layoutCharacter ? recordedLayoutShortcutKey(event) : shortcutKeyFromEvent(event),
+  );
   if (!keyToken) return null;
 
   const parts: string[] = [];

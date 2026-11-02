@@ -1,29 +1,75 @@
 import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
-import { useI18n } from "~/i18n";
 
 import { describePreviewError } from "./errorCodeMessages";
 
-interface Props {
-  url: string;
-  /** Chromium net error code, e.g. -105. */
-  code: number;
-  /** Stringified Chromium error, e.g. "ERR_NAME_NOT_RESOLVED". */
-  description: string;
-  onReload: () => void;
+import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+
+function t(key: MessageKey, values?: TranslateValues): string {
+  return createTranslator(readLocalePreference())(key, values);
 }
 
-/** Theme-aware tailwind port of Chromium's "This site can't be reached" page. */
-export function PreviewUnreachable({ url, code, description, onReload }: Props) {
-  const { t } = useI18n();
+
+interface Props {
+  url: string;
+  code: number;
+  description: string;
+  onReload: () => void;
+  move?: { readonly label: string; readonly onMove: () => void };
+}
+
+export function PreviewFileNotShown({
+  url,
+  fileName,
+  downloadUrl,
+  onOpen,
+}: {
+  url: string;
+  fileName: string;
+  downloadUrl: string | null;
+  onOpen: () => void;
+}) {
+  useI18n();
+
+  const host = safeHost(url) ?? url;
+  return (
+    <div className="scrollbar-gutter-both relative flex h-full min-h-0 w-full overflow-y-auto bg-background">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col px-8 py-12 sm:py-16">
+        <ErrorIcon className="mb-6 size-12 text-muted-foreground/70" />
+        <h1 className="mb-3 text-2xl font-semibold leading-tight text-foreground">
+          This file can&rsquo;t be shown here
+        </h1>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">{fileName}</span> from {host} was
+          downloaded instead.
+        </p>
+        <div className="mt-auto flex items-center gap-2 pt-8">
+          <div className="flex-1" />
+          <Button type="button" variant="outline" size="sm" onClick={onOpen}>
+            Open in browser
+          </Button>
+          {downloadUrl ? (
+            <Button type="button" size="sm" render={<a href={downloadUrl} download={fileName} />}>
+              Download
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function PreviewUnreachable({ url, code, description, onReload, move }: Props) {
+  useI18n();
+
   const [showDetails, setShowDetails] = useState(false);
   const host = safeHost(url) ?? url;
   const friendly = describePreviewError(description, t);
   const errorLabel = description.length > 0 ? description : `ERR_${Math.abs(code) || "FAILED"}`;
 
   return (
-    <div className="relative flex h-full min-h-0 w-full overflow-y-auto bg-background">
+    <div className="scrollbar-gutter-both relative flex h-full min-h-0 w-full overflow-y-auto bg-background">
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col px-8 py-12 sm:py-16">
         <ErrorIcon className="mb-6 size-12 text-muted-foreground/70" />
         <h1 className="mb-3 text-2xl font-semibold leading-tight text-foreground">
@@ -39,6 +85,9 @@ export function PreviewUnreachable({ url, code, description, onReload }: Props) 
             <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
               <li>{t("preview.unreachable.connection")}</li>
               <li>{t("preview.unreachable.server")}</li>
+              {move ? (
+                <li>Opening it in the environment&rsquo;s browser, which reaches its network</li>
+              ) : null}
               <li>{t("preview.unreachable.proxy")}</li>
             </ul>
           </div>
@@ -58,8 +107,13 @@ export function PreviewUnreachable({ url, code, description, onReload }: Props) 
             {showDetails ? t("preview.unreachable.hideDetails") : t("preview.unreachable.details")}
           </Button>
           <div className="flex-1" />
+          {move ? (
+            <Button type="button" variant="outline" size="sm" onClick={move.onMove}>
+              {move.label}
+            </Button>
+          ) : null}
           <Button type="button" size="sm" onClick={onReload}>
-            {t("preview.unreachable.reload")}
+            Reload
           </Button>
         </div>
       </div>

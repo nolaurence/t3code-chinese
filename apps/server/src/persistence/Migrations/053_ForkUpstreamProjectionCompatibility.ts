@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 // Fork databases recorded 42/43 as ForkProjectionCompatibility and
 // ProjectionThreadMessagePhase, so upstream's same-id migrations never ran.

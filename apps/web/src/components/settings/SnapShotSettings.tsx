@@ -1,28 +1,34 @@
-import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   isModifierPairShortcut,
   type ClientSettingsPatch,
   type DesktopSnapShotShortcutAvailability,
-  type DesktopSnapShotState,
   type DesktopSnapShotSetupAction,
   type SnapShotShortcut,
 } from "@t3tools/contracts";
-import { ChevronDownIcon, PlayIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { PlayIcon } from "lucide-react";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import * as Cause from "effect/Cause";
+import { useContext, useRef, useState } from "react";
 
-import { cn } from "~/lib/utils";
-
-import { useClientSettings, useUpdateClientSettings } from "../../hooks/useSettings";
+import { useClientSettings, updateClientSettings } from "../../hooks/useSettings";
 import { getDesktopSnapShotBridge } from "../../lib/desktopSnapShot";
 import {
-  readSnapShotSetupResume,
   saveSnapShotSetupResume,
   clearSnapShotSetupResume,
+  readSnapShotSetupResume,
 } from "../../lib/snapShotSetupResume";
 import { sameSnapShotShortcut, snapShotKeybindingConflict } from "../../lib/snapShotShortcut";
 import { playSnapShotSound } from "../../lib/snapShotSound";
+import {
+  desktopSnapShotAtom,
+  refreshDesktopSnapShotState,
+  snapShotSetupError,
+  type SnapShotSetupError,
+} from "../../state/desktopSnapShot";
+import { toastManager } from "../ui/toast";
 import { primaryServerKeybindingsAtom } from "../../state/server";
-import { localizedCommandLabel } from "./KeybindingsSettings.logic";
+import { commandLabel } from "./KeybindingsSettings.logic";
 import {
   snapShotStatus,
   snapShotShortcutStatus,
@@ -44,62 +50,95 @@ import {
 import { searchableSetting } from "./settingsSearch";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "../ui/menu";
-import { selectTriggerVariants } from "../ui/select";
+import { SelectButton } from "../ui/select";
 import { Switch } from "../ui/switch";
-import { toastManager } from "../ui/toast";
 import { SnapShotSetupDialog } from "./SnapShotSetupDialog";
 import { useSnapShotShortcutRecorder } from "./useSnapShotShortcutRecorder";
-import { useI18n } from "../../i18n";
 import {
   captureSetupAccessReady,
   captureSetupInitialStep,
   captureSetupShouldDisableOnClose,
   type CaptureSetupStep,
 } from "./SnapShotSetupDialog.logic";
+import { useI18n } from "../../i18n";
 
-const soundOptionRowClassName =
-  "grid grid-cols-[1fr_auto] rounded-sm has-data-checked:bg-foreground/[0.08]";
-const soundOptionItemClassName = "data-checked:bg-transparent";
-const soundPreviewClassName = "min-h-7 w-7 justify-center px-0";
-
-function captureSettingsError(title: string, error: unknown, fallback: string) {
-  return { title, message: error instanceof Error ? error.message : fallback };
-}
+const soundOptionRowClassName = "grid grid-cols-[1fr_auto]";
 
 type ShortcutCheck =
   | { readonly status: "idle"; readonly availability: null }
-  | { readonly status: "checking"; readonly availability: null }
+  | {
+      readonly status: "checking";
+      readonly availability: null;
+      readonly shortcut: SnapShotShortcut;
+      readonly savedShortcut: SnapShotShortcut;
+    }
   | {
       readonly status: "checked";
+      readonly shortcut: SnapShotShortcut;
+      readonly savedShortcut: SnapShotShortcut;
       readonly availability: DesktopSnapShotShortcutAvailability;
     };
 
 export function SnapShotSettings() {
   const { t } = useI18n();
-  const settings = useClientSettings();
-  const updateSettings = useUpdateClientSettings();
+  const settings = useClientSettings((current) => ({
+    snapShotAnimations: current.snapShotAnimations,
+    snapShotEnabled: current.snapShotEnabled,
+    snapShotFlash: current.snapShotFlash,
+    snapShotIncludeAccessibility: current.snapShotIncludeAccessibility,
+    snapShotPlaySound: current.snapShotPlaySound,
+    snapShotShortcut: current.snapShotShortcut,
+    snapShotSound: current.snapShotSound,
+  }));
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const bridge = getDesktopSnapShotBridge();
-  const [state, setState] = useState<DesktopSnapShotState | null>(null);
+  const registry = useContext(RegistryContext);
+  const { state, refreshError } = useAtomValue(desktopSnapShotAtom);
   const [setupBusy, setSetupBusy] = useState(false);
-  const [setupError, setSetupError] = useState<ReturnType<typeof captureSettingsError> | null>(
-    null,
-  );
-  const [wizard, setWizard] = useState<{
+  const [setupError, setSetupError] = useState<SnapShotSetupError | null>(null);
+  // macOS can quit the app from a permission prompt; until the user opens or closes the wizard
+  // themselves, a saved resume reopens it where it left off.
+  const [resume] = useState(readSnapShotSetupResume);
+  const [chosenWizard, setWizard] = useState<{
     initialStep: CaptureSetupStep;
     wasEnabled: boolean;
-  } | null>(null);
+  } | null>();
+  const wizard =
+    chosenWizard !== undefined
+      ? chosenWizard
+      : state?.macPermissions && resume
+        ? { initialStep: "access" as const, wasEnabled: resume.wasEnabled }
+        : null;
+  // The wizard shows errors inline; outside it there is nowhere to, so they become a toast.
+  const reportSetupError = (title: string, error: unknown) => {
+    const report = snapShotSetupError(title, error);
+    setSetupError(report);
+    if (!wizard)
+      toastManager.add({ type: "error", title: report.title, description: report.message });
+  };
+  const refreshState = () =>
+    refreshDesktopSnapShotState(registry, (error) =>
+      reportSetupError(t("snapShot.checkSetupFailed"), error),
+    );
   const [candidate, setCandidate] = useState<SnapShotShortcut>(settings.snapShotShortcut);
-  const [shortcutCheck, setShortcutCheck] = useState<ShortcutCheck>({
+  const [latestShortcutCheck, setShortcutCheck] = useState<ShortcutCheck>({
     status: "idle",
     availability: null,
   });
-  const shortcutCheckIdRef = useRef(0);
-  const stateRequestIdRef = useRef(0);
-  const unavailableMessage = snapShotUnavailableMessage(Boolean(bridge), t);
-  const captureAvailable = Boolean(bridge) && state !== null && state.mode !== "unavailable";
-  const feedbackUnavailable = snapShotFeedbackUnavailableMessage(state, t);
+  // A check answers for one candidate against one saved shortcut. Once either moves on (an edit,
+  // or hydration saving a new shortcut) a late answer no longer shows, so a check for the
+  // shortcut that just got saved can't claim it is ready to save.
   const savedShortcut = settings.snapShotShortcut;
+  const shortcutCheck: ShortcutCheck =
+    latestShortcutCheck.status === "idle" ||
+    (sameSnapShotShortcut(latestShortcutCheck.shortcut, candidate) &&
+      sameSnapShotShortcut(latestShortcutCheck.savedShortcut, savedShortcut))
+      ? latestShortcutCheck
+      : { status: "idle", availability: null };
+  const shortcutCheckIdRef = useRef(0);
+  const unavailableMessage = snapShotUnavailableMessage(Boolean(bridge));
+  const captureAvailable = Boolean(bridge) && state !== null && state.mode !== "unavailable";
+  const feedbackUnavailable = snapShotFeedbackUnavailableMessage(state);
   const managedShortcut = state?.linuxBackend === "niri" || state?.linuxBackend === "hyprland";
   const shortcutChanged = !managedShortcut && !sameSnapShotShortcut(candidate, savedShortcut);
   const displayShortcut = shortcutChanged ? candidate : (state?.shortcut ?? savedShortcut);
@@ -110,155 +149,87 @@ export function SnapShotSettings() {
     shortcutChanged && candidateConflict === null && shortcutCheck.availability?.available === true;
   const soundSelection = settings.snapShotPlaySound ? settings.snapShotSound : "off";
   const soundLabel =
-    soundSelection === "off"
-      ? t("common.off")
-      : soundSelection === "soft-pop"
-        ? `${t("snapShot.soundWhoosh")} (${t("common.default")})`
-        : t("snapShot.soundClick");
+    soundSelection === "off" ? "Off" : soundSelection === "soft-pop" ? "Whoosh (Default)" : "Click";
 
-  const refreshState = useCallback(async () => {
-    const requestId = ++stateRequestIdRef.current;
-    try {
-      if (bridge) {
-        const nextState = await bridge.getSnapShotState();
-        if (requestId === stateRequestIdRef.current) setState(nextState);
-        return nextState;
-      }
-    } catch (error) {
-      if (requestId === stateRequestIdRef.current)
-        setSetupError(
-          captureSettingsError(t("snapShot.checkSetupFailed"), error, t("snapShot.tryAgain")),
-        );
-    }
-  }, [bridge, t]);
-
-  const setup = useCallback(
-    async (action: DesktopSnapShotSetupAction) => {
-      if (!bridge?.setupSnapShot || setupBusy) return;
-      setSetupBusy(true);
-      setSetupError(null);
-      try {
-        if (
-          state?.macPermissions &&
-          wizard &&
-          (action === "allow-screen-recording" || action === "allow-accessibility")
-        ) {
-          // macOS can quit the app from its permission prompt.
-          saveSnapShotSetupResume(wizard.wasEnabled);
-        }
-        await bridge.setupSnapShot(action);
-        await refreshState();
-      } catch (error) {
-        setSetupError(
-          captureSettingsError(
-            action === "retry-shortcut"
-              ? t("snapShot.shortcutPermissionsFailed")
-              : t("snapShot.setupFailed"),
-            error,
-            t("snapShot.tryAgain"),
-          ),
-        );
-      } finally {
-        setSetupBusy(false);
-      }
-    },
-    [bridge, refreshState, setupBusy, state, t, wizard],
-  );
-
-  useEffect(() => {
-    if (!setupError || wizard) return;
-    toastManager.add({
-      type: "error",
-      title: setupError.title,
-      description: setupError.message,
-    });
+  const setup = async (action: DesktopSnapShotSetupAction) => {
+    if (!bridge || setupBusy) return;
+    setSetupBusy(true);
     setSetupError(null);
-  }, [setupError, wizard]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void refreshState().then((current) => {
-      const resume = readSnapShotSetupResume();
-      if (!cancelled && current?.macPermissions && resume) {
-        setWizard({ initialStep: "access", wasEnabled: resume.wasEnabled });
+    const result = await settlePromise(async () => {
+      if (
+        state?.macPermissions &&
+        wizard &&
+        (action === "allow-screen-recording" || action === "allow-accessibility")
+      ) {
+        // macOS can quit the app from its permission prompt.
+        saveSnapShotSetupResume(wizard.wasEnabled);
       }
+      await bridge.setupSnapShot(action);
+      await refreshState();
     });
-    window.addEventListener("focus", refreshState);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("focus", refreshState);
-    };
-  }, [refreshState]);
+    if (result._tag === "Failure") {
+      reportSetupError(
+        action === "retry-shortcut"
+          ? t("snapShot.shortcutPermissionsFailed")
+          : t("snapShot.setupFailed"),
+        Cause.squash(result.cause),
+      );
+    }
+    setSetupBusy(false);
+  };
 
-  useEffect(
-    () =>
-      bridge?.onSnapShotEvent((event) => {
-        if (event.type === "shortcut-changed") void refreshState();
-      }),
-    [bridge, refreshState],
-  );
-
-  useEffect(() => {
-    shortcutCheckIdRef.current++;
+  // Hydration can hand back an equal shortcut object; only a different shortcut resets the edit.
+  const [renderedSavedShortcut, setRenderedSavedShortcut] = useState(savedShortcut);
+  if (!sameSnapShotShortcut(renderedSavedShortcut, savedShortcut)) {
+    setRenderedSavedShortcut(savedShortcut);
     setCandidate(savedShortcut);
     setShortcutCheck({ status: "idle", availability: null });
-  }, [savedShortcut]);
+  }
 
-  const save = useCallback(
-    async (patch: ClientSettingsPatch) => {
-      setSetupError(null);
-      try {
-        await updateSettings(patch);
-        return await refreshState();
-      } catch (error) {
-        setSetupError(
-          captureSettingsError(t("snapShot.saveFailed"), error, t("snapShot.tryAgain")),
-        );
-      }
-    },
-    [refreshState, t, updateSettings],
-  );
+  const save = async (patch: ClientSettingsPatch) => {
+    setSetupError(null);
+    try {
+      await updateClientSettings(patch);
+      return await refreshState();
+    } catch (error) {
+      reportSetupError(t("snapShot.saveFailed"), error);
+    }
+  };
 
-  const saveIncludeAccessibility = useCallback(
-    async (includeAccessibility: boolean) => {
-      try {
-        if (includeAccessibility && settings.snapShotEnabled)
-          await bridge?.requestSnapShotPermissions(true);
-        await save({ snapShotIncludeAccessibility: includeAccessibility });
-      } catch (error) {
-        setSetupError(
-          captureSettingsError(t("snapShot.allowTextFailed"), error, t("snapShot.tryAgain")),
-        );
-      }
-    },
-    [bridge, save, settings.snapShotEnabled, t],
-  );
+  const saveIncludeAccessibility = async (includeAccessibility: boolean) => {
+    try {
+      if (includeAccessibility && settings.snapShotEnabled)
+        await bridge?.requestSnapShotPermissions(true);
+      await save({ snapShotIncludeAccessibility: includeAccessibility });
+    } catch (error) {
+      reportSetupError(t("snapShot.allowTextFailed"), error);
+    }
+  };
 
-  const checkShortcut = useCallback(
-    async (shortcut: SnapShotShortcut) => {
-      const checkId = ++shortcutCheckIdRef.current;
-      setCandidate(shortcut);
-      const conflict = snapShotKeybindingConflict(shortcut, keybindings);
-      if (conflict || !bridge) return;
-      setShortcutCheck({ status: "checking", availability: null });
-      try {
-        const availability = await bridge.checkSnapShotShortcut(shortcut);
-        if (checkId === shortcutCheckIdRef.current) {
-          setShortcutCheck({ status: "checked", availability });
-        }
-      } catch (error) {
-        if (checkId !== shortcutCheckIdRef.current) return;
-        setShortcutCheck({
-          status: "checked",
-          availability: {
-            available: false,
-            message: error instanceof Error ? error.message : t("snapShot.checkShortcutFailed"),
-          },
-        });
+  const checkShortcut = async (shortcut: SnapShotShortcut) => {
+    const checkId = ++shortcutCheckIdRef.current;
+    setCandidate(shortcut);
+    const conflict = snapShotKeybindingConflict(shortcut, keybindings);
+    if (conflict || !bridge) return;
+    setShortcutCheck({ status: "checking", availability: null, shortcut, savedShortcut });
+    try {
+      const availability = await bridge.checkSnapShotShortcut(shortcut);
+      if (checkId === shortcutCheckIdRef.current) {
+        setShortcutCheck({ status: "checked", availability, shortcut, savedShortcut });
       }
-    },
-    [bridge, keybindings, t],
-  );
+    } catch (error) {
+      if (checkId !== shortcutCheckIdRef.current) return;
+      setShortcutCheck({
+        status: "checked",
+        shortcut,
+        savedShortcut,
+        availability: {
+          available: false,
+          message: error instanceof Error ? error.message : t("snapShot.checkShortcutFailed"),
+        },
+      });
+    }
+  };
 
   const {
     recording,
@@ -275,13 +246,18 @@ export function SnapShotSettings() {
       setShortcutCheck({ status: "idle", availability: null });
     },
     onError: (message) =>
-      setShortcutCheck({ status: "checked", availability: { available: false, message } }),
+      setShortcutCheck({
+        status: "checked",
+        shortcut: candidate,
+        savedShortcut,
+        availability: { available: false, message },
+      }),
   });
 
   const shortcutStatus = recording
     ? t("snapShot.pressShortcut")
     : candidateConflict
-      ? t("snapShot.shortcutConflict", { command: localizedCommandLabel(candidateConflict, t) })
+      ? `T3 Code already uses this for "${commandLabel(candidateConflict)}".`
       : shortcutCheck.status === "checking"
         ? t("snapShot.checkingShortcut")
         : shortcutCheck.availability
@@ -292,7 +268,7 @@ export function SnapShotSettings() {
               !state.shortcutLabel &&
               isModifierPairShortcut(displayShortcut)
             ? t("snapShot.tryCtrlShift2")
-            : snapShotShortcutStatus(state, t);
+            : snapShotShortcutStatus(state);
 
   const openSetup = async (requested: CaptureSetupStep | "resume" = "resume") => {
     if (!state || setupBusy) return;
@@ -302,39 +278,35 @@ export function SnapShotSettings() {
     setShortcutCheck({ status: "idle", availability: null });
     setSetupError(null);
     setSetupBusy(true);
-    try {
-      let current = await refreshState();
-      if (!current) return;
-      if (current.macPermissions) requested = "access";
-      if (!settings.snapShotEnabled && captureSetupInitialStep(current, requested) !== "access") {
-        // Opening setup is the opt-in. Restore registration before resuming a
-        // later step, just as Continue does on the access step.
-        current = await save({ snapShotEnabled: true });
-        if (!current) {
-          // A settings write can succeed even if the following status check
-          // fails. Keep Finish later available to turn capture back off.
-          setWizard({ initialStep: "access", wasEnabled: false });
-          return;
-        }
+    await prepareSetup(requested).finally(() => setSetupBusy(false));
+  };
+
+  const prepareSetup = async (requested: CaptureSetupStep | "resume") => {
+    let current = await refreshState();
+    if (!current) return;
+    if (current.macPermissions) requested = "access";
+    if (!settings.snapShotEnabled && captureSetupInitialStep(current, requested) !== "access") {
+      current = await save({ snapShotEnabled: true });
+      if (!current) {
+        // Settings may save before status checking fails; keep Finish later available to disable capture.
+        setWizard({ initialStep: "access", wasEnabled: false });
+        return;
       }
-      setWizard({
-        initialStep: captureSetupInitialStep(current, requested),
-        wasEnabled: settings.snapShotEnabled,
-      });
-    } finally {
-      setSetupBusy(false);
     }
+    setWizard({
+      initialStep: captureSetupInitialStep(current, requested),
+      wasEnabled: settings.snapShotEnabled,
+    });
   };
 
   const enableForSetup = async () => {
     if (setupBusy) return false;
     setSetupBusy(true);
     setSetupError(null);
-    try {
+    const verified = await settlePromise(async () => {
       if (state?.macPermissions) {
         saveSnapShotSetupResume(wizard?.wasEnabled ?? settings.snapShotEnabled);
-        if (!bridge?.setupSnapShot) throw new Error(t("snapShot.restartToFinish"));
-        await bridge.setupSnapShot("test-mac-capture");
+        await bridge?.setupSnapShot("test-mac-capture");
       }
       if (state?.mode === "direct")
         await bridge?.requestSnapShotPermissions(settings.snapShotIncludeAccessibility);
@@ -343,20 +315,17 @@ export function SnapShotSettings() {
           ? await refreshState()
           : await save({ snapShotEnabled: true });
       return nextState !== undefined && captureSetupAccessReady(nextState);
-    } catch (error) {
-      setSetupError(
-        captureSettingsError(t("snapShot.verifyAccessFailed"), error, t("snapShot.tryAgain")),
-      );
-      return false;
-    } finally {
-      setSetupBusy(false);
-    }
+    });
+    setSetupBusy(false);
+    if (verified._tag === "Success") return verified.value;
+    reportSetupError(t("snapShot.verifyAccessFailed"), Cause.squash(verified.cause));
+    return false;
   };
 
   const closeSetup = async (completed: boolean) => {
     if (!wizard || setupBusy) return;
     setSetupBusy(true);
-    try {
+    const closed = await settlePromise(async () => {
       if (
         settings.snapShotEnabled &&
         captureSetupShouldDisableOnClose(wizard.wasEnabled, completed)
@@ -367,38 +336,34 @@ export function SnapShotSettings() {
       setSetupError(null);
       clearSnapShotSetupResume();
       setWizard(null);
-    } catch (error) {
-      setSetupError(
-        captureSettingsError(t("snapShot.closeSetupFailed"), error, t("snapShot.tryAgain")),
-      );
-    } finally {
-      setSetupBusy(false);
+    });
+    if (closed._tag === "Failure") {
+      reportSetupError(t("snapShot.closeSetupFailed"), Cause.squash(closed.cause));
     }
+    setSetupBusy(false);
   };
 
   const saveShortcut = async () => {
     if (!canSaveShortcut || setupBusy) return false;
     setSetupBusy(true);
-    try {
-      const saved = await save({ snapShotShortcut: candidate });
-      return Boolean(saved?.shortcutRegistered || saved?.shortcutPending);
-    } finally {
-      setSetupBusy(false);
-    }
+    const saved = await save({ snapShotShortcut: candidate }).finally(() => setSetupBusy(false));
+    return Boolean(saved?.shortcutRegistered || saved?.shortcutPending);
   };
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="snap-shot" title={t("settings.nav.snapShot")}>
+      <SettingsSection id="snap-shot" title="SnapShots">
         <SettingsUnavailableGroup message={unavailableMessage}>
           <SettingsRow
-            {...searchableSetting("snap-shot-enabled", t)}
-            description={snapShotDescription(state, t)}
+            {...searchableSetting("snap-shot-enabled")}
+            description={snapShotDescription(state)}
             status={
               bridge
                 ? setupBusy && !wizard
                   ? t("snapShot.updating")
-                  : snapShotStatus(state, settings.snapShotEnabled, t)
+                  : refreshError
+                    ? `${refreshError.title}. ${refreshError.message}`
+                    : snapShotStatus(state, settings.snapShotEnabled)
                 : undefined
             }
             control={
@@ -411,7 +376,7 @@ export function SnapShotSettings() {
                     disabled={setupBusy}
                     onClick={() => void openSetup()}
                   >
-                    {snapShotSetupButtonLabel(state, t)}
+                    {snapShotSetupButtonLabel(state)}
                   </Button>
                 ) : null}
                 <Switch
@@ -430,18 +395,17 @@ export function SnapShotSettings() {
           {settings.snapShotEnabled && captureAvailable ? (
             <>
               <SettingsRow
-                {...searchableSetting("snap-shot-accessibility", t)}
+                {...searchableSetting("snap-shot-accessibility")}
                 description={t("snapShot.includeTextDescription")}
-                status={snapShotAccessibilityUnavailableMessage(state, t)}
+                status={snapShotAccessibilityUnavailableMessage(state)}
                 control={
                   <Switch
                     checked={
-                      !snapShotAccessibilityUnavailableMessage(state, t) &&
+                      !snapShotAccessibilityUnavailableMessage(state) &&
                       settings.snapShotIncludeAccessibility
                     }
                     disabled={
-                      !captureAvailable ||
-                      Boolean(snapShotAccessibilityUnavailableMessage(state, t))
+                      !captureAvailable || Boolean(snapShotAccessibilityUnavailableMessage(state))
                     }
                     aria-label={t("snapShot.includeTextAria")}
                     onCheckedChange={(checked) => void saveIncludeAccessibility(checked)}
@@ -449,7 +413,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-shortcut", t)}
+                {...searchableSetting("snap-shot-shortcut")}
                 description={
                   state?.linuxBackend === "picker"
                     ? t("snapShot.chooseWindowDescription")
@@ -509,28 +473,25 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-sound", t)}
+                {...searchableSetting("snap-shot-sound")}
                 description={t("snapShot.soundDescription")}
                 control={
                   <Menu>
                     <MenuTrigger
-                      aria-label={t("snapShot.soundAria", { label: soundLabel })}
-                      className={cn(selectTriggerVariants({ size: "sm" }), "w-auto min-w-0")}
+                      aria-label={"Snapshot sound: " + soundLabel}
+                      render={<SelectButton size="sm" />}
+                      className="w-auto min-w-0"
                       disabled={!captureAvailable}
                     >
-                      <span className="min-w-0 flex-1 truncate text-left">
-                        {soundSelection === "off" ? (
-                          t("common.off")
-                        ) : soundSelection === "soft-pop" ? (
-                          <>
-                            {t("snapShot.soundWhoosh")}{" "}
-                            <span className="text-muted-foreground">({t("common.default")})</span>
-                          </>
-                        ) : (
-                          t("snapShot.soundClick")
-                        )}
-                      </span>
-                      <ChevronDownIcon className="-me-1 size-3 shrink-0 opacity-50" />
+                      {soundSelection === "off" ? (
+                        "Off"
+                      ) : soundSelection === "soft-pop" ? (
+                        <>
+                          Whoosh <span className="text-muted-foreground">(Default)</span>
+                        </>
+                      ) : (
+                        "Click"
+                      )}
                     </MenuTrigger>
                     <MenuPopup align="end">
                       <MenuRadioGroup
@@ -540,20 +501,14 @@ export function SnapShotSettings() {
                         value={soundSelection}
                       >
                         <MenuRadioItem closeOnClick value="off">
-                          {t("common.off")}
+                          Off
                         </MenuRadioItem>
                         <div className={soundOptionRowClassName}>
-                          <MenuRadioItem
-                            className={soundOptionItemClassName}
-                            closeOnClick
-                            value="soft-pop"
-                          >
-                            {t("snapShot.soundWhoosh")}{" "}
-                            <span className="text-muted-foreground">({t("common.default")})</span>
+                          <MenuRadioItem closeOnClick value="soft-pop">
+                            Whoosh <span className="text-muted-foreground">(Default)</span>
                           </MenuRadioItem>
                           <MenuItem
                             aria-label={t("snapShot.playWhoosh")}
-                            className={soundPreviewClassName}
                             closeOnClick={false}
                             onClick={() => playSnapShotSound("soft-pop")}
                           >
@@ -561,16 +516,11 @@ export function SnapShotSettings() {
                           </MenuItem>
                         </div>
                         <div className={soundOptionRowClassName}>
-                          <MenuRadioItem
-                            className={soundOptionItemClassName}
-                            closeOnClick
-                            value="camera-shutter"
-                          >
-                            {t("snapShot.soundClick")}
+                          <MenuRadioItem closeOnClick value="camera-shutter">
+                            Click
                           </MenuRadioItem>
                           <MenuItem
                             aria-label={t("snapShot.playClick")}
-                            className={soundPreviewClassName}
                             closeOnClick={false}
                             onClick={() => playSnapShotSound("camera-shutter")}
                           >
@@ -583,7 +533,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-flash", t)}
+                {...searchableSetting("snap-shot-flash")}
                 description={t("snapShot.flashDescription")}
                 status={feedbackUnavailable}
                 control={
@@ -596,7 +546,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-animations", t)}
+                {...searchableSetting("snap-shot-animations")}
                 description={t("snapShot.animationsDescription")}
                 status={feedbackUnavailable}
                 control={
@@ -619,7 +569,7 @@ export function SnapShotSettings() {
           wasEnabled={wizard.wasEnabled}
           includeAccessibility={settings.snapShotIncludeAccessibility}
           busy={setupBusy}
-          error={setupError?.message ?? null}
+          error={(setupError ?? refreshError)?.message ?? null}
           shortcutInput={shortcutInput}
           shortcutStatus={shortcutStatus}
           shortcutChanged={shortcutChanged}

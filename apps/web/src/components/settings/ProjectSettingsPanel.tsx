@@ -1,20 +1,22 @@
-import {
-  isAtomCommandInterrupted,
-  mapAtomCommandResult,
-  settlePromise,
-  squashAtomCommandFailure,
-  type AtomCommandResult,
-} from "@t3tools/client-runtime/state/runtime";
+import { useComposerMenuState } from "../chat/useComposerMenuState";
+import { useOrchestrationCommand } from "../../state/use-orchestration-command";
+import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
+import { useEnvironmentsWithScope } from "../../state/session";
+import { mapAtomCommandResult, settlePromise } from "@t3tools/client-runtime/state/runtime";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
-import { AsyncResult } from "effect/unstable/reactivity";
-import { type EnvironmentId, type ProjectIconOverride } from "@t3tools/contracts";
-import { useLocation, useNavigate } from "@tanstack/react-router";
-import * as Cause from "effect/Cause";
-import { Trash2Icon } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { planProjectRemoval } from "@t3tools/client-runtime/state/projects";
+import { type EnvironmentId } from "@t3tools/contracts";
+import {
+  checkProjectAccess,
+  reportProjectFailure,
+  useProjectGroupUpdate,
+  type ProjectGroupUpdate,
+} from "../../hooks/useProjectGroupUpdate";
+import { Navigate, useLocation, useNavigate } from "@tanstack/react-router";
+import { InfoIcon, Trash2Icon } from "lucide-react";
+import { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 
 import { useComposerDraftStore } from "../../composerDraftStore";
-import { useI18n } from "../../i18n";
 import { releaseProjectDraftUploads } from "../../lib/composerDraftUploads";
 import { readLocalApi } from "../../localApi";
 import {
@@ -22,13 +24,15 @@ import {
   type SidebarProjectSnapshot,
 } from "../../sidebarProjectGrouping";
 import { useEnvironments, usePrimaryEnvironmentId } from "../../state/environments";
-import { useThreadShells } from "../../state/entities";
+import { useThreadShells, waitForProjectRemoval } from "../../state/entities";
 import { projectEnvironment } from "../../state/projects";
-import { useAtomCommand } from "../../state/use-atom-command";
 import { ProjectFavicon } from "../ProjectFavicon";
+import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { stackedThreadToast, toastManager } from "../ui/toast";
+import { Switch } from "../ui/switch";
+import { toastManager } from "../ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   SettingResetButton,
   SettingsPageContainer,
@@ -40,8 +44,18 @@ import {
   ProjectFaviconPickerDialog,
 } from "./ProjectFaviconPickerDialog";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
-import { projectGroupTitleNeedsUpdate } from "./ProjectSettingsPanel.logic";
+import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import {
+  defaultProjectIcon,
+  hasDefaultProjectIcon,
+  projectGroupTitleNeedsUpdate,
+  SCRATCH_PROJECT_TITLE,
+} from "./ProjectSettingsPanel.logic";
 import { useSettingsProjectGroups } from "./useSettingsProjectGroups";
+import { readUnloadedThreadCount } from "../../state/olderSettledShelf";
+import { settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
+import { useI18n } from "../../i18n";
+
 
 const ProjectIconPickerDialog = lazy(() =>
   import("./ProjectIconPickerDialog").then((module) => ({
@@ -49,82 +63,88 @@ const ProjectIconPickerDialog = lazy(() =>
   })),
 );
 
-function memberKey(member: { environmentId: string; id: string }): string {
-  return `${member.environmentId}:${member.id}`;
+export type ProjectSettingsCategory = "general" | "source-control" | "project";
+
+interface ProjectSelection {
+  readonly key: string;
+  readonly environmentId: EnvironmentId | null;
+  readonly checkoutKey: string | null;
+  readonly memberKeys: ReadonlyArray<string>;
 }
 
-export type ProjectSettingsCategory = "general" | "integrations" | "source-control";
+function sameProjectSelection(a: ProjectSelection | null, b: ProjectSelection): boolean {
+  return (
+    a !== null &&
+    a.key === b.key &&
+    a.environmentId === b.environmentId &&
+    a.checkoutKey === b.checkoutKey &&
+    a.memberKeys.length === b.memberKeys.length &&
+    a.memberKeys.every((key, index) => key === b.memberKeys[index])
+  );
+}
 
 export function ProjectSettingsPanel({
   projectKey,
   environmentId = null,
   checkoutKey = null,
+  unavailable,
 }: {
   projectKey: string;
   environmentId?: EnvironmentId | null;
   checkoutKey?: string | null;
+  unavailable?: ReactNode;
 }) {
   const { t } = useI18n();
   const groups = useSettingsProjectGroups();
-  const navigate = useNavigate({ from: "/settings" });
   const pathname = useLocation({ select: (location) => location.pathname });
 
   const selected = groups.find((group) => group.projectKey === projectKey) ?? null;
-  const members = useMemo(
-    () =>
-      selected?.memberProjects.filter(
-        (member) =>
-          (environmentId === null || member.environmentId === environmentId) &&
-          (checkoutKey === null || member.physicalProjectKey === checkoutKey),
-      ) ?? [],
-    [selected, environmentId, checkoutKey],
-  );
+  const members =
+    selected?.memberProjects.filter(
+      (member) =>
+        (environmentId === null || member.environmentId === environmentId) &&
+        (checkoutKey === null || member.physicalProjectKey === checkoutKey),
+    ) ?? [];
 
-  // Remember the members of the last rendered group so a grouping-rule change
-  // (which changes the group key) can follow the project to its new group.
-  const lastSelectionRef = useRef<{
-    key: string;
-    environmentId: EnvironmentId | null;
-    checkoutKey: string | null;
-    memberKeys: string[];
-  } | null>(null);
-  useEffect(() => {
-    if (!selected || members.length === 0) return;
-    lastSelectionRef.current = {
+  // Retain group members so grouping-rule changes can follow the project to its new group.
+  const [lastSelection, setLastSelection] = useState<ProjectSelection | null>(null);
+  if (selected && members.length > 0) {
+    const current: ProjectSelection = {
       key: selected.projectKey,
       environmentId,
       checkoutKey,
       memberKeys: members.map((member) => member.physicalProjectKey),
     };
-  }, [selected, members, environmentId, checkoutKey]);
+    if (!sameProjectSelection(lastSelection, current)) setLastSelection(current);
+  }
 
-  // A grouping-rule change replaces the group key mid-visit; follow the
-  // project to its new key instead of parking on the not-found state.
-  useEffect(() => {
-    if (members.length > 0) return;
-    const last = lastSelectionRef.current;
-    if (
-      last?.key !== projectKey ||
-      last.environmentId !== environmentId ||
-      last.checkoutKey !== checkoutKey
-    )
-      return;
-    const successor = groups.find((group) =>
-      group.memberProjects.some((member) => last.memberKeys.includes(member.physicalProjectKey)),
-    );
-    if (successor) {
-      void navigate({
-        to: pathname,
-        search: () => ({
+  const successor =
+    members.length === 0 &&
+    lastSelection?.key === projectKey &&
+    lastSelection.environmentId === environmentId &&
+    lastSelection.checkoutKey === checkoutKey
+      ? groups.find((group) =>
+          group.memberProjects.some((member) =>
+            lastSelection.memberKeys.includes(member.physicalProjectKey),
+          ),
+        )
+      : undefined;
+  if (successor) {
+    return (
+      <Navigate
+        to={pathname}
+        search={{
           project: successor.projectKey,
           machine: environmentId ?? undefined,
           checkout: checkoutKey ?? undefined,
-        }),
-        replace: true,
-        hashScrollIntoView: false,
-      });
-    }
-  }, [groups, navigate, pathname, projectKey, members.length, environmentId, checkoutKey]);
+        }}
+        replace
+        hashScrollIntoView={false}
+      />
+    );
+  }
+
+  if ((!selected || members.length === 0) && unavailable != null) return unavailable;
 
   if (!selected) {
     return (
@@ -151,6 +171,7 @@ export function ProjectSettingsPanel({
     <ProjectDetail
       key={`${selected.projectKey}:${environmentId ?? "all"}:${checkoutKey ?? "all"}`}
       group={scopedGroup}
+      allMembers={selected.memberProjects}
       hasOtherMembers={members.length < selected.memberProjects.length}
     />
   );
@@ -158,26 +179,33 @@ export function ProjectSettingsPanel({
 
 function ProjectDetail({
   group,
+  allMembers,
   hasOtherMembers,
 }: {
   group: SidebarProjectSnapshot;
+  /** Pin and archive belong to the whole project, even when one machine is picked. */
+  allMembers: ReadonlyArray<SidebarProjectGroupMember>;
   hasOtherMembers: boolean;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate({ from: "/settings" });
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const { environments } = useEnvironments();
-  const environmentById = useMemo(
-    () => new Map(environments.map((environment) => [environment.environmentId, environment])),
-    [environments],
+  const environmentById = new Map(
+    environments.map((environment) => [environment.environmentId, environment]),
+  );
+  const editableIds = useEnvironmentsWithScope(allMembers, AuthOrchestrationOperateScope);
+  const canEditGroup = group.memberProjects.every((member) =>
+    editableIds.has(member.environmentId),
   );
   const representative =
     group.memberProjects.find(
       (member) => environmentById.get(member.environmentId)?.serverConfig != null,
     ) ?? group.memberProjects[0]!;
   const threads = useThreadShells();
-  const updateProject = useAtomCommand(projectEnvironment.update, { reportFailure: false });
-  const deleteProject = useAtomCommand(projectEnvironment.delete, { reportFailure: false });
+  const deleteProject = useOrchestrationCommand(projectEnvironment.delete, {
+    reportFailure: false,
+  });
   const projectNameEditedRef = useRef(false);
 
   const faviconPath = representative.faviconPath ?? null;
@@ -192,260 +220,244 @@ function ProjectDetail({
       ? window.desktopBridge?.pickProjectFavicon
       : undefined;
 
-  const reportFailure = useCallback(
-    (title: string, result: AtomCommandResult<void, unknown>) => {
-      if (result._tag !== "Failure" || isAtomCommandInterrupted(result)) return;
-      const error = squashAtomCommandFailure(result);
-      toastManager.add(
-        stackedThreadToast({
-          type: "error",
-          title,
-          description: error instanceof Error ? error.message : t("common.errorGeneric"),
-        }),
-      );
-    },
-    [t],
-  );
+  const { updateProjectGroup, canOrganizeProjectGroup } = useProjectGroupUpdate();
+  const updateAllMembers = (
+    input: ProjectGroupUpdate | ((member: SidebarProjectGroupMember) => ProjectGroupUpdate),
+    failureTitle: string,
+  ) => updateProjectGroup(group.memberProjects, input, failureTitle);
+  const canOrganize =
+    allMembers.every((member) => editableIds.has(member.environmentId)) &&
+    canOrganizeProjectGroup(allMembers);
+  const [isOrganizing, setIsOrganizing] = useState(false);
+  const organize = async (input: ProjectGroupUpdate, failureTitle: string) => {
+    setIsOrganizing(true);
+    await updateProjectGroup(allMembers, input, failureTitle);
+    setIsOrganizing(false);
+  };
 
-  // Group-shared fields live on each physical project record, so a
-  // group-level edit fans out to every member.
-  const updateAllMembers = useCallback(
-    async (
-      input: Partial<{
-        title: string;
-        faviconPath: string | null;
-        projectIcon: ProjectIconOverride | null;
-      }>,
-      failureTitle: string,
-    ): Promise<AtomCommandResult<void, unknown>> => {
-      const unavailable = group.memberProjects.find((member) => {
-        const environment = environmentById.get(member.environmentId);
-        return environment?.connection.phase !== "connected" || !environment.serverConfig;
-      });
-      if (unavailable) {
-        const error = new Error(
-          t("projectSettings.connectAndRetry", {
-            environment: unavailable.environmentLabel ?? t("projectSettings.selectedEnvironment"),
-          }),
-        );
-        const result: AtomCommandResult<void, unknown> = AsyncResult.failure(Cause.fail(error));
-        reportFailure(failureTitle, result);
-        return result;
-      }
-      for (const member of group.memberProjects) {
-        const result = mapAtomCommandResult(
-          await updateProject({
-            environmentId: member.environmentId,
-            input: { projectId: member.id, ...input },
-          }),
-          () => undefined,
-        );
-        if (result._tag === "Failure") {
-          // A partial fan-out is possible: earlier members already took the
-          // write. Name the environment so the user knows where it stopped.
-          reportFailure(
-            group.memberProjects.length > 1
-              ? t("projectSettings.failureInEnvironment", {
-                  failure: failureTitle,
-                  environment: member.environmentLabel ?? t("projectSettings.currentEnvironment"),
-                })
-              : failureTitle,
-            result,
-          );
-          return result;
-        }
-      }
-      return AsyncResult.success(undefined);
-    },
-    [environmentById, group.memberProjects, reportFailure, t, updateProject],
-  );
+  const renameGroup = async (nextTitle: string, wasEdited: boolean) => {
+    const title = nextTitle.trim();
+    if (!title) {
+      toastManager.add({ type: "warning", title: t("projectSettings.titleEmpty") });
+      return;
+    }
+    if (
+      !projectGroupTitleNeedsUpdate(
+        group.memberProjects.map((member) => member.title),
+        title,
+        wasEdited,
+      )
+    ) {
+      return;
+    }
+    await updateAllMembers({ title }, t("projectSettings.renameFailed"));
+  };
 
-  const renameGroup = useCallback(
-    async (nextTitle: string, wasEdited: boolean) => {
-      const title = nextTitle.trim();
-      if (!title) {
-        toastManager.add({ type: "warning", title: t("projectSettings.titleEmpty") });
-        return;
-      }
-      if (
-        !projectGroupTitleNeedsUpdate(
-          group.memberProjects.map((member) => member.title),
-          title,
-          wasEdited,
-        )
-      ) {
-        return;
-      }
-      await updateAllMembers({ title }, t("projectSettings.renameFailed"));
-    },
-    [group.memberProjects, t, updateAllMembers],
-  );
-
-  // ----- project icon -----
-  const [faviconPickerOpen, setFaviconPickerOpen] = useState(false);
-  const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [faviconPickerOpen, setFaviconPickerOpen] = useComposerMenuState(!canEditGroup);
+  const [iconPickerOpen, setIconPickerOpen] = useComposerMenuState(!canEditGroup);
   const [isSavingFavicon, setIsSavingFavicon] = useState(false);
   const savingFaviconRef = useRef(false);
-  const setProjectIcon = useCallback(
-    async (input: { faviconPath: string | null; projectIcon: ProjectIconOverride | null }) => {
-      if (savingFaviconRef.current) return;
-      savingFaviconRef.current = true;
-      setIsSavingFavicon(true);
-      try {
-        await updateAllMembers(input, t("projectSettings.updateIconFailed"));
-      } finally {
-        savingFaviconRef.current = false;
-        setIsSavingFavicon(false);
-      }
-    },
-    [t, updateAllMembers],
-  );
+  const setProjectIcon = async (input: Parameters<typeof updateAllMembers>[0]) => {
+    if (savingFaviconRef.current) return;
+    savingFaviconRef.current = true;
+    setIsSavingFavicon(true);
+    await updateAllMembers(input, t("projectSettings.updateIconFailed"));
+    savingFaviconRef.current = false;
+    setIsSavingFavicon(false);
+  };
 
   const hasMultipleCheckouts = group.memberProjects.length > 1;
+  const canResetScratchTitle =
+    group.memberProjects.every((member) => member.isScratch) &&
+    group.memberProjects.some((member) => member.title !== SCRATCH_PROJECT_TITLE);
 
-  const removeMembers = useCallback(
-    async (members: ReadonlyArray<SidebarProjectGroupMember>) => {
-      const api = readLocalApi();
-      if (!api) return;
+  const removeMembers = async (members: ReadonlyArray<SidebarProjectGroupMember>) => {
+    if (checkProjectAccess(members, "Failed to remove project")) return;
+    const api = readLocalApi();
+    if (!api) return;
 
-      const memberKeys = new Set(members.map(memberKey));
-      const projectThreads = threads.filter((thread) =>
-        memberKeys.has(`${thread.environmentId}:${thread.projectId}`),
-      );
-      const isWholeGroup = members.length === group.memberProjects.length;
-      const targetKind = hasOtherMembers || !isWholeGroup ? "checkout" : "project";
-      const singleMember = members.length === 1 ? members[0]! : null;
-      const targetLabel = singleMember?.title ?? group.displayName;
-      const removeTitle =
-        projectThreads.length > 0
-          ? t(
-              targetKind === "checkout"
-                ? projectThreads.length === 1
-                  ? "projectSettings.removeCheckoutAndThreads"
-                  : "projectSettings.removeCheckoutAndThreadsPlural"
-                : projectThreads.length === 1
-                  ? "projectSettings.removeWithThread"
-                  : "projectSettings.removeWithThreads",
-              { title: targetLabel, count: projectThreads.length },
-            )
-          : t(
-              targetKind === "checkout"
-                ? "projectSettings.removeCheckoutConfirm"
-                : "projectSettings.removeProjectConfirm",
-              { title: targetLabel },
-            );
-      const confirmed = await settlePromise(() =>
-        api.dialogs.confirm(
-          [
-            removeTitle,
-            ...(singleMember
-              ? [
-                  t("projectSettings.pathLabel", { path: singleMember.workspaceRoot }),
-                  ...(singleMember.environmentLabel
-                    ? [
-                        t("projectSettings.environmentLabel", {
-                          environment: singleMember.environmentLabel,
-                        }),
-                      ]
-                    : []),
-                ]
-              : [t("projectSettings.removeGroupedEntries", { count: members.length })]),
-            projectThreads.length > 0
-              ? t("projectSettings.clearHistoryWithArchived")
-              : t("projectSettings.clearArchivedHistory"),
-            isWholeGroup && !hasOtherMembers
-              ? t("projectSettings.filesUntouched")
-              : t("projectSettings.otherEntriesUnaffected"),
-            t("projectSettings.cannotUndo"),
-          ].join("\n"),
-          { variant: "destructive" },
-        ),
-      );
-      if (confirmed._tag === "Failure" || !confirmed.value) return;
-
-      const draftStore = useComposerDraftStore.getState();
-      for (const member of members) {
-        const memberThreads = projectThreads.filter(
-          (thread) =>
-            thread.environmentId === member.environmentId && thread.projectId === member.id,
-        );
-        const result = mapAtomCommandResult(
-          await deleteProject({
-            environmentId: member.environmentId,
-            input: {
-              projectId: member.id,
-              force: true,
-            },
-          }),
-          () => undefined,
-        );
-        if (result._tag === "Failure") {
-          reportFailure(t("projectSettings.removeFailed", { title: member.title }), result);
-          return;
-        }
-        const projectRef = scopeProjectRef(member.environmentId, member.id);
-        releaseProjectDraftUploads(
-          projectRef,
-          memberThreads.map((thread) => scopeThreadRef(thread.environmentId, thread.id)),
-        );
-        const projectDraftThread = draftStore.getDraftThreadByProjectRef(projectRef);
-        if (projectDraftThread) {
-          draftStore.clearDraftThread(projectDraftThread.draftId);
-        }
-        draftStore.clearProjectDraftThreadId(projectRef);
-      }
-
-      if (isWholeGroup && !hasOtherMembers) {
-        void navigate({ to: "/", replace: true });
-      }
-    },
-    [
-      deleteProject,
-      group.displayName,
-      group.memberProjects.length,
+    const { projectThreads, isWholeGroup, confirmationMessage } = planProjectRemoval({
+      members,
+      groupMemberCount: group.memberProjects.length,
       hasOtherMembers,
-      navigate,
-      reportFailure,
-      t,
+      displayName: group.displayName,
       threads,
-    ],
-  );
+      unloadedThreadCount: readUnloadedThreadCount(members, threads),
+    });
+    const confirmed = await settlePromise(() =>
+      api.dialogs.confirm(confirmationMessage, { variant: "destructive" }),
+    );
+    if (confirmed._tag === "Failure" || !confirmed.value) return;
+    if (checkProjectAccess(members, "Failed to remove project")) return;
 
+    const draftStore = useComposerDraftStore.getState();
+    for (const member of members) {
+      if (checkProjectAccess([member], "Failed to remove project")) return;
+      const memberThreads = projectThreads.filter(
+        (thread) => thread.environmentId === member.environmentId && thread.projectId === member.id,
+      );
+      const result = mapAtomCommandResult(
+        await deleteProject({
+          environmentId: member.environmentId,
+          input: {
+            projectId: member.id,
+            force: true,
+          },
+        }),
+        () => undefined,
+      );
+      if (result._tag === "Failure") {
+        reportProjectFailure(`Failed to remove "${member.title}"`, result);
+        return;
+      }
+      const projectRef = scopeProjectRef(member.environmentId, member.id);
+      await waitForProjectRemoval(projectRef);
+      releaseProjectDraftUploads(
+        projectRef,
+        memberThreads.map((thread) => scopeThreadRef(thread.environmentId, thread.id)),
+      );
+      const projectDraftThread = draftStore.getDraftThreadByProjectRef(projectRef);
+      if (projectDraftThread) {
+        draftStore.clearDraftThread(projectDraftThread.draftId);
+      }
+      draftStore.clearProjectDraftThreadId(projectRef);
+    }
+
+    if (isWholeGroup && !hasOtherMembers) {
+      void navigate({
+        to: "/settings/projects",
+        search: ({ machine }) => ({ project: undefined, machine, checkout: undefined }),
+        replace: true,
+      });
+    }
+  };
+
+  const checkoutsByEnvironment = new Map<EnvironmentId, SidebarProjectGroupMember[]>();
+  for (const member of group.memberProjects) {
+    const members = checkoutsByEnvironment.get(member.environmentId);
+    if (members) members.push(member);
+    else checkoutsByEnvironment.set(member.environmentId, [member]);
+  }
+  const checkoutRemoveButton = (member: SidebarProjectGroupMember) => (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={!editableIds.has(member.environmentId)}
+      onClick={() => void removeMembers([member])}
+      aria-label={t("projectSettings.removeCheckoutAria", { path: member.workspaceRoot })}
+    >
+      {t("common.remove")}
+    </Button>
+  );
   const checkoutChoices = (
     <SettingsSection title={t("projectSettings.checkouts")}>
-      {group.memberProjects.map((member) => (
-        <SettingsRow
-          key={member.physicalProjectKey}
-          title={member.environmentLabel ?? t("settings.inheritance.environmentLayer")}
-          description={member.workspaceRoot}
-          control={
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void removeMembers([member])}
-              aria-label={t("projectSettings.removeCheckoutAria", { path: member.workspaceRoot })}
-            >
-              {t("common.remove")}
-            </Button>
-          }
-        />
-      ))}
+      {Array.from(checkoutsByEnvironment, ([environmentId, members]) => {
+        if (checkoutsByEnvironment.size === 1) {
+          return members.map((member) => (
+            <SettingsRow
+              key={member.physicalProjectKey}
+              title={member.environmentLabel ?? t("settings.inheritance.environmentLayer")}
+              description={member.workspaceRoot}
+              control={checkoutRemoveButton(member)}
+            />
+          ));
+        }
+        const firstMember = members[0]!;
+        const hasMultiple = members.length > 1;
+        const environment = environmentById.get(environmentId);
+        const labels = environment
+          ? settingsScopeEnvironmentLabels(environment, environments)
+          : { primary: firstMember.environmentLabel ?? "Environment", secondary: environmentId };
+        return (
+          <SettingsRow
+            key={environmentId}
+            title={labels.primary}
+            description={
+              <>
+                {labels.secondary ? (
+                  <span className="block truncate">{labels.secondary}</span>
+                ) : null}
+                {!hasMultiple ? (
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="block truncate" />}>
+                      {firstMember.workspaceRoot}
+                    </TooltipTrigger>
+                    <TooltipPopup>{firstMember.workspaceRoot}</TooltipPopup>
+                  </Tooltip>
+                ) : null}
+              </>
+            }
+            control={hasMultiple ? undefined : checkoutRemoveButton(firstMember)}
+          >
+            {hasMultiple ? (
+              <div className="space-y-3 pb-2 pt-1">
+                {members.map((member) => (
+                  <div
+                    key={member.physicalProjectKey}
+                    className="flex min-w-0 items-center justify-between gap-3"
+                  >
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="min-w-0 truncate text-xs text-muted-foreground/80" />
+                        }
+                      >
+                        {member.workspaceRoot}
+                      </TooltipTrigger>
+                      <TooltipPopup>{member.workspaceRoot}</TooltipPopup>
+                    </Tooltip>
+                    <div className="shrink-0">{checkoutRemoveButton(member)}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </SettingsRow>
+        );
+      })}
     </SettingsSection>
   );
 
   return (
     <>
       <SettingsPageContainer className="gap-6">
+        <Alert variant="info">
+          <InfoIcon aria-hidden />
+          <AlertDescription>
+            Can't find a setting? Keep this project picked above and hop to any other settings page.
+          </AlertDescription>
+        </Alert>
         <SettingsSection id="project-overview" title={t("projectSettings.project")} hideTitle>
+          {!canEditGroup ? (
+            <p className="px-3 py-2 text-sm text-muted-foreground sm:px-4">
+              {group.memberProjects.length > 1
+                ? "Shared settings require permission to change every checkout in this group."
+                : "This connection cannot change this project."}
+            </p>
+          ) : null}
           <SettingsRow
             title={t("projectSettings.name")}
             description={t("projectSettings.nameDescription")}
+            resetAction={
+              canResetScratchTitle ? (
+                <SettingResetButton
+                  label="project name"
+                  disabled={!canEditGroup}
+                  onClick={() =>
+                    void updateAllMembers(
+                      { title: SCRATCH_PROJECT_TITLE },
+                      t("projectSettings.renameFailed"),
+                    )
+                  }
+                />
+              ) : null
+            }
             control={
               <Input
                 key={`${group.projectKey}:${group.displayName}`}
                 size="sm"
                 className="w-full sm:w-64"
                 aria-label={t("projectSettings.nameAria")}
+                disabled={!canEditGroup}
                 defaultValue={group.displayName}
                 onChange={() => {
                   projectNameEditedRef.current = true;
@@ -465,19 +477,19 @@ function ProjectDetail({
             title={t("projectSettings.icon")}
             description={
               projectIcon?.kind === "lucide"
-                ? `${projectIcon.monogram ?? projectIcon.name} · ${projectIcon.color}`
-                : projectIcon?.kind === "emoji"
-                  ? projectIcon.emoji
-                  : (faviconPath ?? t("projectSettings.iconAutomatic"))
+                ? `${projectIcon.name} · ${projectIcon.color}`
+                : projectIcon?.kind === "monogram"
+                  ? `${projectIcon.text} · ${projectIcon.color}`
+                  : projectIcon?.kind === "emoji"
+                    ? projectIcon.emoji
+                    : (faviconPath ?? t("projectSettings.iconAutomatic"))
             }
             resetAction={
-              group.memberProjects.some(
-                (member) => member.faviconPath != null || member.projectIcon != null,
-              ) ? (
+              group.memberProjects.some((member) => !hasDefaultProjectIcon(member)) ? (
                 <SettingResetButton
                   label={t("projectSettings.iconResetLabel")}
-                  disabled={isSavingFavicon}
-                  onClick={() => void setProjectIcon({ faviconPath: null, projectIcon: null })}
+                  disabled={isSavingFavicon || !canEditGroup}
+                  onClick={() => void setProjectIcon(defaultProjectIcon)}
                 />
               ) : null
             }
@@ -489,7 +501,7 @@ function ProjectDetail({
                   variant="outline"
                   type="button"
                   aria-label={t("projectSettings.chooseIconPickerAria")}
-                  disabled={isSavingFavicon}
+                  disabled={isSavingFavicon || !canEditGroup}
                   onClick={() => setIconPickerOpen(true)}
                 >
                   {t("projectSettings.chooseIcon")}
@@ -499,7 +511,7 @@ function ProjectDetail({
                   variant="outline"
                   type="button"
                   aria-label={t("projectSettings.chooseIconAria")}
-                  disabled={isSavingFavicon}
+                  disabled={isSavingFavicon || !canEditGroup}
                   onClick={() => setFaviconPickerOpen(true)}
                 >
                   {t("projectSettings.chooseFile")}
@@ -507,7 +519,54 @@ function ProjectDetail({
               </div>
             }
           />
+          {canOrganize ? (
+            <>
+              <SettingsRow
+                title="Pin"
+                description="Pinned projects come first in project pickers."
+                control={
+                  <Switch
+                    checked={group.pinned}
+                    disabled={isOrganizing}
+                    onCheckedChange={(checked) =>
+                      void organize(
+                        { pinned: Boolean(checked) },
+                        checked ? "Failed to pin project" : "Failed to unpin project",
+                      )
+                    }
+                    aria-label="Pin project"
+                  />
+                }
+              />
+              <SettingsRow
+                title="Archive"
+                description={
+                  group.archived
+                    ? "Hidden from project pickers. Threads and files are kept."
+                    : "Hides the project from project pickers. Threads and files are kept."
+                }
+                control={
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isOrganizing}
+                    onClick={() =>
+                      void organize(
+                        { archived: !group.archived },
+                        group.archived
+                          ? "Failed to unarchive project"
+                          : "Failed to archive project",
+                      )
+                    }
+                  >
+                    {group.archived ? "Unarchive" : "Archive"}
+                  </Button>
+                }
+              />
+            </>
+          ) : null}
         </SettingsSection>
+        <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
         {hasMultipleCheckouts ? checkoutChoices : null}
         <SettingsSection title={t("projectSettings.danger")}>
@@ -523,15 +582,14 @@ function ProjectDetail({
               hasOtherMembers
                 ? t("projectSettings.removeSelectedCheckoutDescription")
                 : group.memberProjects.length > 1
-                  ? t("projectSettings.removeEverywhereDescription", {
-                      count: group.memberProjects.length,
-                    })
+                  ? t("projectSettings.removeEverywhereDescription", { count: group.memberProjects.length })
                   : t("projectSettings.removeProjectDescription")
             }
             control={
               <Button
                 size="sm"
                 variant="destructive-outline"
+                disabled={!canEditGroup}
                 onClick={() => void removeMembers(group.memberProjects)}
               >
                 <Trash2Icon />
@@ -555,10 +613,10 @@ function ProjectDetail({
           ? { onPickExternal: () => pickProjectFavicon(representative.workspaceRoot) }
           : {})}
         onSelect={(path) => void setProjectIcon({ faviconPath: path, projectIcon: null })}
-        open={faviconPickerOpen}
+        open={faviconPickerOpen && canEditGroup}
         projectName={group.displayName}
       />
-      {iconPickerOpen ? (
+      {iconPickerOpen && canEditGroup ? (
         <Suspense fallback={null}>
           <ProjectIconPickerDialog
             current={projectIcon}

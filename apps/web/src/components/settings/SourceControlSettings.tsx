@@ -1,24 +1,14 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
-import { ChevronDownIcon, GitPullRequestIcon } from "lucide-react";
-import * as Duration from "effect/Duration";
+import { ChevronDownIcon } from "lucide-react";
 import * as Option from "effect/Option";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type {
-  BackgroundActivitySettings,
-  SourceControlProviderKind,
   SourceControlDiscoveryResult,
   SourceControlProviderAuth,
   SourceControlProviderDiscoveryItem,
   VcsDriverKind,
   VcsDiscoveryItem,
 } from "@t3tools/contracts";
-import {
-  getBackgroundActivityBaseProfile,
-  getBackgroundActivityPresetSettings,
-  resolveServerBackgroundActivitySettings,
-} from "@t3tools/shared/backgroundActivitySettings";
-
-import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
 import { cn } from "../../lib/utils";
@@ -36,50 +26,31 @@ import {
   EmptyTitle,
 } from "../ui/empty";
 import { Skeleton } from "../ui/skeleton";
-import {
-  NumberField,
-  NumberFieldDecrement,
-  NumberFieldGroup,
-  NumberFieldIncrement,
-  NumberFieldInput,
-} from "../ui/number-field";
 import { Switch } from "../ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
-import {
-  AzureDevOpsIcon,
-  BitbucketIcon,
-  GitHubIcon,
-  GitIcon,
-  GitLabIcon,
-  ForgejoIcon,
-  JujutsuIcon,
-  type Icon,
-} from "../Icons";
+import { GitIcon, JujutsuIcon, type Icon } from "../Icons";
+import { SourceControlHostSettings } from "./SourceControlHostSettings";
+import { SourceControlAccountSettings } from "./SourceControlAccountSettings";
+import { SourceControlAppSignInSettings } from "./SourceControlAppSignInSettings";
+import { SourceControlTokenSettings } from "./SourceControlTokenSettings";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
 import {
-  PolicyTooltip,
-  SettingResetButton,
   SettingsPageContainer,
   SettingsSearchTarget,
   SettingsSection,
   useSettingsSearchTargetId,
 } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
-import { localizedSourceControlDiscoveryText, useI18n, type Translate } from "../../i18n";
+import { searchableSetting, sourceControlHostSettingsSearchId } from "./settingsSearch";
+import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { sourceControlIcon } from "~/sourceControlPresentation";
+import { useI18n } from "~/i18n";
 
 const EMPTY_DISCOVERY_RESULT: SourceControlDiscoveryResult = {
   versionControlSystems: [],
   sourceControlProviders: [],
-};
-
-const SOURCE_CONTROL_PROVIDER_ICONS: Partial<Record<SourceControlProviderKind, Icon>> = {
-  github: GitHubIcon,
-  gitlab: GitLabIcon,
-  forgejo: ForgejoIcon,
-  "azure-devops": AzureDevOpsIcon,
-  bitbucket: BitbucketIcon,
 };
 
 const VCS_ICONS: Partial<Record<VcsDriverKind, Icon>> = {
@@ -88,47 +59,6 @@ const VCS_ICONS: Partial<Record<VcsDriverKind, Icon>> = {
 };
 
 const SOURCE_CONTROL_SKELETON_ROWS = ["primary", "secondary"] as const;
-const GIT_FETCH_INTERVAL_STEP_SECONDS = 5;
-type BackgroundActivityOverridePatch = Partial<{
-  [K in keyof BackgroundActivitySettings["overrides"]]:
-    | BackgroundActivitySettings["overrides"][K]
-    | undefined;
-}>;
-
-function durationToSeconds(duration: Duration.Duration): number {
-  return Math.round(Duration.toMillis(duration) / 1_000);
-}
-
-function normalizeFetchIntervalSeconds(value: number | null): number {
-  if (value === null || !Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.max(0, Math.round(value));
-}
-
-function backgroundActivityOverrideSettings(
-  current: BackgroundActivitySettings,
-  overrides: BackgroundActivityOverridePatch,
-) {
-  const nextOverrides: BackgroundActivityOverridePatch = {
-    ...current.overrides,
-    ...overrides,
-  };
-  for (const [key, value] of Object.entries(nextOverrides)) {
-    if (value === undefined) {
-      delete nextOverrides[key as keyof typeof nextOverrides];
-    }
-  }
-  return {
-    backgroundActivity: {
-      schemaVersion: 1 as const,
-      profile: "custom" as const,
-      baseProfile: getBackgroundActivityBaseProfile(current),
-      overrides: nextOverrides as BackgroundActivitySettings["overrides"],
-    },
-  };
-}
-
 function optionLabel(value: Option.Option<string>): string | null {
   return Option.getOrNull(value);
 }
@@ -143,39 +73,49 @@ function isVcsNotReady(item: VcsDiscoveryItem | SourceControlProviderDiscoveryIt
   return !isProviderDiscoveryItem(item) && !item.implemented;
 }
 
-function authPresentation(
-  auth: SourceControlProviderAuth,
-  t: Translate,
-): {
+function authPresentation(auth: SourceControlProviderAuth): {
   readonly label: string;
-  readonly badge: "warning" | null;
+  readonly badge: "secondary" | null;
 } {
   if (auth.status === "authenticated") {
-    return { label: t("sourceControl.authenticated"), badge: null };
+    return { label: "Authenticated", badge: null };
   }
   if (auth.status === "unauthenticated") {
-    return { label: t("sourceControl.unauthenticated"), badge: "warning" };
+    return { label: "Not authenticated", badge: "secondary" };
   }
   return { label: t("sourceControl.statusUnknown"), badge: null };
 }
 
 function RedactedAccount(props: { readonly account: string | null }) {
-  const { t } = useI18n();
   return (
     <RedactedSensitiveText
       value={props.account}
-      ariaLabel={t("sourceControl.accountToggle")}
-      revealTooltip={t("sourceControl.accountReveal")}
-      hideTooltip={t("sourceControl.accountHide")}
+      ariaLabel="Toggle source control account visibility"
+      revealTooltip="Click to reveal account"
+      hideTooltip="Click to hide account"
     />
   );
 }
 
 function itemStatusDot(item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem): string {
   if (isVcsNotReady(item)) return "bg-muted-foreground/35";
+  if (isProviderDiscoveryItem(item)) {
+    return item.status === "available" && item.auth.status === "authenticated"
+      ? "bg-success"
+      : "bg-muted-foreground/35";
+  }
   if (item.status !== "available") return "bg-warning";
-  if (isProviderDiscoveryItem(item) && item.auth.status !== "authenticated") return "bg-warning";
   return "bg-success";
+}
+
+function sourceControlItemIcon(
+  item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem,
+): ReactNode {
+  const host = isProviderDiscoveryItem(item) ? sourceControlClients.find(item.kind) : undefined;
+  const Icon = isProviderDiscoveryItem(item)
+    ? host && sourceControlIcon(host)
+    : VCS_ICONS[item.kind];
+  return Icon ? <Icon className="size-4.5 text-foreground/80" aria-hidden /> : null;
 }
 
 function SourceControlItemMark({
@@ -184,17 +124,15 @@ function SourceControlItemMark({
   readonly item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem;
 }) {
   const dotClassName = itemStatusDot(item);
-  const Icon = isProviderDiscoveryItem(item)
-    ? SOURCE_CONTROL_PROVIDER_ICONS[item.kind]
-    : VCS_ICONS[item.kind];
+  const icon = sourceControlItemIcon(item);
 
-  if (!Icon) {
+  if (!icon) {
     return <span className={cn("size-2 shrink-0 rounded-full", dotClassName)} aria-hidden />;
   }
 
   return (
     <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-      <Icon className="size-4.5 text-foreground/80" aria-hidden />
+      {icon}
       <span
         className={cn(
           "pointer-events-none absolute -left-0.5 -top-0.5 size-2 rounded-full ring-2 ring-background",
@@ -210,74 +148,62 @@ function itemSummary({
   item,
   auth,
   authAccount,
-  t,
 }: {
   readonly item: VcsDiscoveryItem | SourceControlProviderDiscoveryItem;
   readonly auth: SourceControlProviderAuth | null;
   readonly authAccount: string | null;
-  readonly t: Translate;
 }) {
   if (isVcsNotReady(item)) {
-    return <span>{t("sourceControl.comingSoon", { provider: item.label })}</span>;
+    return <span>Support for {item.label} is coming soon.</span>;
   }
 
   if (item.status !== "available") {
-    return (
-      <span>
-        {t("sourceControl.notAvailable", {
-          hint: localizedSourceControlDiscoveryText(item.installHint, t),
-        })}
-      </span>
-    );
+    return <span>Not available on this server: {item.installHint}</span>;
   }
 
   if (auth) {
     if (auth.status === "authenticated") {
+      const authDetail = optionLabel(auth.detail);
       return (
         <>
-          <span>{t("sourceControl.authenticated")}</span>
+          <span>Authenticated</span>
           {authAccount ? (
             <>
-              <span aria-hidden>{t("sourceControl.authenticatedAs")}</span>
+              <span aria-hidden>as</span>
               <RedactedAccount account={authAccount} />
             </>
           ) : null}
+          {authDetail ? <span>· {authDetail}</span> : null}
         </>
       );
     }
 
-    if (!item.executable) {
-      return (
-        <span>
-          {t("sourceControl.availableHint", {
-            hint: localizedSourceControlDiscoveryText(item.installHint, t),
-          })}
-        </span>
-      );
+    if (!item.executable && auth.status === "unauthenticated") {
+      return <span>Available. {item.installHint}</span>;
+    }
+
+    if (auth.status === "unauthenticated" && auth.accounts?.some((entry) => entry.authenticated)) {
+      return <span>{optionLabel(auth.detail) ?? `Every ${item.label} host is turned off.`}</span>;
     }
 
     if (auth.status === "unauthenticated") {
       return (
         <span>
-          {t("sourceControl.notAuthenticated", {
-            provider: item.label,
-            executable: item.executable,
-          })}
+          {item.label} is not authenticated on this server. Sign in or configure credentials using
+          the <code className="rounded bg-muted px-1 py-px text-2xs">{item.executable}</code> tool
+          on the server host to enable change request features.
         </span>
       );
     }
     const authDetail = optionLabel(auth.detail);
     return (
       <span>
-        {t("sourceControl.verifyFailed", {
-          provider: item.label,
-          hint: localizedSourceControlDiscoveryText(authDetail ?? item.installHint, t),
-        })}
+        Could not verify {item.label}. {authDetail ?? item.installHint}
       </span>
     );
   }
 
-  return <span>{t("sourceControl.available")}</span>;
+  return <span>Available</span>;
 }
 
 function DiscoveryItemRow({
@@ -293,17 +219,17 @@ function DiscoveryItemRow({
     ? item.status === "available" && item.auth.status === "authenticated"
     : item.status === "available" && item.implemented;
   const auth = isProviderDiscoveryItem(item) ? item.auth : null;
-  const authStatus = auth ? authPresentation(auth, t) : null;
+  const authStatus = auth ? authPresentation(auth) : null;
   const authAccount = auth ? optionLabel(auth.account) : null;
   const [isExpanded, setIsExpanded] = useState(false);
   const hasDetails = children !== undefined;
   const searchTargetId = useSettingsSearchTargetId();
-
-  useEffect(() => {
-    if (item.kind === "git" && searchTargetId === searchableSetting("git-fetch-interval", t).id) {
-      setIsExpanded(true);
-    }
-  }, [item.kind, searchTargetId]);
+  const [seenSearchTargetId, setSeenSearchTargetId] = useState<string | null>(null);
+  const targetsThisRow = searchTargetId === sourceControlHostSettingsSearchId(item.kind);
+  if (targetsThisRow && !isExpanded && seenSearchTargetId !== searchTargetId) {
+    setIsExpanded(true);
+  }
+  if (seenSearchTargetId !== searchTargetId) setSeenSearchTargetId(searchTargetId);
 
   return (
     <div
@@ -317,13 +243,11 @@ function DiscoveryItemRow({
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <SourceControlItemMark item={item} />
-              <span className="truncate text-sm font-medium tracking-[-0.005em] text-foreground">
-                {item.label}
-              </span>
+              <span className="truncate text-sm font-medium text-foreground">{item.label}</span>
               {version ? <code className="text-xs text-muted-foreground">{version}</code> : null}
               {isVcsNotReady(item) ? (
                 <Badge variant="warning" size="sm">
-                  {t("sourceControl.comingSoonBadge")}
+                  Coming Soon
                 </Badge>
               ) : null}
               {authStatus?.badge ? (
@@ -332,8 +256,8 @@ function DiscoveryItemRow({
                 </Badge>
               ) : null}
             </div>
-            <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-[13px] leading-[1.45] text-muted-foreground/80">
-              {itemSummary({ item, auth, authAccount, t })}
+            <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs leading-normal text-muted-foreground/80">
+              {itemSummary({ item, auth, authAccount })}
             </p>
           </div>
           <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
@@ -343,7 +267,7 @@ function DiscoveryItemRow({
                 variant="ghost-muted"
                 onClick={() => setIsExpanded((open) => !open)}
                 aria-expanded={isExpanded}
-                aria-label={t("sourceControl.toggleDetails", { provider: item.label })}
+                aria-label={`Toggle ${item.label} details`}
               >
                 <ChevronDownIcon
                   className={cn("size-3.5 transition-transform", isExpanded && "rotate-180")}
@@ -351,11 +275,7 @@ function DiscoveryItemRow({
               </Button>
             ) : null}
             {!isVcsNotReady(item) ? (
-              <Switch
-                checked={enabled}
-                disabled
-                aria-label={t("sourceControl.availability", { provider: item.label })}
-              />
+              <Switch checked={enabled} disabled aria-label={t("sourceControl.availability", { provider: item.label })} />
             ) : null}
           </div>
         </div>
@@ -369,83 +289,6 @@ function DiscoveryItemRow({
         </Collapsible>
       ) : null}
     </div>
-  );
-}
-
-function GitFetchIntervalSettings() {
-  const { t } = useI18n();
-  const settings = useScopedSettings();
-  const updateSettings = useUpdateScopedSettings();
-  const resolvedBackgroundActivity = resolveServerBackgroundActivitySettings(settings);
-  const automaticGitFetchIntervalSeconds = durationToSeconds(
-    resolvedBackgroundActivity.automaticGitFetchInterval,
-  );
-  const defaultAutomaticGitFetchIntervalSeconds = durationToSeconds(
-    getBackgroundActivityPresetSettings(
-      getBackgroundActivityBaseProfile(settings.backgroundActivity),
-    ).automaticGitFetchInterval,
-  );
-  const canResetFetchInterval =
-    automaticGitFetchIntervalSeconds !== defaultAutomaticGitFetchIntervalSeconds;
-  const setting = searchableSetting("git-fetch-interval", t);
-
-  return (
-    <SettingsSearchTarget id={setting.id} className="grid gap-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <div className="flex min-w-0 items-center gap-1">
-            <span className="text-xs font-medium text-foreground">{setting.title}</span>
-            <PolicyTooltip>{t("sourceControl.fetchPolicy")}</PolicyTooltip>
-            <span
-              className={cn(
-                "inline-flex size-5 shrink-0 items-center justify-center transition-opacity",
-                canResetFetchInterval ? "opacity-100" : "pointer-events-none opacity-0",
-              )}
-              aria-hidden={!canResetFetchInterval}
-            >
-              {canResetFetchInterval ? (
-                <SettingResetButton
-                  label={t("sourceControl.fetchIntervalReset")}
-                  onClick={() =>
-                    updateSettings(
-                      backgroundActivityOverrideSettings(settings.backgroundActivity, {
-                        automaticGitFetchInterval: undefined,
-                      }),
-                    )
-                  }
-                />
-              ) : null}
-            </span>
-          </div>
-          <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-            {t("sourceControl.fetchDescription")}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <NumberField
-            value={automaticGitFetchIntervalSeconds}
-            min={0}
-            step={GIT_FETCH_INTERVAL_STEP_SECONDS}
-            size="sm"
-            className="w-32"
-            onValueChange={(value) =>
-              updateSettings(
-                backgroundActivityOverrideSettings(settings.backgroundActivity, {
-                  automaticGitFetchInterval: Duration.seconds(normalizeFetchIntervalSeconds(value)),
-                }),
-              )
-            }
-          >
-            <NumberFieldGroup>
-              <NumberFieldDecrement aria-label={t("sourceControl.fetchDecrease")} />
-              <NumberFieldInput aria-label={t("sourceControl.fetchInput")} />
-              <NumberFieldIncrement aria-label={t("sourceControl.fetchIncrease")} />
-            </NumberFieldGroup>
-          </NumberField>
-          <span className="text-xs text-muted-foreground">{t("sourceControl.seconds")}</span>
-        </div>
-      </div>
-    </SettingsSearchTarget>
   );
 }
 
@@ -464,20 +307,21 @@ function SourceControlSectionSkeleton({
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-                  <Skeleton className="size-4.5 rounded-md" />
+                  <Skeleton className="size-4.5" />
                   <Skeleton
-                    className="pointer-events-none absolute -left-0.5 -top-0.5 size-2 rounded-full ring-2 ring-background"
+                    shape="pill"
+                    className="pointer-events-none absolute -left-0.5 -top-0.5 size-2"
                     aria-hidden
                   />
                 </span>
-                <Skeleton className="h-4 w-28 rounded-full" />
-                <Skeleton className="h-5 w-14 rounded-full" />
+                <Skeleton shape="pill" className="h-4 w-28" />
+                <Skeleton shape="pill" className="h-5 w-14" />
               </div>
-              <Skeleton className="h-3 w-full max-w-xs rounded-full" />
+              <Skeleton shape="pill" className="h-3 w-full max-w-xs" />
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <Skeleton className="size-7 rounded-md" />
-              <Skeleton className="h-5 w-9 rounded-full" />
+              <Skeleton className="size-7" />
+              <Skeleton shape="pill" className="h-5 w-9" />
             </div>
           </div>
         </div>
@@ -499,26 +343,25 @@ function EmptySourceControlDiscovery({
   const hasError = error !== null;
 
   return (
-    <SettingsSection
-      id={searchableSetting("source-control", t).id}
-      title={t("sourceControl.serverEnvironment")}
-    >
-      <Empty className="min-h-88">
+    <SettingsSection id={searchableSetting("source-control").id} title={t("sourceControl.serverEnvironment")}>
+      <Empty>
         <EmptyMedia variant="icon">
-          <GitPullRequestIcon />
+          <PullRequestGlyph.pullRequest />
         </EmptyMedia>
         <EmptyHeader>
           <EmptyTitle>
             {hasError ? t("sourceControl.scanFailed") : t("sourceControl.nothingDetected")}
           </EmptyTitle>
           <EmptyDescription>
-            {hasError ? error : t("sourceControl.emptyDescription")}
+            {hasError
+              ? error
+              : "Install Git on the server, add optional hosting integrations or credentials your workspace needs, then rescan."}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button size="sm" variant="outline" onClick={onScan} disabled={isPending}>
-            <RefreshIcon className="size-3.5" refreshing={isPending} />
-            {t("sourceControl.scan")}
+            <RefreshIcon size="sm" refreshing={isPending} />
+            Scan
           </Button>
         </EmptyContent>
       </Empty>
@@ -529,9 +372,7 @@ function EmptySourceControlDiscovery({
 export function SourceControlSettingsPanel() {
   const { t } = useI18n();
   const { scope, environment, connectedEnvironments } = useSettingsScope();
-  // Discovery scans one machine's tools, so it shows the representative
-  // environment (named in the section title when several are selected);
-  // the settings rows above it fan out like everywhere else.
+
   const environmentId =
     environment?.connection.phase === "connected" ? environment.environmentId : null;
   const aggregate = scope.environmentIds.length !== 1 && connectedEnvironments.length > 1;
@@ -550,6 +391,63 @@ export function SourceControlSettingsPanel() {
   const isInitialScanPending = discovery.isPending && discovery.data === null;
   const handleScan = () => {
     discovery.refresh();
+  };
+  const hostSettingsPanel = (item: SourceControlProviderDiscoveryItem) => {
+    const definition = sourceControlClients.find(item.kind);
+    if (!definition?.settings || environmentId === null) return undefined;
+    const { credentials } = definition;
+    if (credentials) {
+      return (
+        <SettingsSearchTarget id={sourceControlHostSettingsSearchId(item.kind)}>
+          <div className="grid gap-6">
+            {credentials.appSignIn && item.appSignIn === true ? (
+              <SourceControlAppSignInSettings
+                key={`sign-in-${environmentId}`}
+                environmentId={environmentId}
+                definition={definition}
+                appSignIn={credentials.appSignIn}
+                account={Option.getOrNull(item.auth.account)}
+                onChanged={handleScan}
+              />
+            ) : null}
+            {credentials.appSignIn && item.appSignIn === true ? (
+              <div className="flex items-center gap-3 text-2xs text-muted-foreground">
+                <span aria-hidden className="h-px flex-1 bg-border" />
+                Or use your own credentials
+                <span aria-hidden className="h-px flex-1 bg-border" />
+              </div>
+            ) : null}
+            <SourceControlTokenSettings
+              key={`token-${environmentId}`}
+              environmentId={environmentId}
+              definition={definition}
+              credentials={credentials}
+              onSaved={handleScan}
+            />
+            {item.status === "available" ? (
+              <SourceControlAccountSettings
+                key={environmentId}
+                environmentId={environmentId}
+                definition={definition}
+                credentials={credentials}
+                auth={item.auth}
+                onSaved={handleScan}
+              />
+            ) : null}
+          </div>
+        </SettingsSearchTarget>
+      );
+    }
+    return (
+      <SettingsSearchTarget id={sourceControlHostSettingsSearchId(item.kind)}>
+        <SourceControlHostSettings
+          key={environmentId}
+          environmentId={environmentId}
+          definition={{ ...definition, settings: definition.settings }}
+          onSaved={handleScan}
+        />
+      </SettingsSearchTarget>
+    );
   };
   const scanButton = (
     <Tooltip>
@@ -574,10 +472,7 @@ export function SourceControlSettingsPanel() {
     <SettingsPageContainer>
       <ProjectDefaultsSettings category="source-control" />
       {environmentId === null ? (
-        <SettingsSection
-          id={searchableSetting("source-control", t).id}
-          title={t("sourceControl.serverEnvironment")}
-        >
+        <SettingsSection id={searchableSetting("source-control").id} title={t("sourceControl.serverEnvironment")}>
           <p className="px-4 py-3 text-sm text-muted-foreground">
             {t("sourceControl.connectToInspect")}
           </p>
@@ -585,39 +480,39 @@ export function SourceControlSettingsPanel() {
       ) : isInitialScanPending ? (
         <>
           <SourceControlSectionSkeleton
-            title={`${t("sourceControl.versionControl")}${environmentSuffix}`}
+            title={`Version Control${environmentSuffix}`}
             headerAction={scanButton}
           />
-          <SourceControlSectionSkeleton title={t("sourceControl.providers")} />
+          <SourceControlSectionSkeleton title="Source control providers" />
         </>
       ) : hasDiscoveryItems ? (
         <>
           {hasVersionControlSystems ? (
             <SettingsSection
-              id={searchableSetting("source-control", t).id}
-              title={`${t("sourceControl.versionControl")}${environmentSuffix}`}
+              id={searchableSetting("source-control").id}
+              title={`Version Control${environmentSuffix}`}
               headerAction={scanButton}
             >
               {result.versionControlSystems.map((item) => (
-                <DiscoveryItemRow key={`vcs:${item.kind}`} item={item}>
-                  {item.kind === "git" ? <GitFetchIntervalSettings /> : undefined}
-                </DiscoveryItemRow>
+                <DiscoveryItemRow key={`vcs:${item.kind}`} item={item} />
               ))}
             </SettingsSection>
           ) : null}
 
           {result.sourceControlProviders.length > 0 ? (
             <SettingsSection
-              id={hasVersionControlSystems ? undefined : searchableSetting("source-control", t).id}
+              id={hasVersionControlSystems ? undefined : searchableSetting("source-control").id}
               title={
                 hasVersionControlSystems
-                  ? t("sourceControl.providers")
-                  : `${t("sourceControl.providers")}${environmentSuffix}`
+                  ? "Source control providers"
+                  : `Source control providers${environmentSuffix}`
               }
               headerAction={hasVersionControlSystems ? null : scanButton}
             >
               {result.sourceControlProviders.map((item) => (
-                <DiscoveryItemRow key={`provider:${item.kind}`} item={item} />
+                <DiscoveryItemRow key={`provider:${item.kind}`} item={item}>
+                  {hostSettingsPanel(item)}
+                </DiscoveryItemRow>
               ))}
             </SettingsSection>
           ) : null}

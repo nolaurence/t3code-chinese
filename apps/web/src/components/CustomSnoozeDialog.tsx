@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { Tabs } from "@base-ui/react/tabs";
+import { useNavigate } from "@tanstack/react-router";
 import { create } from "zustand";
 import {
   localSnoozeDate,
@@ -8,12 +8,14 @@ import {
   type CustomSnoozeInput,
 } from "@t3tools/client-runtime/state/thread-settled";
 import { Button } from "./ui/button";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Settings2Icon } from "lucide-react";
 import { Calendar } from "./ui/calendar";
+import { weekStartsOn } from "../timestampFormat";
+import { useNowMinute } from "../hooks/useNowMinute";
 import { Popover, PopoverTrigger, PopoverPopup } from "./ui/popover";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { toggleVariants } from "./ui/toggle";
+import { Toggle, ToggleGroup } from "./ui/toggle-group";
 import { Select, SelectTrigger, SelectValue, SelectPopup, SelectItem } from "./ui/select";
 import {
   NumberField,
@@ -31,7 +33,13 @@ import {
   DialogPanel,
   DialogFooter,
 } from "./ui/dialog";
-import { useI18n } from "../i18n";
+
+import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+
+function t(key: MessageKey, values?: TranslateValues): string {
+  return createTranslator(readLocalePreference())(key, values);
+}
+
 
 type SnoozeChoice = { readonly snoozedUntil: string };
 type Request = { readonly resolve: (choice: SnoozeChoice | null) => void };
@@ -48,16 +56,30 @@ function finish(choice: SnoozeChoice | null) {
   request?.resolve(choice);
 }
 
+function startOfLocalDay(ms: number) {
+  const day = new Date(ms);
+  day.setHours(0, 0, 0, 0);
+  return day;
+}
+
 export function CustomSnoozeDialogHost() {
+  useI18n();
+
   const request = useRequest((state) => state.request);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- resolves any pending snooze request promise with null when the dialog host unmounts
   useEffect(() => () => finish(null), []);
   return request ? <CustomSnoozeDialog /> : null;
 }
 
 function CustomSnoozeDialog() {
-  const { t } = useI18n();
+  useI18n();
+
   const id = useId();
+  const navigate = useNavigate();
   const [initial] = useState(() => new Date(Date.now() + 3_600_000));
+  const nowMinute = useNowMinute();
+  // Follows the clock so a dialog left open past midnight stops offering yesterday.
+  const today = startOfLocalDay(Date.parse(`${nowMinute}Z`));
   const [mode, setMode] = useState<CustomSnoozeInput["mode"]>("date");
   const [date, setDate] = useState(initial);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -95,37 +117,22 @@ function CustomSnoozeDialog() {
             <DialogTitle>{t("sidebar.customSnooze.title")}</DialogTitle>
             <DialogDescription>{t("sidebar.customSnooze.description")}</DialogDescription>
           </DialogHeader>
-          <DialogPanel className="flex flex-col gap-4 text-base sm:text-sm">
-            <Tabs.Root
-              value={mode}
-              onValueChange={(value) => {
-                if (value === "date" || value === "duration") setMode(value);
-                setError(null);
-              }}
-              className="flex flex-col gap-4"
-            >
-              <Tabs.List
-                aria-label={t("sidebar.customSnooze.scheduleType")}
-                className="flex gap-0.5 rounded-lg bg-input/40 p-0.5"
+          <DialogPanel>
+            <div className="flex flex-col gap-4">
+              <ToggleGroup
+                aria-label=t("sidebar.customSnooze.scheduleType")
+                className="w-full *:flex-1"
+                value={[mode]}
+                onValueChange={(next) => {
+                  const value = next[0];
+                  if (value === "date" || value === "duration") setMode(value);
+                  setError(null);
+                }}
               >
-                {(["date", "duration"] as const).map((value) => (
-                  <Tabs.Tab
-                    key={value}
-                    value={value}
-                    data-pressed={mode === value ? "" : undefined}
-                    className={toggleVariants({
-                      variant: "segmented",
-                      size: "sm",
-                      className: "flex-1",
-                    })}
-                  >
-                    {value === "date"
-                      ? t("sidebar.customSnooze.dateAndTime")
-                      : t("sidebar.customSnooze.duration")}
-                  </Tabs.Tab>
-                ))}
-              </Tabs.List>
-              <Tabs.Panel value={mode} className="flex flex-col gap-4">
+                <Toggle value="date">{t("sidebar.customSnooze.dateAndTime")}</Toggle>
+                <Toggle value="duration">{t("sidebar.customSnooze.duration")}</Toggle>
+              </ToggleGroup>
+              <div className="flex flex-col gap-4">
                 {mode === "date" ? (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex min-w-0 flex-col gap-1.5">
@@ -136,7 +143,7 @@ function CustomSnoozeDialog() {
                             <Button
                               id={`${id}-date`}
                               variant="outline"
-                              className="w-full justify-between font-normal"
+                              className="w-full justify-between"
                             />
                           }
                         >
@@ -147,16 +154,14 @@ function CustomSnoozeDialog() {
                           })}
                           <CalendarIcon className="size-4 text-muted-foreground" />
                         </PopoverTrigger>
-                        <PopoverPopup
-                          align="start"
-                          aria-label={t("sidebar.customSnooze.chooseDate")}
-                        >
+                        <PopoverPopup align="start" aria-label=t("sidebar.customSnooze.chooseDate")>
                           <Calendar
                             mode="single"
                             required
                             selected={date}
                             defaultMonth={date}
-                            disabled={{ before: new Date(new Date().setHours(0, 0, 0, 0)) }}
+                            {...(weekStartsOn === undefined ? {} : { weekStartsOn })}
+                            disabled={{ before: today }}
                             onSelect={(selected) => {
                               setDate(selected);
                               setCalendarOpen(false);
@@ -166,11 +171,8 @@ function CustomSnoozeDialog() {
                         </PopoverPopup>
                       </Popover>
                     </div>
-                    <Label
-                      className="flex min-w-0 flex-col items-stretch gap-1.5"
-                      htmlFor={`${id}-time`}
-                    >
-                      {t("sidebar.customSnooze.time")}
+                    <Label className="flex min-w-0 flex-col items-stretch" htmlFor={`${id}-time`}>
+                      Time
                       <Input
                         nativeInput
                         id={`${id}-time`}
@@ -188,7 +190,6 @@ function CustomSnoozeDialog() {
                 ) : (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <NumberField
-                      className="gap-1.5"
                       id={`${id}-amount`}
                       min={0}
                       step="any"
@@ -200,27 +201,16 @@ function CustomSnoozeDialog() {
                     >
                       <Label htmlFor={`${id}-amount`}>{t("sidebar.customSnooze.snoozeFor")}</Label>
                       <NumberFieldGroup>
-                        <NumberFieldDecrement
-                          aria-label={t("sidebar.customSnooze.decreaseDuration")}
-                        />
+                        <NumberFieldDecrement aria-label=t("sidebar.customSnooze.decreaseDuration") />
                         <NumberFieldInput required />
-                        <NumberFieldIncrement
-                          aria-label={t("sidebar.customSnooze.increaseDuration")}
-                        />
+                        <NumberFieldIncrement aria-label=t("sidebar.customSnooze.increaseDuration") />
                       </NumberFieldGroup>
                     </NumberField>
-                    <Label
-                      className="flex min-w-0 flex-col items-stretch gap-1.5"
-                      htmlFor={`${id}-unit`}
-                    >
-                      {t("sidebar.customSnooze.unit")}
+                    <Label className="flex min-w-0 flex-col items-stretch" htmlFor={`${id}-unit`}>
+                      Unit
                       <Select
                         value={unit}
-                        items={{
-                          minutes: t("sidebar.customSnooze.minutes"),
-                          hours: t("sidebar.customSnooze.hours"),
-                          days: t("sidebar.customSnooze.days"),
-                        }}
+                        items={{ minutes: t("sidebar.customSnooze.minutes"), hours: t("sidebar.customSnooze.hours"), days: t("sidebar.customSnooze.days") }}
                         onValueChange={(value) => {
                           if (value === "minutes" || value === "hours" || value === "days")
                             setUnit(value);
@@ -231,9 +221,7 @@ function CustomSnoozeDialog() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectPopup>
-                          <SelectItem value="minutes">
-                            {t("sidebar.customSnooze.minutes")}
-                          </SelectItem>
+                          <SelectItem value="minutes">{t("sidebar.customSnooze.minutes")}</SelectItem>
                           <SelectItem value="hours">{t("sidebar.customSnooze.hours")}</SelectItem>
                           <SelectItem value="days">{t("sidebar.customSnooze.days")}</SelectItem>
                         </SelectPopup>
@@ -241,8 +229,8 @@ function CustomSnoozeDialog() {
                     </Label>
                   </div>
                 )}
-              </Tabs.Panel>
-            </Tabs.Root>
+              </div>
+            </div>
             {error && (
               <p role="alert" className="text-destructive">
                 {error}
@@ -250,8 +238,23 @@ function CustomSnoozeDialog() {
             )}
           </DialogPanel>
           <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost-muted"
+              className="sm:mr-auto"
+              onClick={() => {
+                finish(null);
+                void navigate({
+                  to: "/settings/threads",
+                  hash: "snooze-options",
+                });
+              }}
+            >
+              <Settings2Icon />
+              Edit snooze options
+            </Button>
             <Button type="button" variant="outline" onClick={() => finish(null)}>
-              {t("common.cancel")}
+              Cancel
             </Button>
             <Button type="submit">{t("sidebar.snooze")}</Button>
           </DialogFooter>

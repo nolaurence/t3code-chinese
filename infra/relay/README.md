@@ -1,7 +1,7 @@
 # T3 Connect Relay
 
 > [!NOTE]
-> Sign in to T3 Connect from the app under Settings > Connections.
+> Sign in to T3 Connect from the app under Settings > Sharing & access.
 
 The relay is the hosted control plane for T3 Connect. It helps clients discover and connect to
 remote environments, manages the cloud-side records needed for those connections, and delivers
@@ -140,6 +140,10 @@ The `production` GitHub environment must define these Actions variables:
 - `RELAY_API_ZONE_NAME`
 - `RELAY_TUNNEL_ZONE_NAME`
 - `RELAY_DOMAIN` if overriding the derived production relay domain
+- `RELAY_ALERT_NOTIFIER_ID`, the Axiom notifier that relay alerts page. Without it the deployment
+  creates no monitors or health dashboard. See
+  [Relay alerts](../../docs/operations/relay-observability.md#alerts).
+- `RELAY_WARNING_NOTIFIER_ID`, optional, the Axiom notifier for relay warnings
 - `CLERK_PUBLISHABLE_KEY`
 - `CLERK_JWT_AUDIENCE`
 - `CLERK_JWT_TEMPLATE`
@@ -153,6 +157,9 @@ The `production` GitHub environment must define these Actions secrets:
 - `CLERK_SECRET_KEY`
 - `APNS_PRIVATE_KEY`
 - `FCM_SERVICE_ACCOUNT` when Android push is enabled
+- `T3CHAT_LINK_SECRET`, optional, shared with T3 Chat's `T3CODE_LINK_SECRET`. Without it the
+  T3 Chat account link is off. Local and preview stages can set `T3CHAT_URL` to point
+  at another T3 Chat deployment; production uses `https://t3.chat`.
 
 The account-scoped repository credentials are consumed by Alchemy while provisioning relay stages; they
 are not bound into the relay Worker. The production deployment uses an Axiom personal access token,
