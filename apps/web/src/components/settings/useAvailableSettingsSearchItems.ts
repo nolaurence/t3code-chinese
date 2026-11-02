@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
 
 import { usePrimaryCloudLinkState } from "~/cloud/primaryCloudLinkState";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
+import { useI18n } from "~/i18n";
 import { isElectron } from "~/env";
 import { isLocalEnvironmentDisabled } from "~/localEnvironment";
 import { desktopWslStateAtom } from "~/state/desktopWslState";
@@ -15,9 +17,11 @@ import type { SettingsScopeSearch } from "./settingsScope";
 import {
   filterAvailableSettingsSearchItems,
   getThreadAutoSettlementSearchAvailability,
+  localizeSettingsSearchItems,
 } from "./settingsSearch";
 
 export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch = {}) {
+  const { t } = useI18n();
   const { environments } = useEnvironments();
   // Explicit booleans keep flags out of the filter cache so environment updates do not rebuild the list.
   const hasEnvironment =
@@ -58,16 +62,35 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
   const wslSettingsRowVisible =
     isWslSettingsRowVisible({ state: desktopWsl.data, error: desktopWsl.error }) === true;
 
-  return filterAvailableSettingsSearchItems({
-    localEnvironmentDisabled,
-    hasCloudPublicConfig: cloudPublicConfig,
-    hasEnvironment,
-    hasProviderSettingsEnvironment,
-    hasMacProviderSettingsEnvironment,
-    canManageLocalBackend,
-    isWslSettingsRowVisible: wslSettingsRowVisible,
-    hasThreadAutoSettlement,
-    managedTunnelActive,
-    hasPeerLinkHost,
-  });
+  return useMemo(
+    () =>
+      localizeSettingsSearchItems(
+        t,
+        filterAvailableSettingsSearchItems({
+          localEnvironmentDisabled,
+          hasCloudPublicConfig: cloudPublicConfig,
+          hasEnvironment,
+          hasProviderSettingsEnvironment,
+          hasMacProviderSettingsEnvironment,
+          canManageLocalBackend,
+          isWslSettingsRowVisible: wslSettingsRowVisible,
+          hasThreadAutoSettlement,
+          managedTunnelActive,
+          hasPeerLinkHost,
+        }),
+      ),
+    [
+      canManageLocalBackend,
+      cloudPublicConfig,
+      hasEnvironment,
+      hasMacProviderSettingsEnvironment,
+      hasPeerLinkHost,
+      hasProviderSettingsEnvironment,
+      hasThreadAutoSettlement,
+      localEnvironmentDisabled,
+      managedTunnelActive,
+      t,
+      wslSettingsRowVisible,
+    ],
+  );
 }

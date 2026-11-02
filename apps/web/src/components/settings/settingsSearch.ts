@@ -14,6 +14,7 @@ import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
 import { writeLocalStorageValue } from "../../hooks/useLocalStorage";
 import { commandLabel } from "./KeybindingsSettings.logic";
 import type { ResolvedSettingsScope } from "./settingsScope";
+import type { MessageKey, Translate } from "~/i18n";
 
 export type SettingsPath =
   | "/settings/projects"
@@ -108,6 +109,22 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/labs": "Labs",
   "/settings/about": "About",
   "/settings/archived": "Archive",
+};
+
+
+/** Section labels whose existing message English matches the upstream label. */
+const SETTINGS_SECTION_LABEL_KEYS: Partial<Record<SettingsPath, MessageKey>> = {
+  "/settings/diagnostics": "settings.nav.diagnostics",
+  "/settings/general": "settings.nav.general",
+  "/settings/appearance": "settings.nav.appearance",
+  "/settings/keybindings": "settings.nav.keybindings",
+  "/settings/snap-shot": "settings.nav.snapShot",
+  "/settings/providers": "settings.nav.providers",
+  "/settings/browser": "panel.browser",
+  "/settings/source-control": "settings.search.sourceControl",
+  "/settings/connections": "settings.search.remoteEnvironments",
+  "/settings/about": "settings.about.title",
+  "/settings/archived": "settings.nav.archive",
 };
 
 /** Sidebar order. A group without a heading is set apart by space alone. */
@@ -746,6 +763,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["composer meter usage tokens circle old"],
   },
   {
+    id: "legacy-sidebar",
+    title: "Sidebar (legacy)",
+    to: "/settings/labs",
+    searchTerms: ["project thread tree old flat list"],
+  },
+  {
     id: "keybindings",
     title: "Keybindings",
     to: "/settings/keybindings",
@@ -1303,12 +1326,124 @@ export function isSettingsSearchScopeAvailable(
   }
 }
 
-export function searchableSetting(id: SettingsSearchItemId): {
+const SETTINGS_SEARCH_TITLE_KEYS: Partial<Record<SettingsSearchItemId, MessageKey>> = {
+  "project-defaults": "settings.search.projectDefaults",
+  "project-overview": "settings.search.projectOverview",
+  "default-model": "settings.search.defaultModel",
+  "default-permissions": "settings.search.defaultPermissions",
+  "color-scheme": "settings.search.colorScheme",
+  theme: "settings.search.themes",
+  "setting-appearance-contrast": "settings.search.contrast",
+  "setting-glass-opacity": "settings.search.glassOpacity",
+  "diff-color-scheme": "settings.search.diffColors",
+  "panel-animations": "settings.search.panelAnimations",
+  "environment-identification": "settings.search.environmentIdentification",
+  "interface-font": "settings.search.interfaceFont",
+  "prompt-font": "settings.search.promptFont",
+  "code-font": "settings.search.codeFont",
+  "terminal-font": "settings.search.terminalFont",
+  "font-smoothing": "settings.search.fontSmoothing",
+  "word-wrap": "settings.search.wordWrap",
+  "project-grouping": "settings.search.projectGrouping",
+  "auto-settle-inactive-threads": "settings.search.autoSettleInactive",
+  "auto-settle-merged-threads": "settings.search.autoSettleMerged",
+  "days-before-auto-settle": "settings.search.daysBeforeAutoSettle",
+  "thread-notifications": "settings.search.threadNotifications",
+  "in-app-notifications": "settings.search.inAppNotifications",
+  "time-format": "settings.search.timeFormat",
+  "response-streaming": "settings.search.responseStreaming",
+  "hide-whitespace-changes": "settings.search.hideWhitespaceChanges",
+  "default-diff-file-state": "settings.search.defaultDiffFileState",
+  "diff-layout": "settings.search.diffLayout",
+  "proactive-panels": "settings.search.proactivePanels",
+  "skills-in-slash-menu": "settings.search.skillsInSlashMenu",
+  "send-shortcut": "settings.search.sendShortcut",
+  "follow-up-behavior": "settings.search.followUpBehavior",
+  "provider-update-checks": "settings.search.providerUpdateChecks",
+  "continue-threads-after-server-update": "settings.search.continueThreadsAfterRestarts",
+  "background-activity": "settings.search.backgroundActivity",
+  "new-threads": "settings.search.newThreads",
+  "add-project-starts-in": "settings.search.addProjectStartsIn",
+  "unpin-confirmation": "settings.search.unpinConfirmation",
+  "archive-confirmation": "settings.search.archiveConfirmation",
+  "delete-confirmation": "settings.search.deleteConfirmation",
+  "quit-confirmation": "settings.search.holdToQuit",
+  "text-generation-model": "settings.search.textGenerationModel",
+  diagnostics: "settings.search.diagnostics",
+  "open-source-licenses": "settings.search.openSourceLicenses",
+  "legacy-plan-mode": "settings.search.legacyPlanMode",
+  "legacy-context-window-indicator": "settings.search.legacyContextWindowIndicator",
+  "legacy-sidebar": "settings.search.legacySidebar",
+  keybindings: "settings.search.keybindings",
+  "snap-shot-enabled": "settings.search.snapShots",
+  "snap-shot-accessibility": "settings.search.snapShotAccessibility",
+  "snap-shot-shortcut": "settings.search.snapShotShortcut",
+  "snap-shot-sound": "settings.search.snapShotSound",
+  "snap-shot-flash": "settings.search.snapShotFlash",
+  "snap-shot-animations": "settings.search.snapShotAnimations",
+  providers: "settings.search.providers",
+  "usage-providers": "settings.search.usageProviders",
+  "provider-health-check-interval": "settings.search.providerHealthCheckInterval",
+  "agent-browser-access": "settings.search.agentBrowserAccess",
+  "browser-profiles": "settings.search.browserProfiles",
+  "browser-default-profile": "settings.search.browserDefaultProfile",
+  "browser-default-viewport": "settings.search.browserDefaultViewport",
+  "browser-default-zoom": "settings.search.browserDefaultZoom",
+  "browser-default-appearance": "settings.search.browserDefaultAppearance",
+  "browser-recording-frame-rate": "settings.search.browserRecordingFrameRate",
+  "browser-link-target": "settings.search.browserLinkTarget",
+  "browser-auto-show-floating-preview": "settings.search.browserAutoShowFloatingPreview",
+  "automatic-pull": "settings.search.automaticPull",
+  "pull-request-merge-method": "settings.search.defaultMergeMethod",
+  "source-control": "settings.search.sourceControl",
+  "git-fetch-interval": "settings.search.gitFetchInterval",
+  "source-control-writing-style": "settings.search.sourceControlWritingStyle",
+  "follow-change-request-templates": "settings.search.followChangeRequestTemplates",
+  "source-control-writer-model": "settings.search.sourceControlWriterModel",
+  "project-actions": "settings.search.projectActions",
+  "environment-icon": "settings.search.environmentIcon",
+  "local-environment": "settings.search.localEnvironment",
+  "network-access": "settings.search.networkAccess",
+  "tailscale-https": "settings.search.tailscaleHttps",
+  "wsl-backend": "settings.search.wslBackend",
+  "connections-environment": "settings.search.connectionsEnvironment",
+  "remote-environments": "settings.search.remoteEnvironments",
+  "load-balancing": "settings.search.loadBalancing",
+  archive: "settings.search.archivedThreads",
+};
+
+export function searchableSetting(
+  id: SettingsSearchItemId,
+  t?: Translate,
+): {
   readonly id: string;
   readonly title: string;
 } {
   const { id: anchorId, title } = SEARCH_ITEMS_BY_ID.get(id)!;
-  return { id: anchorId, title };
+  const key = SETTINGS_SEARCH_TITLE_KEYS[id];
+  return { id: anchorId, title: key && t ? t(key) : title };
+}
+
+export function settingsSectionLabel(to: SettingsPath, t?: Translate): string {
+  const label = SETTINGS_SECTION_LABELS[to];
+  const key = SETTINGS_SECTION_LABEL_KEYS[to];
+  return key && t ? t(key) : label;
+}
+
+/** Localize catalog titles for display. English titles stay in search terms. */
+export function localizeSettingsSearchItems(
+  t: Translate,
+  items: ReadonlyArray<SettingsSearchItem> = SETTINGS_SEARCH_ITEMS,
+): ReadonlyArray<SettingsSearchItem> {
+  return items.map((item) => {
+    const titleKey = SETTINGS_SEARCH_TITLE_KEYS[item.id as SettingsSearchItemId];
+    const sectionLabel = settingsSectionLabel(item.to, t);
+    return {
+      ...item,
+      title: titleKey ? t(titleKey) : item.title,
+      searchTerms: [item.title, SETTINGS_SECTION_LABELS[item.to], sectionLabel, ...(item.searchTerms ?? [])],
+    };
+  });
 }
 
 export function filterAvailableSettingsSearchItems(

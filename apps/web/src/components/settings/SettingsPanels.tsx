@@ -106,6 +106,7 @@ import { useUpdateEverythingRun } from "../sidebar/updateEverythingRun";
 import { awaitsTrackSwitch, channelSwitchLabel } from "../sidebar/updateEverything.logic";
 import { isHostedByThisApp } from "../sidebar/useUpdateEverything";
 import { useI18n } from "~/i18n";
+import { isDefaultLocalePreference } from "./LanguageSettings";
 
 const RESPONSE_STREAMING_MODE_LABELS: Record<ResponseStreamingMode, string> = {
   turn: "Wait for the full response",
@@ -398,7 +399,7 @@ function AboutVersionSection() {
 }
 
 export function useSettingsRestore(onRestored?: () => void) {
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const {
     theme,
     setTheme,
@@ -418,7 +419,8 @@ export function useSettingsRestore(onRestored?: () => void) {
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
 
   const changedSettingLabels = [
-    ...(theme !== "system" ? ["Theme"] : []),
+    ...(theme !== "system" ? [t("settings.theme.title")] : []),
+    ...(!isDefaultLocalePreference(locale) ? [t("settings.language.title")] : []),
     ...(!followSystem ? [t("settings.restore.followSystem")] : []),
     ...(themeHalves !== null ? [t("settings.restore.themeMix")] : []),
     ...(settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast
@@ -484,7 +486,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     DEFAULT_UNIFIED_SETTINGS.persistComposerContextStrip
       ? ["Composer context"]
       : []),
-    ...getChangedTypographySettingLabels(settings),
+    ...getChangedTypographySettingLabels(settings, t),
     ...(settings.diffFilesCollapsed !== DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed
       ? ["Default diff file state"]
       : []),
@@ -543,7 +545,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.threadTitleInstructions !== DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions
       ? ["Thread title instructions"]
       : []),
-    ...getChangedBrowserSettingLabels(settings),
+    ...getChangedBrowserSettingLabels(settings, t),
     ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
       ? ["Agent browser access"]
       : []),
@@ -669,6 +671,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       pullRequestLinksOpenInApp: DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp,
       enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
     });
+    if (!isDefaultLocalePreference(locale)) setLocale("en");
     onRestored?.();
   };
 
@@ -749,6 +752,19 @@ export function LegacyFeaturesSection() {
               updateSettings({ contextWindowMeterEnabled: Boolean(checked) })
             }
             aria-label="Context window indicator (legacy)"
+          />
+        }
+      />
+      <SettingsRow
+        {...searchableSetting("legacy-sidebar", t)}
+        description={t("settings.legacy.sidebarDescription")}
+        control={
+          <Switch
+            checked={settings.legacySidebarEnabled}
+            onCheckedChange={(checked) =>
+              updateSettings({ legacySidebarEnabled: Boolean(checked) })
+            }
+            aria-label={t("settings.legacy.sidebarAria")}
           />
         }
       />

@@ -15,10 +15,10 @@ import {
 } from "@t3tools/contracts";
 
 import { persistClientSettingsPatch, useMergedSettings } from "../../hooks/useSettings";
-import { useI18n } from "../../i18n";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { toastManager } from "../ui/toast";
+import { useI18n } from "../../i18n";
 import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeContext";
 import {
   persistScopedSettingsPatch,
@@ -85,9 +85,7 @@ function useRunScopedPlan() {
       toastManager.add({
         type: "error",
         title:
-          savedEnvironmentCount > 0
-            ? t("settings.scope.savedOnSome")
-            : t("settings.scope.notSaved"),
+          savedEnvironmentCount > 0 ? t("settings.scope.savedOnSome") : t("settings.scope.notSaved"),
         description: [
           ...failedEnvironments.map(
             ({ label, message }) => `Could not save on ${label}: ${message}`,
@@ -102,8 +100,8 @@ function useRunScopedPlan() {
 }
 
 export function useUpdateScopedSettings() {
-  const { scope, environments } = useSettingsScope();
   const { t } = useI18n();
+  const { scope, environments } = useSettingsScope();
   const run = useRunScopedPlan();
   /** `onFailed` runs when any target rejects or drops the patch, so a draft can fall back. */
   return (patch: ScopedSettingsPatch, options?: { readonly onFailed?: () => void }) =>
@@ -111,8 +109,8 @@ export function useUpdateScopedSettings() {
 }
 
 export function useClearScopedSettings() {
-  const context = useOptionalSettingsScope();
   const { t } = useI18n();
+  const context = useOptionalSettingsScope();
   const run = useRunScopedPlan();
   return (keys: readonly ProjectScopedServerSettingKey[]) => {
     if (context === null) return;
@@ -121,8 +119,8 @@ export function useClearScopedSettings() {
 }
 
 export function useClearProjectOverrides() {
-  const context = useOptionalSettingsScope();
   const { t } = useI18n();
+  const context = useOptionalSettingsScope();
   const run = useRunScopedPlan();
   return (
     entries: readonly ProjectOverrideEntry[],

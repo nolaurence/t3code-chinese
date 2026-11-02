@@ -23,7 +23,7 @@ import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "../ui/dialog";
 import { ThemeSearchSection } from "./ThemeSearchSection";
-import { useI18n } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 
 /**
  * The guard runs on the size before the bytes are ever read: a large file
@@ -41,9 +41,14 @@ function formatByteSize(bytes: number): string {
   return `${bytes} bytes`;
 }
 
-function describeOversizedThemeFile(bytes: number): string | null {
+function describeOversizedThemeFile(bytes: number, t?: Translate): string | null {
   if (bytes <= MAX_THEME_FILE_BYTES) return null;
-  return `That file is ${formatByteSize(bytes)}. Theme files are only a few KB, so this one was not read (limit ${formatByteSize(MAX_THEME_FILE_BYTES)}).`;
+  const size = formatByteSize(bytes);
+  const limit = formatByteSize(MAX_THEME_FILE_BYTES);
+  return (
+    t?.("theme.import.tooLarge", { size, limit }) ??
+    `That file is ${size}. Theme files are only a few KB, so this one was not read (limit ${limit}).`
+  );
 }
 
 function escapeJsonHtml(value: string): string {
@@ -218,7 +223,7 @@ function ThemeImportBody({
     requestId === importRequestRef.current && !signal.aborted;
 
   const readThemeFile = async (file: ImportableThemeFile) => {
-    const oversized = describeOversizedThemeFile(file.size);
+    const oversized = describeOversizedThemeFile(file.size, t);
     if (oversized) {
       setError(oversized);
       return;
@@ -253,7 +258,7 @@ function ThemeImportBody({
     const failures: string[] = [];
     const parsed: Array<{ theme: ThemeDefinition; sourceName: string }> = [];
     for (const file of files) {
-      const oversized = describeOversizedThemeFile(file.size);
+      const oversized = describeOversizedThemeFile(file.size, t);
       if (oversized) {
         failures.push(`${file.name}: too large`);
         continue;
@@ -394,7 +399,7 @@ function ThemeImportBody({
   };
 
   const handleSubmit = () => {
-    const oversized = describeOversizedThemeFile(json.length);
+    const oversized = describeOversizedThemeFile(json.length, t);
     if (oversized) {
       setError(oversized);
       return;
@@ -467,7 +472,7 @@ function ThemeImportBody({
             type="file"
           />
         );
-        const chooseButton = (label = {t("theme.import.chooseFiles")}) => (
+        const chooseButton = (label = t("theme.import.chooseFiles")) => (
           <Button disabled={isReading} size="sm" variant="outline" onClick={openFilePicker}>
             <DownloadIcon />
             {isReading ? "Reading…" : label}

@@ -22,7 +22,7 @@ import { useOptionalSettingsScope } from "./SettingsScopeContext";
 import type { ProjectOverrideEntry, ScopedSettingsTarget } from "./scopedSettings";
 import { isProjectScopedSettingKey } from "./scopedSettings";
 import { settingsScopeEnvironmentLabels } from "./settingsScopeAxis";
-import { useI18n } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 
 interface InheritanceLayer {
   readonly key: "project" | "environment" | "t3.json" | "built-in";
@@ -45,26 +45,31 @@ const BACKGROUND_ACTIVITY_PROFILE_LABELS: Record<string, string> = {
   custom: "Advanced",
 };
 
-function formatValue(key: keyof ServerSettings, value: unknown): string {
+function formatValue(key: keyof ServerSettings, value: unknown, t?: Translate): string {
   if (value === null || value === undefined) {
     return key === "pullRequestMergeMethod"
-      ? t("settings.inheritance.lastSelected")
+      ? (t?.("settings.inheritance.lastSelected") ?? "Last selected")
       : key === "sidebarAutoSettleAfterDays"
-        ? t("settings.inheritance.never")
+        ? (t?.("settings.inheritance.never") ?? "Never")
         : key === "defaultModelSelection"
-          ? t("settings.inheritance.automatic")
+          ? (t?.("settings.inheritance.automatic") ?? "Automatic")
           : key === "sourceControlWriterModelSelection"
-            ? t("settings.inheritance.textGenerationModel")
+            ? (t?.("settings.inheritance.textGenerationModel") ?? "Text generation model")
             : key === "reviewGuideModelSelection"
               ? "Source control writer model"
               : key === "defaultThreadEnvMode" || key === "worktreeSubmodules"
                 ? "Inherit"
-                : t("settings.inheritance.notSet");
+                : (t?.("settings.inheritance.notSet") ?? "Not set");
   }
-  if (typeof value === "boolean") return value ? t("settings.inheritance.on") : t("settings.inheritance.off");
+  if (typeof value === "boolean")
+    return value
+      ? (t?.("settings.inheritance.on") ?? "On")
+      : (t?.("settings.inheritance.off") ?? "Off");
   if (typeof value === "number") {
     return key === "sidebarAutoSettleAfterDays"
-      ? `${value} ${value === 1 ? "day" : "days"}`
+      ? value === 1
+        ? (t?.("settings.inheritance.day", { count: value }) ?? `${value} day`)
+        : (t?.("settings.inheritance.days", { count: value }) ?? `${value} days`)
       : String(value);
   }
   if (typeof value === "string") {
@@ -79,7 +84,7 @@ function formatValue(key: keyof ServerSettings, value: unknown): string {
         value as keyof typeof PULL_REQUEST_MERGE_METHOD_LABELS
       ];
     }
-    return value === "" ? t("settings.inheritance.empty") : value;
+    return value === "" ? (t?.("settings.inheritance.empty") ?? "Empty") : value;
   }
   if (Array.isArray(value)) return `${value.length} ${value.length === 1 ? "item" : "items"}`;
   if (typeof value === "object") {
@@ -88,13 +93,16 @@ function formatValue(key: keyof ServerSettings, value: unknown): string {
     }
     if ("model" in value && typeof value.model === "string") return value.model;
     if ("mode" in value && typeof value.mode === "string") {
-      if (key === "worktreeCleanup") return value.mode === "off" ? "Off" : "Custom";
+      if (key === "worktreeCleanup")
+        return value.mode === "off"
+          ? (t?.("settings.inheritance.off") ?? "Off")
+          : (t?.("settings.inheritance.custom") ?? "Custom");
       return key === "sourceControlWritingStyle"
         ? (WRITING_STYLE_LABELS[value.mode] ?? value.mode)
         : value.mode;
     }
   }
-  return "Custom";
+  return t?.("settings.inheritance.custom") ?? "Custom";
 }
 
 /** Matches resolveProjectSettings order. */
@@ -102,17 +110,19 @@ export function settingInheritanceLayers(
   target: ScopedSettingsTarget,
   environmentSettings: ServerSettings,
   key: keyof ServerSettings,
+  t?: Translate,
 ): readonly InheritanceLayer[] {
   const environmentValue = environmentSettings[key];
   const source = isProjectScopedSettingKey(key) ? target.sources[key] : "environment";
   const environmentSet = !Equal.equals(environmentValue, DEFAULT_SERVER_SETTINGS[key]);
   const fileBacked = isProjectFileBackedSettingKey(key);
+  const inherits = t?.("settings.inheritance.inherits") ?? "Inherits";
   const layers: InheritanceLayer[] = [];
   if (target.projectId !== null && isProjectScopedSettingKey(key)) {
     layers.push({
       key: "project",
-      label: "Project",
-      value: source === "project" ? formatValue(key, target.settings[key]) : "Inherits",
+      label: t?.("settings.inheritance.project") ?? "Project",
+      value: source === "project" ? formatValue(key, target.settings[key], t) : inherits,
       effective: source === "project",
       set: source === "project",
     });
@@ -120,7 +130,7 @@ export function settingInheritanceLayers(
   layers.push({
     key: "environment",
     label: target.label,
-    value: environmentSet ? formatValue(key, environmentValue) : "Inherits",
+    value: environmentSet ? formatValue(key, environmentValue, t) : inherits,
     effective: source === "environment" && environmentSet,
     set: environmentSet,
   });
@@ -128,7 +138,7 @@ export function settingInheritanceLayers(
     layers.push({
       key: "t3.json",
       label: "t3.json",
-      value: source === "t3.json" ? formatValue(key, target.settings[key]) : "Inherits",
+      value: source === "t3.json" ? formatValue(key, target.settings[key], t) : inherits,
       effective: source === "t3.json",
       set: source === "t3.json",
     });
@@ -139,8 +149,8 @@ export function settingInheritanceLayers(
     : DEFAULT_SERVER_SETTINGS[key];
   layers.push({
     key: "built-in",
-    label: "Default",
-    value: formatValue(key, builtIn),
+    label: t?.("settings.inheritance.defaultLayer") ?? "Default",
+    value: formatValue(key, builtIn, t),
     effective: source === "environment" && !environmentSet,
     set: true,
   });
@@ -185,6 +195,7 @@ export function SettingInheritance({
   overridingProjects?: readonly SettingOverridingProject[];
   onClearOverrides?: (entries: readonly ProjectOverrideEntry[]) => void;
 }) {
+  const { t } = useI18n();
   const scopeContext = useOptionalSettingsScope();
   const key = keys[0];
   if (!key || targets.length === 0) return null;
@@ -205,7 +216,7 @@ export function SettingInheritance({
     const secondary = [labels.secondary, path?.split(/[\\/]/).filter(Boolean).slice(-2).join("/")]
       .filter(Boolean)
       .join(" · ");
-    const layers = settingInheritanceLayers(target, environment.serverConfig.settings, key);
+    const layers = settingInheritanceLayers(target, environment.serverConfig.settings, key, t);
     const winningLayer = layers.find((layer) => layer.effective);
     return [
       {
@@ -440,6 +451,7 @@ export function SettingInheritance({
                                     (member) =>
                                       member.target.environmentId === project.environmentId,
                                   )?.overrides[project.projectId]?.[key],
+                                  t,
                                 )
                               : null}
                           </span>

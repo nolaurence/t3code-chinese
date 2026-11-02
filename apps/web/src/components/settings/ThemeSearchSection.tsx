@@ -29,18 +29,18 @@ import { Button } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Spinner } from "../ui/spinner";
-import { useI18n } from "~/i18n";
+import { useI18n, type MessageKey, type Translate } from "~/i18n";
 
 const DOWNLOAD_FORMAT = new Intl.NumberFormat(undefined, {
   notation: "compact",
   maximumFractionDigits: 1,
 });
 const SUGGESTED_SEARCHES = ["Dracula", "Catppuccin", "Nord", "Tokyo Night"];
-const SORT_OPTIONS: ReadonlyArray<{ value: OpenVsxThemeSort; label: string }> = [
-  { value: "downloadCount", label: "Most downloaded" },
-  { value: "rating", label: "Best rated" },
-  { value: "timestamp", label: "Newest" },
-  { value: "relevance", label: "Most relevant" },
+const SORT_OPTIONS: ReadonlyArray<{ value: OpenVsxThemeSort; labelKey: MessageKey }> = [
+  { value: "downloadCount", labelKey: "theme.search.sort.downloads" },
+  { value: "rating", labelKey: "theme.search.sort.rating" },
+  { value: "timestamp", labelKey: "theme.search.sort.newest" },
+  { value: "relevance", labelKey: "theme.search.sort.relevance" },
 ];
 const SEARCH_DEBOUNCE_MS = 350;
 
@@ -97,6 +97,7 @@ export function createThemeSearch(
   view: ThemeSearchView,
   signal: AbortSignal,
   search: SearchThemes = searchOpenVsxThemes,
+  t?: Translate,
 ) {
   let query = "";
   let sortBy: OpenVsxThemeSort = "downloadCount";
@@ -135,7 +136,11 @@ export function createThemeSearch(
           if (controller.signal.aborted) return;
           view.setResults(null);
           shownKey = null;
-          view.setError(cause instanceof Error ? cause.message : t("theme.search.failed"));
+          view.setError(
+            cause instanceof Error
+              ? cause.message
+              : (t?.("theme.search.failed") ?? "Open VSX search failed."),
+          );
         },
       )
       .then(() => {
@@ -244,7 +249,7 @@ export function ThemeSearchSection({
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<OpenVsxThemeExtension | null>(null);
   const [themeSearch] = useState(() =>
-    createThemeSearch({ setResults, setError, setIsSearching }, signal),
+    createThemeSearch({ setResults, setError, setIsSearching }, signal, undefined, t),
   );
 
   const changeQuery = (nextQuery: string) => {
@@ -346,7 +351,7 @@ export function ThemeSearchSection({
           </div>
           {results && results.length > 0 ? (
             <div className="flex shrink-0 items-center justify-end gap-2">
-              <p className="text-muted-foreground text-xs">Sort</p>
+              <p className="text-muted-foreground text-xs">{t("theme.search.sort")}</p>
               <Select
                 disabled={installingId !== null}
                 value={sortBy}
@@ -354,13 +359,13 @@ export function ThemeSearchSection({
               >
                 <SelectTrigger size="sm" className="w-40" aria-label={t("theme.search.sortAria")}>
                   <SelectValue>
-                    {SORT_OPTIONS.find((option) => option.value === sortBy)?.label}
+                    {t(SORT_OPTIONS.find((option) => option.value === sortBy)?.labelKey ?? "theme.search.sort.downloads")}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   {SORT_OPTIONS.map((option) => (
                     <SelectItem key={option.value} hideIndicator value={option.value}>
-                      {option.label}
+                      {t(option.labelKey)}
                     </SelectItem>
                   ))}
                 </SelectPopup>

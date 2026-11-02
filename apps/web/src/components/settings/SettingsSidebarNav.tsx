@@ -51,7 +51,7 @@ import {
   searchSettings,
   revealSettingsSearchTarget,
   SETTINGS_NAV_GROUPS,
-  SETTINGS_SECTION_LABELS,
+  settingsSectionLabel,
   type SettingsPath,
   type SettingsSearchItem,
 } from "./settingsSearch";
@@ -59,7 +59,7 @@ import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchIte
 import { validateSettingsScopeSearch } from "./settingsScope";
 import { useSettingsSectionNavigation } from "./useSettingsSectionNavigation";
 import { workspaceAreaProps } from "../../lib/workspaceFocus";
-import { useI18n } from "../../i18n";
+import { useI18n, type Translate } from "../../i18n";
 
 const SnapShotIcon = createLucideIcon("snap-shot", [
   [
@@ -120,6 +120,12 @@ const SETTINGS_DETAIL_PAGE_PARENTS: Readonly<Record<string, SettingsPath>> = {
 // Attached only to the highlighted result, so it runs whenever the highlight lands on a row.
 function scrollResultIntoView(row: HTMLElement | null) {
   row?.scrollIntoView({ block: "nearest" });
+}
+
+function settingsGroupHeading(heading: string, t: Translate): string {
+  if (heading === "Agents") return t("panel.agents");
+  if (heading === "Connections") return t("settings.nav.connections");
+  return heading;
 }
 
 function SettingsSectionIcon({ to }: { to: SettingsPath }) {
@@ -355,7 +361,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                           {item.title}
                         </span>
                         <span className="block truncate text-2xs text-sidebar-muted-foreground/75">
-                          {SETTINGS_SECTION_LABELS[item.to]}
+                          {settingsSectionLabel(item.to, t)}
                         </span>
                       </span>
                     </SidebarMenuButton>
@@ -386,7 +392,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     <div
                       key={group.heading ?? index}
                       role="group"
-                      aria-label={group.heading ?? undefined}
+                      aria-label={group.heading ? settingsGroupHeading(group.heading, t) : undefined}
                       className="flex flex-col gap-1 max-md:border-t max-md:border-sidebar-border max-md:pt-4 max-md:first:border-t-0 max-md:first:pt-0"
                     >
                       {group.heading ? (
@@ -398,7 +404,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                             !compactSearchOpen && "max-md:hidden",
                           )}
                         >
-                          {group.heading}
+                          {settingsGroupHeading(group.heading, t)}
                         </h3>
                       ) : null}
                       <SidebarMenu role="presentation">
@@ -420,7 +426,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                                 <span
                                   className={cn("truncate", !compactSearchOpen && "max-md:sr-only")}
                                 >
-                                  {SETTINGS_SECTION_LABELS[to]}
+                                  {settingsSectionLabel(to, t)}
                                 </span>
                               </SidebarMenuButton>
                             </SidebarMenuItem>

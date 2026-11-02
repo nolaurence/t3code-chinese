@@ -41,7 +41,7 @@ import {
   showThemeInspectorHover,
   type ThemeElementInspection,
 } from "./themeInspector";
-import { useI18n } from "~/i18n";
+import { useI18n, type MessageKey } from "~/i18n";
 
 const THEME_EDITOR_SIMPLE_ROLES: ReadonlyArray<ThemeColorRole> = ["canvas", "accent"];
 
@@ -231,6 +231,36 @@ const THEME_EDITOR_ROLE_GROUPS: ReadonlyArray<{
     ],
   },
 ];
+
+const THEME_EDITOR_GROUP_TITLE_KEYS: Partial<Record<string, MessageKey>> = {
+  foundation: "theme.editor.group.foundation",
+  "brand-content": "theme.editor.group.brandContent",
+  context: "theme.editor.group.context",
+  status: "theme.editor.group.status",
+};
+
+const THEME_EDITOR_FAMILY_LABEL_KEYS: Partial<Record<string, MessageKey>> = {
+  background: "theme.editor.family.background",
+  surface: "theme.editor.family.surface",
+  "raised-surface": "theme.editor.family.raisedSurface",
+  overlay: "theme.editor.family.overlay",
+  text: "theme.editor.family.text",
+  "muted-text": "theme.editor.family.mutedText",
+  border: "theme.editor.family.border",
+  input: "theme.editor.family.input",
+  "subtle-surface": "theme.editor.family.subtleSurface",
+  "highlight-surface": "theme.editor.family.highlightSurface",
+  accent: "theme.editor.family.accent",
+  action: "theme.editor.family.action",
+  "message-surface": "theme.editor.family.messageSurface",
+  "code-surface": "theme.editor.family.codeSurface",
+  "sidebar-background": "theme.editor.family.sidebarBackground",
+  "sidebar-controls": "theme.editor.family.sidebarControls",
+  "sidebar-selection": "theme.editor.family.sidebarSelection",
+  "terminal-background": "theme.editor.family.terminalBackground",
+  error: "theme.editor.family.error",
+  warning: "theme.editor.family.warning",
+};
 
 const THEME_EDITOR_COLOR_FAMILIES = THEME_EDITOR_ROLE_GROUPS.flatMap((group) => group.families);
 const THEME_EDITOR_COLOR_FAMILY_BY_ROLE = new Map(
@@ -939,6 +969,15 @@ export function ThemeEditorPanel({
     </div>
   );
 
+  const familyLabel = (family: ThemeEditorColorFamily) => {
+    const key = THEME_EDITOR_FAMILY_LABEL_KEYS[family.id];
+    return key ? t(key) : family.label;
+  };
+  const groupTitle = (group: (typeof THEME_EDITOR_ROLE_GROUPS)[number]) => {
+    const key = THEME_EDITOR_GROUP_TITLE_KEYS[group.id];
+    return key ? t(key) : group.title;
+  };
+
   const renderRoleFields = (
     families: ReadonlyArray<ThemeEditorColorFamily>,
     gridClassName = "grid gap-2 sm:grid-cols-2",
@@ -947,7 +986,7 @@ export function ThemeEditorPanel({
       {families.map((family) => (
         <ThemeColorField
           key={family.id}
-          label={family.label}
+          label={familyLabel(family)}
           onChange={updateColor}
           onSelect={selectThemeRole}
           onToggleSelected={toggleThemeRole}
@@ -966,7 +1005,7 @@ export function ThemeEditorPanel({
       families: group.families.filter(
         (family) =>
           !query ||
-          [family.label, ...family.roles.map((role) => getThemeRoleLabel(role))]
+          [family.label, familyLabel(family), ...family.roles.map((role) => getThemeRoleLabel(role))]
             .join(" ")
             .toLowerCase()
             .includes(query),
@@ -976,7 +1015,7 @@ export function ThemeEditorPanel({
       <div className="space-y-5">
         {groups.map((group) => (
           <section className="space-y-2" key={group.id}>
-            <h4 className="text-sm font-medium text-foreground">{group.title}</h4>
+            <h4 className="text-sm font-medium text-foreground">{groupTitle(group)}</h4>
             {renderRoleFields(group.families, "grid gap-1")}
           </section>
         ))}
@@ -991,7 +1030,11 @@ export function ThemeEditorPanel({
             onSelect={selectThemeRole}
             onToggleSelected={toggleThemeRole}
             role={role}
-            label={role === "canvas" ? "Background" : "Accent"}
+            label={
+              role === "canvas"
+                ? t("theme.editor.family.background")
+                : t("theme.editor.family.accent")
+            }
             selected={selectedRole === role}
             value={colorsByAppearance[activeAppearance][role]}
           />

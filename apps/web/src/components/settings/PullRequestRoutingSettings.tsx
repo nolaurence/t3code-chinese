@@ -8,6 +8,7 @@ import {
 import { useState } from "react";
 
 import { environmentCatalog } from "~/connection/catalog";
+import { useI18n, type Translate } from "~/i18n";
 import type { EnvironmentPresentation } from "~/state/environments";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -16,20 +17,28 @@ import { EnvironmentRow, EnvironmentTransportLabel } from "./EnvironmentRow";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { searchableSetting } from "./settingsSearch";
 
-const options: ReadonlyArray<{ value: PullRequestRoutingPermission; label: string }> = [
-  { value: "off", label: "Off" },
-  { value: "read", label: "Read PRs" },
-  { value: "read-write", label: "Read and act" },
-];
-
-const summaryLabels = { "read-write": "read and act", read: "read PRs" } as const;
+function routingOptions(t: Translate): ReadonlyArray<{
+  value: PullRequestRoutingPermission;
+  label: string;
+}> {
+  return [
+    { value: "off", label: t("settings.inheritance.off") },
+    { value: "read", label: t("settings.githubRouting.read") },
+    { value: "read-write", label: t("settings.githubRouting.readWrite") },
+  ];
+}
 
 function summarizePullRequestRouting(
   entries: ReadonlyArray<{
     readonly label: string;
     readonly permission: PullRequestRoutingPermission;
   }>,
+  t: Translate,
 ): string | null {
+  const summaryLabels = {
+    "read-write": t("settings.githubRouting.readWriteSummary"),
+    read: t("settings.githubRouting.readSummary"),
+  } as const;
   const groups = (["read-write", "read"] as const).flatMap((permission) => {
     const labels = entries.filter((entry) => entry.permission === permission);
     return labels.length === 0
@@ -44,14 +53,16 @@ export function PullRequestRoutingSettings({
 }: {
   readonly environments: ReadonlyArray<EnvironmentPresentation>;
 }) {
+  const { t } = useI18n();
   const permissions = useAtomValue(environmentCatalog.pullRequestRoutingPermissionsValueAtom);
   const catalog = useAtomValue(environmentCatalog.catalogValueAtom);
   const update = useAtomCommand(environmentCatalog.setPullRequestRoutingPermission);
   const [saving, setSaving] = useState(false);
+  const options = routingOptions(t);
 
   if (environments.length < 2) return null;
 
-  const { id, title } = searchableSetting("pull-request-routing");
+  const { id, title } = searchableSetting("pull-request-routing", t);
   return (
     <FoldedSettingsSection
       id={id}
@@ -62,7 +73,8 @@ export function PullRequestRoutingSettings({
             label: environment.label,
             permission: pullRequestRoutingPermissionFor(environment.entry, permissions),
           })),
-        ) ?? "Off"
+          t,
+        ) ?? t("settings.inheritance.off")
       }
     >
       <p className="px-3 py-2.5 text-xs text-muted-foreground sm:px-4">

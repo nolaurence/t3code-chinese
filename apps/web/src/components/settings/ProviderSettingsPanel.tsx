@@ -132,7 +132,7 @@ import {
   resolveRemoteOperateAccess,
   resolveSelectedProviderEnvironmentId,
 } from "./ProviderSettingsPanel.logic";
-import { useI18n } from "~/i18n";
+import { useI18n, type Translate } from "~/i18n";
 
 function modelListChanges(current: ReadonlyArray<string>, next: ReadonlyArray<string>) {
   const currentSet = new Set(current);
@@ -193,12 +193,14 @@ function ProviderLastChecked({ environmentId }: { environmentId: EnvironmentId }
   );
 }
 
-function providerEnvironmentDetail(environment: EnvironmentPresentation): string {
-  if (environment.entry.target._tag === "PrimaryConnectionTarget") return "Primary device";
+function providerEnvironmentDetail(environment: EnvironmentPresentation, t?: Translate): string {
+  if (environment.entry.target._tag === "PrimaryConnectionTarget")
+    return t?.("providers.device.primary") ?? "Primary device";
   if (environment.relayManaged) return "T3 Connect";
   if (environment.entry.target._tag === "SshConnectionTarget") return "SSH";
-  if (isDesktopLocalConnectionTarget(environment.entry.target)) return "Local device";
-  return environment.displayUrl ?? t("providers.device.remote");
+  if (isDesktopLocalConnectionTarget(environment.entry.target))
+    return t?.("providers.device.local") ?? "Local device";
+  return environment.displayUrl ?? t?.("providers.device.remote") ?? "Remote device";
 }
 
 const providerCardHeightClassName =
@@ -390,7 +392,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
         >
           {options.map((environment) => {
             const machine = resolveEnvironmentMachineKind(environment.serverConfig);
-            const detail = providerEnvironmentDetail(environment);
+            const detail = providerEnvironmentDetail(environment, t);
             const statusText = connectionStatusTitle(environment.connection);
             return (
               <Tooltip key={environment.environmentId}>
