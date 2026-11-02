@@ -1,21 +1,20 @@
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { ExternalLinkIcon, PackagePlusIcon, PaletteIcon, SearchIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useI18n, type MessageKey } from "../../i18n";
+import { type ReactNode, useState } from "react";
 import {
   importOpenVsxThemeExtension,
   searchOpenVsxThemes,
   type OpenVsxThemeExtension,
   type OpenVsxThemeSort,
 } from "../../openVsxThemes";
-import { useDebouncedValue } from "../../state/queries";
 import {
   getCustomThemes,
   getStoredCustomThemeCollection,
   replaceCustomThemeCollection,
   type ThemeDefinition,
 } from "../../themePalette";
-import { GitHubIcon, GitLabIcon } from "../Icons";
+import { sourceControlIcon } from "../../sourceControlPresentation";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -25,10 +24,12 @@ import {
   AlertDialogPopup,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
+import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Spinner } from "../ui/spinner";
+import { useI18n, type MessageKey, type Translate } from "~/i18n";
 
 const DOWNLOAD_FORMAT = new Intl.NumberFormat(undefined, {
   notation: "compact",
@@ -43,17 +44,19 @@ const SORT_OPTIONS: ReadonlyArray<{ value: OpenVsxThemeSort; labelKey: MessageKe
 ];
 const SEARCH_DEBOUNCE_MS = 350;
 
-function SourceLinkIcon({ url }: { url: string }) {
+function sourceHost(url: string): string | null {
   try {
-    const host = new URL(url).hostname.toLowerCase();
-    if (host === "github.com" || host.endsWith(".github.com"))
-      return <GitHubIcon className="size-3.5" />;
-    if (host === "gitlab.com" || host.endsWith(".gitlab.com"))
-      return <GitLabIcon className="size-3.5" monochrome />;
+    return new URL(url).hostname.toLowerCase();
   } catch {
-    // Fall through to the generic external-link icon.
+    return null;
   }
-  return <ExternalLinkIcon className="size-3.5" />;
+}
+
+function sourceLinkIcon(url: string): ReactNode {
+  const host = sourceHost(url);
+  const definition = host === null ? undefined : sourceControlClients.findByPublicDomain(host);
+  const Icon = definition ? sourceControlIcon(definition) : ExternalLinkIcon;
+  return <Icon className="size-3.5" />;
 }
 
 function ThemeExtensionIcon({ extension }: { extension: OpenVsxThemeExtension }) {
@@ -77,11 +80,164 @@ function ThemeExtensionIcon({ extension }: { extension: OpenVsxThemeExtension })
   );
 }
 
+export interface ThemeSearchView {
+  readonly setResults: (results: ReadonlyArray<OpenVsxThemeExtension> | null) => void;
+  readonly setError: (error: string | null) => void;
+  readonly setIsSearching: (isSearching: boolean) => void;
+}
+
+type SearchThemes = typeof searchOpenVsxThemes;
+
+/**
+ * Owns one dialog session's Open VSX traffic: the input debounce, the request in
+ * flight, and which key the shown results belong to. Aborting `signal` (the
+ * dialog closing) cancels all of it, including an install.
+ */
+export function createThemeSearch(
+  view: ThemeSearchView,
+  signal: AbortSignal,
+  search: SearchThemes = searchOpenVsxThemes,
+  t?: Translate,
+) {
+  let query = "";
+  let sortBy: OpenVsxThemeSort = "downloadCount";
+  let debounce: ReturnType<typeof setTimeout> | null = null;
+  let request: AbortController | null = null;
+  let install: AbortController | null = null;
+  // Record successful searches only; rerun after install only for changed query/sort to preserve install
+  // errors.
+  let shownKey: string | null = null;
+  let handledKey: string | null = null;
+  let interrupted = false;
+
+  const keyOf = () => `${query}\u0000${sortBy}`;
+  const abortRequest = () => {
+    request?.abort();
+    request = null;
+  };
+  const cancelDebounce = () => {
+    if (debounce !== null) clearTimeout(debounce);
+    debounce = null;
+  };
+
+  const fetchResults = () => {
+    abortRequest();
+    const controller = new AbortController();
+    request = controller;
+    const key = keyOf();
+    void search(query, { signal: controller.signal, sortBy })
+      .then(
+        (results) => {
+          if (controller.signal.aborted) return;
+          view.setResults(results);
+          shownKey = key;
+        },
+        (cause: unknown) => {
+          if (controller.signal.aborted) return;
+          view.setResults(null);
+          shownKey = null;
+          view.setError(
+            cause instanceof Error
+              ? cause.message
+              : (t?.("theme.search.failed") ?? "Open VSX search failed."),
+          );
+        },
+      )
+      .then(() => {
+        if (request !== controller) return;
+        request = null;
+        view.setIsSearching(false);
+      });
+  };
+
+  const clear = () => {
+    cancelDebounce();
+    abortRequest();
+    shownKey = null;
+    handledKey = null;
+    view.setResults(null);
+    view.setError(null);
+    view.setIsSearching(false);
+  };
+
+  const settle = () => {
+    if (install !== null || signal.aborted || query === "") return;
+    const key = keyOf();
+    const keyChanged = handledKey !== key;
+    if (!keyChanged && !interrupted) return;
+    handledKey = key;
+    interrupted = false;
+    const shouldFetch = shownKey !== key;
+    if (shouldFetch || keyChanged) view.setError(null);
+    view.setIsSearching(shouldFetch);
+    if (shouldFetch) fetchResults();
+    else abortRequest();
+  };
+
+  signal.addEventListener(
+    "abort",
+    () => {
+      cancelDebounce();
+      abortRequest();
+      install?.abort();
+    },
+    { once: true },
+  );
+
+  return {
+    /** An unsettled query would hit Open VSX for text that is no longer visible, so typing waits. */
+    setQuery(nextQuery: string) {
+      const trimmed = nextQuery.trim();
+      if (trimmed === query) return;
+      query = trimmed;
+      cancelDebounce();
+      if (trimmed === "") {
+        if (install === null) clear();
+        return;
+      }
+      debounce = setTimeout(() => {
+        debounce = null;
+        settle();
+      }, SEARCH_DEBOUNCE_MS);
+    },
+    setSortBy(nextSort: OpenVsxThemeSort) {
+      sortBy = nextSort;
+      if (debounce === null) settle();
+    },
+    /** Enter or re-picking the current suggestion searches again even for the shown key. */
+    searchNow() {
+      if (install !== null || signal.aborted || query === "") return;
+      // A pending debounce for the same key would otherwise restart this search.
+      cancelDebounce();
+      handledKey = keyOf();
+      interrupted = false;
+      view.setError(null);
+      view.setIsSearching(true);
+      fetchResults();
+    },
+    beginInstall(): AbortSignal {
+      abortRequest();
+      install?.abort();
+      install = new AbortController();
+      interrupted = true;
+      view.setIsSearching(false);
+      return install.signal;
+    },
+    endInstall(installSignal: AbortSignal): boolean {
+      if (install?.signal !== installSignal) return false;
+      install = null;
+      if (query === "") clear();
+      else if (debounce === null) settle();
+      return true;
+    },
+  };
+}
+
 export function ThemeSearchSection({
-  open,
+  signal,
   onInstalled,
 }: {
-  open: boolean;
+  signal: AbortSignal;
   onInstalled: (themes: ReadonlyArray<ThemeDefinition>, context: { updated: boolean }) => void;
 }) {
   const { t } = useI18n();
@@ -92,173 +248,54 @@ export function ThemeSearchSection({
   const [isSearching, setIsSearching] = useState(false);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<OpenVsxThemeExtension | null>(null);
-  const requestRef = useRef<AbortController | null>(null);
-  // The (query, sort) pair the last search actually ran, so an install
-  // finishing can tell a same-key rerun (which must not wipe an install
-  // error) from a query that changed mid-install (which must be searched).
-  const lastSearchKeyRef = useRef<string | null>(null);
-  // The (query, sort) pair from the previous effect run, so a search error
-  // that belongs to an older key can be cleared when the user returns to
-  // already-shown results without clearing a fresh install error.
-  const prevSearchKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    requestRef.current?.abort();
-    requestRef.current = null;
-    if (open) {
-      lastSearchKeyRef.current = null;
-      prevSearchKeyRef.current = null;
-      setQuery("");
-      setSortBy("downloadCount");
-      setResults(null);
-      setError(null);
-      setIsSearching(false);
-      setInstallingId(null);
-      setPendingUpdate(null);
-    }
-    return () => {
-      requestRef.current?.abort();
-      requestRef.current = null;
-    };
-  }, [open]);
-
-  const runSearch = useCallback(
-    async (searchText: string, nextSort = sortBy) => {
-      const trimmed = searchText.trim();
-      if (!trimmed) return;
-      requestRef.current?.abort();
-      const controller = new AbortController();
-      requestRef.current = controller;
-      setError(null);
-      setIsSearching(true);
-      try {
-        const nextResults = await searchOpenVsxThemes(trimmed, {
-          signal: controller.signal,
-          sortBy: nextSort,
-        });
-        if (!controller.signal.aborted) {
-          setResults(nextResults);
-          lastSearchKeyRef.current = `${trimmed}\u0000${nextSort}`;
-        }
-      } catch (cause) {
-        if (!controller.signal.aborted) {
-          console.error("Open VSX theme search failed", cause);
-          setResults(null);
-          lastSearchKeyRef.current = null;
-          setError(t("theme.search.failed"));
-        }
-      }
-      if (requestRef.current === controller) {
-        requestRef.current = null;
-        setIsSearching(false);
-      }
-    },
-    [sortBy, t],
+  const [themeSearch] = useState(() =>
+    createThemeSearch({ setResults, setError, setIsSearching }, signal, undefined, t),
   );
 
-  const debouncedQuery = useDebouncedValue(query.trim(), SEARCH_DEBOUNCE_MS);
+  const changeQuery = (nextQuery: string) => {
+    setQuery(nextQuery);
+    themeSearch.setQuery(nextQuery);
+  };
 
-  useEffect(() => {
-    if (query.trim() || installingId !== null) return;
-    requestRef.current?.abort();
-    requestRef.current = null;
-    lastSearchKeyRef.current = null;
-    setResults(null);
-    setError(null);
-    setIsSearching(false);
-  }, [query, installingId]);
-
-  useEffect(() => {
-    if (!open) return;
-    const searchKey = `${debouncedQuery}\u0000${sortBy}`;
-    const keyChanged = prevSearchKeyRef.current !== searchKey;
-    prevSearchKeyRef.current = searchKey;
-    if (installingId !== null) return;
-    if (!debouncedQuery) {
-      lastSearchKeyRef.current = null;
-      requestRef.current?.abort();
-      requestRef.current = null;
-      setResults(null);
-      setError(null);
-      setIsSearching(false);
-      return;
-    }
-    if (debouncedQuery !== query.trim()) {
-      // The debounced value still trails the input (dialog reopened with the
-      // box reset, or the user is mid-keystroke). Searching it would hit Open
-      // VSX for a query that is no longer visible; wait for the debounce to
-      // catch up to the current input instead.
-      return;
-    }
-    if (lastSearchKeyRef.current === searchKey) {
-      // The results already match this query. A request for a newer key may
-      // still be in flight (typed and then undone); abort it so it cannot
-      // overwrite the results. Only a genuine key change makes a stale search
-      // error irrelevant, so an install error on an unchanged query survives.
-      requestRef.current?.abort();
-      requestRef.current = null;
-      setIsSearching(false);
-      if (keyChanged) setError(null);
-      return;
-    }
-    void runSearch(debouncedQuery);
-    // `sortBy` is deliberately not a direct dependency: the guards above read
-    // the current value from the fresh render closure. An install finishing
-    // reruns the search only when the query or sort changed while it was in
-    // flight (checked via lastSearchKeyRef, recorded only once a search
-    // succeeds), so the install error the user needs to see is preserved
-    // across that rerun.
-  }, [open, query, debouncedQuery, installingId, runSearch]);
-
-  const handleSortChange = useCallback((value: OpenVsxThemeSort | null) => {
+  const handleSortChange = (value: OpenVsxThemeSort | null) => {
     const nextSort = SORT_OPTIONS.find((option) => option.value === value)?.value;
     if (!nextSort) return;
     setSortBy(nextSort);
-  }, []);
+    themeSearch.setSortBy(nextSort);
+  };
 
-  const handleInstall = useCallback(
-    async (extension: OpenVsxThemeExtension, allowUpdate: boolean) => {
-      setError(null);
-      let installedCollection: ReadonlyArray<ThemeDefinition>;
-      try {
-        installedCollection = getStoredCustomThemeCollection(extension.collectionId);
-      } catch (cause) {
-        console.error("Could not read installed themes", cause);
-        setError(t("theme.search.installedReadFailed"));
-        return;
-      }
-      const updated = installedCollection.length > 0;
-      if (updated && !allowUpdate) {
-        setPendingUpdate(extension);
-        return;
-      }
+  const handleInstall = async (extension: OpenVsxThemeExtension, allowUpdate: boolean) => {
+    setError(null);
+    let installedCollection: ReadonlyArray<ThemeDefinition>;
+    try {
+      installedCollection = getStoredCustomThemeCollection(extension.collectionId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("theme.search.installedReadFailed"));
+      return;
+    }
+    const updated = installedCollection.length > 0;
+    if (updated && !allowUpdate) {
+      setPendingUpdate(extension);
+      return;
+    }
 
-      requestRef.current?.abort();
-      const controller = new AbortController();
-      requestRef.current = controller;
-      setIsSearching(false);
-      setInstallingId(extension.id);
-      try {
-        const themes = await importOpenVsxThemeExtension(extension, controller.signal);
-        if (!controller.signal.aborted) {
-          const imported = replaceCustomThemeCollection(extension.collectionId, themes, {
-            expectedCollection: installedCollection,
-          });
-          onInstalled(imported, { updated });
-        }
-      } catch (cause) {
-        if (!controller.signal.aborted) {
-          console.error("Could not add Open VSX theme", cause);
-          setError(t("theme.search.addFailed"));
-        }
+    const installSignal = themeSearch.beginInstall();
+    setInstallingId(extension.id);
+    try {
+      const themes = await importOpenVsxThemeExtension(extension, installSignal);
+      if (!installSignal.aborted) {
+        const imported = replaceCustomThemeCollection(extension.collectionId, themes, {
+          expectedCollection: installedCollection,
+        });
+        onInstalled(imported, { updated });
       }
-      if (requestRef.current === controller) {
-        requestRef.current = null;
-        setInstallingId(null);
+    } catch (cause) {
+      if (!installSignal.aborted) {
+        setError(cause instanceof Error ? cause.message : t("theme.search.addFailed"));
       }
-    },
-    [onInstalled, t],
-  );
+    }
+    if (themeSearch.endInstall(installSignal)) setInstallingId(null);
+  };
 
   return (
     <section className="space-y-3" aria-labelledby="theme-search-heading">
@@ -266,7 +303,9 @@ export function ThemeSearchSection({
         <h3 className="text-sm font-medium" id="theme-search-heading">
           {t("theme.search.title")}
         </h3>
-        <p className="mt-0.5 text-muted-foreground text-xs">{t("theme.search.description")}</p>
+        <p className="mt-0.5 text-muted-foreground text-xs">
+          {t("theme.search.description")}
+        </p>
       </div>
       <InputGroup>
         <InputGroupAddon>
@@ -275,11 +314,11 @@ export function ThemeSearchSection({
         <InputGroupInput
           aria-label={t("theme.search.aria")}
           autoFocus
-          onChange={(event) => setQuery(event.currentTarget.value)}
+          onChange={(event) => changeQuery(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing || event.keyCode === 229) return;
             if (event.key === "Enter" && !isSearching && installingId === null)
-              void runSearch(query.trim());
+              themeSearch.searchNow();
           }}
           placeholder={t("theme.search.placeholder")}
           size="lg"
@@ -291,7 +330,7 @@ export function ThemeSearchSection({
       {!isSearching || results !== null ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <p className="text-muted-foreground text-xs">{t("theme.search.popular")}</p>
+            <p className="text-muted-foreground text-xs">Popular</p>
             {SUGGESTED_SEARCHES.map((suggestion) => (
               <Button
                 key={suggestion}
@@ -300,9 +339,9 @@ export function ThemeSearchSection({
                 variant="ghost"
                 onClick={() => {
                   if (query.trim() === suggestion) {
-                    void runSearch(suggestion);
+                    themeSearch.searchNow();
                   } else {
-                    setQuery(suggestion);
+                    changeQuery(suggestion);
                   }
                 }}
               >
@@ -320,7 +359,7 @@ export function ThemeSearchSection({
               >
                 <SelectTrigger size="sm" className="w-40" aria-label={t("theme.search.sortAria")}>
                   <SelectValue>
-                    {t(SORT_OPTIONS.find((option) => option.value === sortBy)!.labelKey)}
+                    {t(SORT_OPTIONS.find((option) => option.value === sortBy)?.labelKey ?? "theme.search.sort.downloads")}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -340,17 +379,14 @@ export function ThemeSearchSection({
         {isSearching
           ? t("theme.search.searching")
           : results
-            ? t("theme.search.resultCount", { count: results.length })
+            ? `${results.length} supported ${results.length === 1 ? "theme" : "themes"} found.`
             : ""}
       </div>
 
       {error ? (
-        <div
-          aria-live="polite"
-          className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive text-sm"
-        >
-          {error}
-        </div>
+        <Alert variant="error" role="status" aria-live="polite">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       {isSearching && results === null ? (
@@ -372,10 +408,8 @@ export function ThemeSearchSection({
               const isInstalled = getCustomThemes().some(
                 (theme) => theme.collection?.id === extension.collectionId,
               );
-              const action = t(isInstalled ? "theme.search.update" : "theme.search.install");
-              const progressAction = t(
-                isInstalled ? "theme.search.updating" : "theme.search.installing",
-              );
+              const action = isInstalled ? "Update" : "Install";
+              const progressAction = isInstalled ? "Updating" : "Installing";
               return (
                 <article
                   className="group flex min-w-0 flex-col gap-3 rounded-xl border border-border/70 bg-card/60 p-3 transition-colors hover:bg-accent/20"
@@ -387,7 +421,7 @@ export function ThemeSearchSection({
                       <h4 className="truncate text-sm font-medium">{extension.name}</h4>
                       <p className="truncate text-muted-foreground text-xs">
                         {extension.publisher} · {DOWNLOAD_FORMAT.format(extension.downloadCount)}{" "}
-                        {t("theme.search.downloads")}
+                        downloads
                       </p>
                     </div>
                   </div>
@@ -403,15 +437,12 @@ export function ThemeSearchSection({
                           size="icon-micro"
                           variant="ghost-muted"
                         >
-                          <SourceLinkIcon url={extension.sourceUrl} />
+                          {sourceLinkIcon(extension.sourceUrl)}
                         </Button>
                       ) : null}
                     </div>
                     <Button
-                      aria-label={t("theme.search.actionAria", {
-                        action: isInstalling ? progressAction : action,
-                        name: extension.name,
-                      })}
+                      aria-label={`${isInstalling ? progressAction : action} ${extension.name}`}
                       disabled={installingId !== null}
                       size="xs"
                       variant="outline"
@@ -424,9 +455,7 @@ export function ThemeSearchSection({
                       ) : (
                         <PackagePlusIcon />
                       )}
-                      {isInstalling
-                        ? t("theme.search.progress", { action: progressAction })
-                        : action}
+                      {isInstalling ? `${progressAction}...` : action}
                     </Button>
                   </div>
                 </article>
@@ -444,15 +473,14 @@ export function ThemeSearchSection({
       >
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("theme.search.updateTitle", { name: pendingUpdate?.name ?? "" })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>{t("theme.search.updateDescription")}</AlertDialogDescription>
+            <AlertDialogTitle>Update “{pendingUpdate?.name}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This replaces its installed variants, including any local edits. Variants no longer in
+              the extension will be removed.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>
-              {t("common.cancel")}
-            </AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline" />}>{t("common.cancel")}</AlertDialogClose>
             <Button
               onClick={() => {
                 const extension = pendingUpdate;

@@ -1,48 +1,74 @@
+import type { EnvironmentId } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
+  pickSnoozePreset as pickSharedSnoozePreset,
   resolveSnoozePresets as resolveSharedSnoozePresets,
   snoozeWakeLabel,
   type SnoozePreset,
 } from "@t3tools/client-runtime/state/thread-settled";
 
 import type { MessageKey, Translate } from "../i18n";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { serverEnvironment } from "../state/server";
 import { formatShortTimestamp, parseTimestampDate } from "../timestampFormat";
+import { toastManager } from "./ui/toast";
 
 export { snoozeWakeLabel, type SnoozePreset };
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
-function timeOfDayLabel(date: Date, timestampFormat: TimestampFormat): string {
-  return formatShortTimestamp(date.toISOString(), timestampFormat);
-}
-
-export function resolveSnoozePresets(
-  now: Date,
-  timestampFormat: TimestampFormat,
-  t?: Translate,
-): ReadonlyArray<SnoozePreset> {
-  return resolveSharedSnoozePresets(now).map((preset) => {
-    const wake = parseTimestampDate(preset.snoozedUntil);
-    if (wake === null) return preset;
-    const time = timeOfDayLabel(wake, timestampFormat);
-    return {
-      ...preset,
-      label: t?.(SNOOZE_PRESET_LABEL_KEYS[preset.id]) ?? preset.label,
-      whenLabel:
-        preset.id === "next-week"
-          ? `${wake.toLocaleDateString(undefined, { weekday: "short" })} ${time}`
-          : time,
-    };
-  });
-}
-
-const SNOOZE_PRESET_LABEL_KEYS = {
+const SNOOZE_PRESET_LABEL_KEYS: Partial<Record<string, MessageKey>> = {
   hour: "sidebar.snooze.hour",
   "three-hours": "sidebar.snooze.threeHours",
   evening: "sidebar.snooze.evening",
   tomorrow: "sidebar.snooze.tomorrow",
   "next-week": "sidebar.snooze.nextWeek",
-} as const satisfies Record<SnoozePreset["id"], MessageKey>;
+};
+
+function timeOfDayLabel(date: Date, timestampFormat: TimestampFormat): string {
+  return formatShortTimestamp(date.toISOString(), timestampFormat);
+}
+
+/** The snooze menu for a thread, from its environment's presets, read when the menu opens. */
+export function resolveSnoozePresets(
+  now: Date,
+  timestampFormat: TimestampFormat,
+  environmentId: EnvironmentId,
+  t?: Translate,
+): ReadonlyArray<SnoozePreset> {
+  return resolveSharedSnoozePresets(now, snoozeOptions(timestampFormat, environmentId)).map(
+    (preset) => localizeSnoozePreset(preset, t),
+  );
+}
+
+function localizeSnoozePreset(preset: SnoozePreset, t?: Translate): SnoozePreset {
+  const key = SNOOZE_PRESET_LABEL_KEYS[preset.id];
+  if (!t || !key) return preset;
+  return { ...preset, label: t(key) };
+}
+
+/** A shown menu choice as picked; see the shared `pickSnoozePreset`. */
+export function pickSnoozePreset(
+  shown: ReadonlyArray<SnoozePreset>,
+  id: string,
+  timestampFormat: TimestampFormat,
+  environmentId: EnvironmentId,
+): SnoozePreset | undefined {
+  const picked = pickSharedSnoozePreset({
+    shown,
+    id,
+    now: new Date(),
+    ...snoozeOptions(timestampFormat, environmentId),
+  });
+  if (!picked) {
+    toastManager.add({
+      type: "warning",
+      title: "Could not snooze thread",
+      description: "That snooze time has passed. Choose another time.",
+    });
+  }
+  return picked;
+}
 
 /**
  * Human wake time for menus and toasts: "tomorrow 9:00", "Mon 9:00",
@@ -66,4 +92,14 @@ export function snoozeWakeDescription(
   if (dayDelta < 7) return `${weekday} ${time}`;
   const date = wake.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return `${date}, ${time}`;
+}
+
+function snoozeOptions(timestampFormat: TimestampFormat, environmentId: EnvironmentId) {
+  const presets = appAtomRegistry.get(
+    serverEnvironment.settingsValueAtom(environmentId),
+  )?.snoozePresets;
+  return {
+    ...(presets ? { presets } : {}),
+    formatTime: (date: Date) => formatShortTimestamp(date.toISOString(), timestampFormat),
+  };
 }

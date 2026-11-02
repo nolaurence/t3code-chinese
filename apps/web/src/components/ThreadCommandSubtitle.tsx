@@ -7,12 +7,6 @@ import { useI18n } from "~/i18n";
 
 import { MiddleTruncate } from "./ui/middle-truncate";
 
-/**
- * Flip this while reviewing command-palette thread subtitles.
- * - favicon-workspace-harness: favicon + Folder/FolderGit2 + branch + harness (default)
- * - favicon-workspace: same without harness
- * - favicon-branch-harness: GitBranch for local, FolderGit2 for worktrees, + harness
- */
 export type ThreadCommandSubtitleVariant =
   | "favicon-workspace-harness"
   | "favicon-workspace"
@@ -45,6 +39,8 @@ export function ThreadCommandSubtitle(props: {
   isCurrent: boolean;
   driverKind?: ProviderDriverKind | null;
   providerDisplayName?: string | null;
+  acpRegistryAgentId?: string | undefined;
+  acpRegistryIconUrl?: string | undefined;
   variant?: ThreadCommandSubtitleVariant;
   className?: string;
 }) {
@@ -99,6 +95,8 @@ export function ThreadCommandSubtitle(props: {
           <ProviderInstanceIcon
             driverKind={props.driverKind}
             displayName={props.providerDisplayName ?? props.driverKind}
+            acpRegistryAgentId={props.acpRegistryAgentId}
+            acpRegistryIconUrl={props.acpRegistryIconUrl}
             iconClassName="size-3 shrink-0 opacity-70"
           />
         </>

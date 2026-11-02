@@ -1,17 +1,20 @@
-import type { ServerProvider, ServerProviderVersionAdvisory } from "@t3tools/contracts";
+import type {
+  ServerProvider,
+  ServerProviderVersionAdvisory,
+  ServerProviderCompatibilityAdvisory,
+} from "@t3tools/contracts";
 
 import type { Translate } from "../../i18n";
 
-/**
- * Visual treatment for each server-reported provider status. Centralized so
- * the default-driver card and per-instance cards share the same language.
- */
 export const PROVIDER_STATUS_STYLES = {
   disabled: {
     dot: "bg-muted-foreground/50",
   },
   error: {
     dot: "bg-destructive",
+  },
+  neutral: {
+    dot: "bg-muted-foreground",
   },
   ready: {
     dot: "bg-success",
@@ -23,14 +26,26 @@ export const PROVIDER_STATUS_STYLES = {
 
 export type ProviderStatusKey = keyof typeof PROVIDER_STATUS_STYLES;
 
-/**
- * Derive the headline + detail copy shown under a provider's name in the
- * settings page. Prefers `provider.message` for server-supplied detail and
- * falls back to generic phrasing when the server has not yet reported any
- * state — which happens before the first probe or when an instance names a
- * driver this build does not ship. A ready provider without account metadata
- * remains available and does not imply an authentication failure.
- */
+// Antigravity's local health check verifies installation, not Google sign-in.
+// API-key and Agent Platform warnings still need attention.
+function isAntigravitySignInUnchecked(provider: ServerProvider): boolean {
+  return (
+    provider.driver === "antigravity" &&
+    provider.installed &&
+    provider.status === "warning" &&
+    provider.auth.status === "unknown" &&
+    (provider.auth.type === undefined ||
+      provider.auth.type === "oauth-personal" ||
+      provider.auth.type === "oauth-business")
+  );
+}
+
+export function getProviderStatusKey(provider: ServerProvider | undefined): ProviderStatusKey {
+  if (provider && !provider.enabled) return "disabled";
+  if (provider && isAntigravitySignInUnchecked(provider)) return "neutral";
+  return provider?.status ?? "warning";
+}
+
 export function getProviderSummary(provider: ServerProvider | undefined, t?: Translate) {
   if (!provider) {
     return {
@@ -52,13 +67,21 @@ export function getProviderSummary(provider: ServerProvider | undefined, t?: Tra
   if (!provider.installed) {
     return {
       headline: t?.("providers.status.notFound") ?? "Not found",
-      detail:
-        provider.message ?? t?.("providers.status.notFoundDetail") ?? "CLI not detected on PATH.",
+      detail: provider.message ?? t?.("providers.status.notFoundDetail") ?? "CLI not detected on PATH.",
     };
   }
   if (provider.auth.status === "unauthenticated") {
+    const authLabel = provider.auth.label ?? provider.auth.type;
     return {
-      headline: t?.("providers.status.unauthenticated") ?? "Not authenticated",
+      headline: authLabel
+        ? `Not authenticated · ${authLabel}`
+        : (t?.("providers.status.unauthenticated") ?? "Not authenticated"),
+      detail: provider.message ?? null,
+    };
+  }
+  if (isAntigravitySignInUnchecked(provider)) {
+    return {
+      headline: "Installed · Sign-in not checked",
       detail: provider.message ?? null,
     };
   }
@@ -96,48 +119,85 @@ export function getProviderSummary(provider: ServerProvider | undefined, t?: Tra
   };
 }
 
-/**
- * Normalize a version string for display. Adds the `v` prefix when the
- * driver reported a bare version (e.g. `1.2.3`) so cards render
- * consistently regardless of driver.
- */
 export function getProviderVersionLabel(version: string | null | undefined) {
   if (!version) return null;
-  // Antigravity reports a release tag such as `agy_acp_server_20260818_01_RC01`.
-  // Show the date and candidate so the row title keeps room for the name.
   const antigravity = /^agy_acp_server_(\d{4})(\d{2})(\d{2})_\d+(?:_(\w+))?$/.exec(version);
   if (antigravity) {
     const [, year, month, day, candidate] = antigravity;
     return `${year}-${month}-${day}${candidate ? ` ${candidate}` : ""}`;
   }
-  // Only bare semver-like versions get a `v` prefix. Other tags are shown as-is.
   return /^\d/.test(version) ? `v${version}` : version;
 }
 
+const COMPATIBILITY_TITLES = {
+  graceful: "Limited support",
+  unsupported: "Unsupported version",
+  broken: "Known broken version",
+} as const;
+
 export function getProviderVersionAdvisoryPresentation(
   advisory: ServerProviderVersionAdvisory | undefined,
+  compatibility?: ServerProviderCompatibilityAdvisory | undefined,
+  showCompatibility = true,
   t?: Translate,
 ): {
+  readonly title: string;
   readonly detail: string;
   readonly updateCommand: string | null;
   readonly emphasis: "normal" | "strong";
+  readonly targetVersion: string | null;
 } | null {
-  if (!advisory || advisory.status === "current" || advisory.status === "unknown") {
+  const latestIsIncompatible =
+    compatibility?.latestVersionStatus === "broken" ||
+    compatibility?.latestVersionStatus === "unsupported";
+  if (
+    showCompatibility &&
+    compatibility &&
+    (compatibility.status === "graceful" ||
+      compatibility.status === "unsupported" ||
+      compatibility.status === "broken")
+  ) {
+    const targetVersion = compatibility.recommendedVersion;
+    const recommendation = getProviderVersionLabel(targetVersion) ?? compatibility.recommendedRange;
+    // Latest package versions cannot be updated into recommendations requiring another package.
+    const isAlreadyLatest = advisory?.status === "current";
+    return {
+      title: COMPATIBILITY_TITLES[compatibility.status],
+      detail:
+        compatibility.message ??
+        (recommendation ? `Use ${recommendation} for full support.` : "Update for full support."),
+      updateCommand:
+        targetVersion || latestIsIncompatible || isAlreadyLatest
+          ? null
+          : (advisory?.updateCommand ?? null),
+      emphasis: compatibility.status === "graceful" ? "normal" : "strong",
+      targetVersion,
+    };
+  }
+  if (
+    !advisory ||
+    advisory.status === "current" ||
+    advisory.status === "unknown" ||
+    latestIsIncompatible
+  ) {
     return null;
   }
 
+  const label = t?.("providers.updateAvailable") ?? "Update available";
   const version = advisory.latestVersion;
   const versionLabel = getProviderVersionLabel(version);
 
   return {
+    title: label,
     detail:
       advisory.message ??
       (versionLabel
         ? (t?.("providers.status.installVersion", { version: versionLabel }) ??
-          `Update available: install ${versionLabel}.`)
+          `${label}: install ${versionLabel}.`)
         : (t?.("providers.status.installLatest") ??
-          "Update available: install the latest provider version.")),
+          `${label}: install the latest provider version.`)),
     updateCommand: advisory.updateCommand,
     emphasis: "normal" as const,
+    targetVersion: null,
   };
 }

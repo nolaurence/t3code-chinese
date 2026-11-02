@@ -1,8 +1,8 @@
+import { Alert, AlertDescription } from "../ui/alert";
 import type { AuthSessionState } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import React, { startTransition, useEffect, useRef, useState, useCallback } from "react";
+import React, { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { APP_DISPLAY_NAME } from "../../branding";
 import { connectPairing } from "../../connection/onboarding";
 import {
   peekPairingTokenFromUrl,
@@ -12,31 +12,26 @@ import {
 import { readHostedPairingRequest } from "../../hostedPairing";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { StandalonePage, StandalonePageHeader } from "../ui/standalone-page";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { useI18n, type Translate } from "../../i18n";
+
+import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+
+function t(key: MessageKey, values?: TranslateValues): string {
+  return createTranslator(readLocalePreference())(key, values);
+}
+
 
 export function PairingPendingSurface() {
-  const { t } = useI18n();
-  return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
-      <div className="pointer-events-none absolute inset-0 opacity-80">
-        <div className="absolute inset-x-0 top-0 h-44 bg-[radial-gradient(44rem_16rem_at_top,color-mix(in_srgb,var(--color-emerald-500)_14%,transparent),transparent)]" />
-        <div className="absolute inset-y-0 left-0 w-72 bg-[radial-gradient(28rem_18rem_at_left,color-mix(in_srgb,var(--color-sky-500)_10%,transparent),transparent)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_90%,var(--color-black))_0%,var(--background)_55%)]" />
-      </div>
+  useI18n();
 
-      <section className="relative w-full max-w-xl rounded-2xl border border-border/80 bg-card/90 p-6 shadow-2xl shadow-black/20 backdrop-blur-md sm:p-8">
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-          {APP_DISPLAY_NAME}
-        </p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-          {t("auth.pairingPending")}
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          {t("auth.pairingPendingDescription")}
-        </p>
-      </section>
-    </div>
+  return (
+    <StandalonePage>
+      <StandalonePageHeader
+        title=t("auth.pairingPending")
+        description=t("auth.pairingPendingDescription")
+      />
+    </StandalonePage>
   );
 }
 
@@ -49,144 +44,129 @@ export function PairingRouteSurface({
   initialErrorMessage?: string;
   onAuthenticated: () => void;
 }) {
-  const { t } = useI18n();
-  const autoPairTokenRef = useRef<string | null>(peekPairingTokenFromUrl());
-  const [credential, setCredential] = useState(() => autoPairTokenRef.current ?? "");
-  const [errorMessage, setErrorMessage] = useState(() =>
-    initialErrorMessage ? localizeAuthErrorMessage(initialErrorMessage, t) : "",
-  );
+  useI18n();
+
+  const [autoPairToken] = useState(peekPairingTokenFromUrl);
+  const [credential, setCredential] = useState(autoPairToken ?? "");
+  const [errorMessage, setErrorMessage] = useState(initialErrorMessage ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const autoSubmitAttemptedRef = useRef(false);
 
-  const submitCredential = useCallback(
-    async (nextCredential: string) => {
-      setIsSubmitting(true);
-      setErrorMessage("");
+  const submitCredential = async (nextCredential: string) => {
+    setIsSubmitting(true);
+    setErrorMessage("");
 
-      const submitError = await submitServerAuthCredential(nextCredential).then(
-        () => null,
-        (error) => errorMessageFromUnknown(error, t),
-      );
+    const submitError = await submitServerAuthCredential(nextCredential).then(
+      () => null,
+      (error) => errorMessageFromUnknown(error),
+    );
 
-      setIsSubmitting(false);
+    setIsSubmitting(false);
 
-      if (submitError) {
-        setErrorMessage(submitError);
-        return;
-      }
+    if (submitError) {
+      setErrorMessage(submitError);
+      return;
+    }
 
-      startTransition(() => {
-        onAuthenticated();
-      });
-    },
-    [onAuthenticated, t],
-  );
+    startTransition(() => {
+      onAuthenticated();
+    });
+  };
 
-  const handleSubmit = useCallback(
-    async (event?: React.SubmitEvent<HTMLFormElement>) => {
-      event?.preventDefault();
-      await submitCredential(credential);
-    },
-    [submitCredential, credential],
-  );
+  const handleSubmit = async (event?: React.SubmitEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    await submitCredential(credential);
+  };
 
+  const autoSubmit = useEffectEvent((token: string) => {
+    void submitCredential(token);
+  });
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- strips the pairing token from the URL and submits it once when the route carries one
   useEffect(() => {
-    const token = autoPairTokenRef.current;
-    if (!token || autoSubmitAttemptedRef.current) {
+    if (!autoPairToken || autoSubmitAttemptedRef.current) {
       return;
     }
 
     autoSubmitAttemptedRef.current = true;
     stripPairingTokenFromUrl();
-    void submitCredential(token);
-  }, [submitCredential]);
+    autoSubmit(autoPairToken);
+  }, [autoPairToken]);
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
-      <div className="pointer-events-none absolute inset-0 opacity-80">
-        <div className="absolute inset-x-0 top-0 h-44 bg-[radial-gradient(44rem_16rem_at_top,color-mix(in_srgb,var(--color-emerald-500)_14%,transparent),transparent)]" />
-        <div className="absolute inset-y-0 left-0 w-72 bg-[radial-gradient(28rem_18rem_at_left,color-mix(in_srgb,var(--color-sky-500)_10%,transparent),transparent)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_90%,var(--color-black))_0%,var(--background)_55%)]" />
-      </div>
+    <StandalonePage>
+      <StandalonePageHeader
+        title=t("auth.pairTitle")
+        description={describeAuthGate(auth.bootstrapMethods)}
+      />
 
-      <section className="relative w-full max-w-xl rounded-2xl border border-border/80 bg-card/90 p-6 shadow-2xl shadow-black/20 backdrop-blur-md sm:p-8">
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-          {APP_DISPLAY_NAME}
-        </p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-          {t("auth.pairTitle")}
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          {describeAuthGate(auth.bootstrapMethods, t)}
-        </p>
-
-        <form className="mt-6 space-y-4" onSubmit={(event) => void handleSubmit(event)}>
-          <div className="space-y-2">
-            <label className="text-sm font-medium" htmlFor="pairing-token">
-              {t("auth.pairingToken")}
-            </label>
-            <Input
-              id="pairing-token"
-              autoCapitalize="none"
-              autoComplete="off"
-              autoCorrect="off"
-              disabled={isSubmitting}
-              nativeInput
-              onChange={(event) => setCredential(event.currentTarget.value)}
-              placeholder={t("auth.pairingPlaceholder")}
-              spellCheck={false}
-              value={credential}
-            />
-          </div>
-
-          {errorMessage ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/6 px-3 py-2 text-sm text-destructive">
-              {errorMessage}
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
-            <Button disabled={isSubmitting} size="sm" type="submit">
-              {isSubmitting ? t("auth.pairing") : t("git.continue")}
-            </Button>
-            <Button
-              disabled={isSubmitting}
-              onClick={() => window.location.reload()}
-              size="sm"
-              variant="outline"
-            >
-              {t("rootError.reload")}
-            </Button>
-          </div>
-        </form>
-
-        <div className="mt-6 rounded-lg border border-border/70 bg-background/55 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
-          {describeSupportedMethods(auth.bootstrapMethods, t)}
+      <form className="mt-6 space-y-4" onSubmit={(event) => void handleSubmit(event)}>
+        <div className="space-y-2">
+          <label className="text-sm font-medium" htmlFor="pairing-token">
+            Pairing token
+          </label>
+          <Input
+            id="pairing-token"
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect="off"
+            disabled={isSubmitting}
+            nativeInput
+            onChange={(event) => setCredential(event.currentTarget.value)}
+            placeholder=t("auth.pairingPlaceholder")
+            spellCheck={false}
+            value={credential}
+          />
         </div>
-      </section>
-    </div>
+
+        {errorMessage ? (
+          <Alert variant="error">
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={isSubmitting} size="sm" type="submit">
+            {isSubmitting ? t("auth.pairing") : t("git.continue")}
+          </Button>
+          <Button
+            disabled={isSubmitting}
+            onClick={() => window.location.reload()}
+            size="sm"
+            variant="outline"
+          >
+            Reload app
+          </Button>
+        </div>
+      </form>
+
+      <div className="mt-6 rounded-lg border border-border/70 bg-background/55 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
+        {describeSupportedMethods(auth.bootstrapMethods)}
+      </div>
+    </StandalonePage>
   );
 }
 
 export function HostedPairingRouteSurface() {
-  const { t } = useI18n();
+  useI18n();
+
   const connectPairingEnvironment = useAtomCommand(connectPairing, {
     reportFailure: false,
   });
-  const hostedPairingRequestRef = useRef(readHostedPairingRequest());
-  const [status, setStatus] = useState<"pairing" | "paired" | "error">(() =>
-    hostedPairingRequestRef.current ? "pairing" : "error",
+  const [request] = useState(readHostedPairingRequest);
+  const [status, setStatus] = useState<"pairing" | "paired" | "error">(
+    request ? "pairing" : "error",
   );
-  const [message, setMessage] = useState(() =>
-    hostedPairingRequestRef.current ? t("auth.connectingBackend") : t("auth.pairingMissing"),
+  const [message, setMessage] = useState(
+    request
+      ? t("auth.connectingBackend")
+      : t("auth.pairingMissing"),
   );
   const [canRetry, setCanRetry] = useState(false);
   const submitAttemptedRef = useRef(false);
   const tokenSubmittedRef = useRef(false);
 
-  const submitHostedPairingRequest = useCallback(async () => {
-    const request = hostedPairingRequestRef.current;
-
+  const submitHostedPairingRequest = async () => {
     if (!request) {
       setStatus("error");
       setMessage(t("auth.pairingMissing"));
@@ -212,9 +192,7 @@ export function HostedPairingRouteSurface() {
     });
     if (result._tag === "Success") {
       setStatus("paired");
-      setMessage(
-        t("auth.environmentSaved", { environment: request.label || t("auth.environment") }),
-      );
+      setMessage(`${request.label || t("auth.environment")} is saved in this browser.`);
       return;
     }
 
@@ -222,12 +200,15 @@ export function HostedPairingRouteSurface() {
     setStatus("error");
     setCanRetry(true);
     setMessage(
-      t("auth.pairingRetryDescription", {
-        error: errorMessageFromUnknown(squashAtomCommandFailure(result), t),
-      }),
+      `${errorMessageFromUnknown(squashAtomCommandFailure(result))} If the backend accepted this one-time token, request a new pairing link before retrying.`,
     );
-  }, [connectPairingEnvironment, t]);
+  };
 
+  const submitOnMount = useEffectEvent(() => {
+    void submitHostedPairingRequest();
+  });
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- strips the pairing token from the URL and submits the hosted pairing request once on mount
   useEffect(() => {
     if (submitAttemptedRef.current) {
       return;
@@ -235,93 +216,70 @@ export function HostedPairingRouteSurface() {
     submitAttemptedRef.current = true;
 
     stripPairingTokenFromUrl();
-    void submitHostedPairingRequest();
-  }, [submitHostedPairingRequest]);
-
-  const request = hostedPairingRequestRef.current;
+    submitOnMount();
+  }, []);
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
-      <div className="pointer-events-none absolute inset-0 opacity-80">
-        <div className="absolute inset-x-0 top-0 h-44 bg-[radial-gradient(44rem_16rem_at_top,color-mix(in_srgb,var(--color-emerald-500)_14%,transparent),transparent)]" />
-        <div className="absolute inset-y-0 left-0 w-72 bg-[radial-gradient(28rem_18rem_at_left,color-mix(in_srgb,var(--color-sky-500)_10%,transparent),transparent)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_90%,var(--color-black))_0%,var(--background)_55%)]" />
-      </div>
-
-      <section className="relative w-full max-w-xl rounded-2xl border border-border/80 bg-card/90 p-6 shadow-2xl shadow-black/20 backdrop-blur-md sm:p-8">
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-          {APP_DISPLAY_NAME}
-        </p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-          {status === "paired"
+    <StandalonePage>
+      <StandalonePageHeader
+        title={
+          status === "paired"
             ? t("auth.backendPaired")
             : status === "error"
               ? t("auth.pairingFailed")
-              : t("auth.pairingBackend")}
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{message}</p>
+              : t("auth.pairingBackend")
+        }
+        description={message}
+      />
 
-        {request ? (
-          <div className="mt-5 rounded-lg border border-border/70 bg-background/55 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
-            {t("auth.host")}: <span className="font-mono text-foreground/80">{request.host}</span>
-          </div>
-        ) : null}
-
-        {status === "error" ? (
-          <div className="mt-5 rounded-lg border border-destructive/30 bg-destructive/6 px-3 py-2 text-sm text-destructive">
-            {t("auth.backendReachableHint")}
-          </div>
-        ) : null}
-
-        <div className="mt-6 flex flex-wrap gap-2">
-          {status === "pairing" ? (
-            <Button disabled size="sm">
-              {t("auth.pairing")}
-            </Button>
-          ) : canRetry ? (
-            <Button size="sm" onClick={() => void submitHostedPairingRequest()}>
-              {t("rootError.tryAgain")}
-            </Button>
-          ) : null}
-          {status === "paired" ? (
-            <Button size="sm" variant="outline" onClick={() => (window.location.href = "/")}>
-              {t("auth.openApp")}
-            </Button>
-          ) : null}
+      {request ? (
+        <div className="mt-5 rounded-lg border border-border/70 bg-background/55 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
+          Host: <span className="font-mono text-foreground/80">{request.host}</span>
         </div>
-      </section>
-    </div>
+      ) : null}
+
+      {status === "error" ? (
+        <Alert variant="error" className="mt-5">
+          <AlertDescription>
+            Verify the backend is reachable from this browser, supports CORS for hosted clients, and
+            is served over HTTPS when opening this page from HTTPS.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="mt-6 flex flex-wrap gap-2">
+        {status === "pairing" ? (
+          <Button disabled size="sm">
+            Pairing...
+          </Button>
+        ) : canRetry ? (
+          <Button size="sm" onClick={() => void submitHostedPairingRequest()}>
+            Try again
+          </Button>
+        ) : null}
+        {status === "paired" ? (
+          <Button size="sm" variant="outline" onClick={() => (window.location.href = "/")}>
+            Open app
+          </Button>
+        ) : null}
+      </div>
+    </StandalonePage>
   );
 }
 
-function errorMessageFromUnknown(error: unknown, t: Translate): string {
+function errorMessageFromUnknown(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
-    return localizeAuthErrorMessage(error.message, t);
+    return error.message;
   }
 
   if (typeof error === "string" && error.trim().length > 0) {
-    return localizeAuthErrorMessage(error, t);
+    return error;
   }
 
   return t("auth.failed");
 }
 
-function localizeAuthErrorMessage(message: string, t: Translate): string {
-  switch (message.trim()) {
-    case "Invalid pairing token. Check the token and try again.":
-      return t("auth.invalidPairingToken");
-    case "Timed out waiting for authenticated session after bootstrap.":
-      return t("auth.sessionTimeout");
-    case "Enter a pairing token to continue.":
-      return t("auth.pairingTokenRequired");
-    case "Authentication failed.":
-      return t("auth.failed");
-    default:
-      return message;
-  }
-}
-
-function describeAuthGate(bootstrapMethods: ReadonlyArray<string>, t: Translate): string {
+function describeAuthGate(bootstrapMethods: ReadonlyArray<string>): string {
   if (bootstrapMethods.includes("desktop-bootstrap")) {
     return t("auth.trustedCredential");
   }
@@ -329,7 +287,7 @@ function describeAuthGate(bootstrapMethods: ReadonlyArray<string>, t: Translate)
   return t("auth.enterPairingToken");
 }
 
-function describeSupportedMethods(bootstrapMethods: ReadonlyArray<string>, t: Translate): string {
+function describeSupportedMethods(bootstrapMethods: ReadonlyArray<string>): string {
   if (
     bootstrapMethods.includes("desktop-bootstrap") &&
     bootstrapMethods.includes("one-time-token")

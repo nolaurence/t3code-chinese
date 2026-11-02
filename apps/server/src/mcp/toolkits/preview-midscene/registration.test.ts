@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { McpServer } from "effect/unstable/ai";
+import { McpServer } from "effect/ai";
 
 import * as McpHttpServer from "../../McpHttpServer.ts";
 import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";

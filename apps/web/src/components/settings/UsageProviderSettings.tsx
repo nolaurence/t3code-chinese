@@ -1,8 +1,11 @@
 import type { EnvironmentId, UnifiedSettings } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 
 import { useUpdateEnvironmentSettings } from "../../hooks/useSettings";
+import { serverEnvironment } from "../../state/server";
+import { useAtomCommand } from "../../state/use-atom-command";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -13,32 +16,55 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
 import { AddUsageLimitSourceDialog } from "./AddUsageLimitSourceDialog";
 import { searchableSetting } from "./settingsSearch";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { useI18n } from "../../i18n";
 
-/** Hub management follows the selected device and access rules of provider settings. */
 export function UsageProviderSettings({
   environmentId,
   environmentLabel,
   sources,
+  cursorKeychainUsageEnabled,
   readOnly,
 }: {
   readonly environmentId: EnvironmentId;
   readonly environmentLabel: string;
   readonly sources: UnifiedSettings["usageLimitSources"];
+  readonly cursorKeychainUsageEnabled: boolean;
   readonly readOnly: boolean;
 }) {
   const { t } = useI18n();
   const updateSettings = useUpdateEnvironmentSettings(environmentId);
+  const updateCursorSettings = useAtomCommand(serverEnvironment.updateSettings, {
+    label: "update Cursor account usage",
+  });
+  const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
+    reportFailure: false,
+  });
+  const platform = useAtomValue(serverEnvironment.configValueAtom(environmentId))?.environment
+    .platform;
   const [adding, setAdding] = useState(false);
+  const [updatingCursor, setUpdatingCursor] = useState(false);
   const entries = Object.entries(sources);
+
+  const setCursorUsageEnabled = async (enabled: boolean) => {
+    setUpdatingCursor(true);
+    const result = await updateCursorSettings({
+      environmentId,
+      input: { patch: { cursorKeychainUsageEnabled: enabled } },
+    });
+    if (result._tag === "Success") {
+      await refreshProviders({ environmentId, input: {} });
+    }
+    setUpdatingCursor(false);
+  };
 
   return (
     <>
       <SettingsSection
-        {...searchableSetting("usage-providers", t)}
+        {...searchableSetting("usage-providers")}
         headerAction={
           !readOnly ? (
             <Button size="xs" variant="outline" onClick={() => setAdding(true)}>
@@ -48,8 +74,23 @@ export function UsageProviderSettings({
           ) : null
         }
       >
+        {platform?.os === "darwin" ? (
+          <SettingsRow
+            id="cursor-keychain-usage"
+            title="Cursor account usage"
+            description="Read your existing Cursor CLI login from macOS Keychain to show account history and monthly limits. macOS may ask you to allow access."
+            control={
+              <Switch
+                aria-label="Cursor account usage"
+                checked={cursorKeychainUsageEnabled}
+                disabled={readOnly || updatingCursor}
+                onCheckedChange={(enabled) => void setCursorUsageEnabled(enabled)}
+              />
+            }
+          />
+        ) : null}
         {entries.length === 0 ? (
-          <SettingsRow title={t("usage.providers.empty")} />
+          <SettingsRow title="No hubs configured." />
         ) : (
           entries.map(([id, source]) => {
             const label = source.label?.trim() || source.url;
@@ -59,8 +100,7 @@ export function UsageProviderSettings({
                 title={label}
                 description={
                   <span className="break-all">
-                    {t("usage.providers.cliProxy")}
-                    {source.enabled ? "" : ` · ${t("usage.providers.disabled")}`}
+                    CLI Proxy{source.enabled ? "" : " · Disabled"}
                     {label !== source.url ? ` · ${source.url}` : ""}
                   </span>
                 }
@@ -83,13 +123,13 @@ export function UsageProviderSettings({
           onOpenChange={setAdding}
           environmentId={environmentId}
           environmentLabel={environmentLabel}
+          sources={sources}
         />
       ) : null}
     </>
   );
 }
 
-/** Removing a hub deletes its stored management key, so it requires confirmation. */
 function RemoveUsageProviderButton({
   label,
   onConfirm,
@@ -102,20 +142,20 @@ function RemoveUsageProviderButton({
   return (
     <>
       <Button size="xs" variant="ghost" onClick={() => setOpen(true)}>
-        {t("usage.providers.remove")}
+        Remove
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("usage.providers.removeQuestion", { label })}</AlertDialogTitle>
+            <AlertDialogTitle>{t("usage.providers.removeQuestion")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t("usage.providers.removeDescription")}
+              The hub's management key is deleted from this server. Its accounts leave the Limits
+              view; the hub itself is untouched. Add it again with the URL and key to bring them
+              back.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>
-              {t("common.cancel")}
-            </AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline" />}>{t("common.cancel")}</AlertDialogClose>
             <Button
               variant="destructive"
               onClick={() => {
