@@ -32,12 +32,10 @@ describe("toolActivityHeading", () => {
     expect(toolActivityHeading(entry({ itemType: "command_execution" }), zhCN)).toBe("运行命令");
     expect(toolActivityHeading(entry({ itemType: "file_change" }), zhCN)).toBe("编辑文件");
     expect(toolActivityHeading(entry({ itemType: "web_search" }), zhCN)).toBe("网页搜索");
-    expect(toolActivityHeading(entry({ itemType: "image_view" }), zhCN)).toBe("查看图片");
-    expect(toolActivityHeading(entry({ itemType: "mcp_tool_call" }), zhCN)).toBe("MCP 工具调用");
-    expect(toolActivityHeading(entry({ itemType: "collab_agent_tool_call" }), zhCN)).toBe(
-      "子 Agent 任务",
-    );
-    expect(toolActivityHeading(entry({ itemType: "dynamic_tool_call" }), zhCN)).toBe("工具调用");
+    expect(toolActivityHeading(entry({ label: "View image" }), zhCN)).toBe("查看图片");
+    expect(toolActivityHeading(entry({ label: "MCP tool call" }), zhCN)).toBe("MCP 工具调用");
+    expect(toolActivityHeading(entry({ itemType: "subagent" }), zhCN)).toBe("子 Agent 任务");
+    expect(toolActivityHeading(entry({ itemType: "dynamic_tool" }), zhCN)).toBe("工具调用");
   });
 
   it("uses canonical tool names to distinguish file and search operations", () => {

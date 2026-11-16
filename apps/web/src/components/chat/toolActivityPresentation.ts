@@ -42,10 +42,8 @@ const ITEM_TYPE_KEYS: Partial<Record<NonNullable<WorkLogEntry["itemType"]>, Mess
   command_execution: "chat.toolActivity.runCommand",
   file_change: "chat.toolActivity.editFile",
   web_search: "chat.toolActivity.webSearch",
-  image_view: "chat.toolActivity.viewImage",
-  mcp_tool_call: "chat.toolActivity.mcpToolCall",
-  collab_agent_tool_call: "chat.toolActivity.subagentTask",
-  dynamic_tool_call: "chat.toolActivity.toolCall",
+  subagent: "chat.toolActivity.subagentTask",
+  dynamic_tool: "chat.toolActivity.toolCall",
 };
 
 const LEGACY_LABEL_KEYS: Readonly<Record<string, MessageKey>> = {
@@ -84,7 +82,7 @@ function toolActivityHeadingKey(entry: WorkLogEntry): MessageKey | null {
   const toolNameKey = toolTitle ? TOOL_NAME_KEYS[normalizedKnownLabel(toolTitle)] : undefined;
   if (toolNameKey) return toolNameKey;
 
-  if (entry.requestKind) return REQUEST_KIND_KEYS[entry.requestKind];
+  if (entry.requestKind) return REQUEST_KIND_KEYS[entry.requestKind] ?? null;
 
   const itemTypeKey = entry.itemType ? ITEM_TYPE_KEYS[entry.itemType] : undefined;
   if (itemTypeKey) return itemTypeKey;
@@ -133,6 +131,18 @@ const TOOL_GROUP_SUMMARY_KEYS: Record<
   ToolGroupAction,
   { readonly one: MessageKey; readonly many: MessageKey }
 > = {
+  "watch-pr": {
+    one: "chat.timeline.summary.watchPrs.one",
+    many: "chat.timeline.summary.watchPrs.many",
+  },
+  "unwatch-pr": {
+    one: "chat.timeline.summary.unwatchPrs.one",
+    many: "chat.timeline.summary.unwatchPrs.many",
+  },
+  "thread-create": {
+    one: "chat.timeline.summary.createThreads.one",
+    many: "chat.timeline.summary.createThreads.many",
+  },
   "link-pr": {
     one: "chat.timeline.summary.linkPrs.one",
     many: "chat.timeline.summary.linkPrs.many",

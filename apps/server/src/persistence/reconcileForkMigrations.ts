@@ -4,6 +4,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 import PullRequestFilesViewed from "./Migrations/053_PullRequestFilesViewed.ts";
 import AutoSettleDisabledAt from "./Migrations/054_ProjectionThreadsAutoSettleDisabledAt.ts";
+import RepairBooleanSettledOverride from "./Migrations/077_RepairBooleanSettledOverride.ts";
 import ForkCompatibility from "./Migrations/077_ForkUpstreamProjectionCompatibility.ts";
 
 // Older fork builds used 53 for compatibility and 55 for viewed files, before V2 reserved 55.
@@ -16,8 +17,26 @@ export const reconcileForkMigrations = Effect.fn("reconcileForkMigrations")(func
       `;
       if (tables.length === 0) return [];
       const history = yield* sql<{ readonly migration_id: number; readonly name: string }>`
-        SELECT migration_id, name FROM effect_sql_migrations WHERE migration_id >= 53
+        SELECT migration_id, name FROM effect_sql_migrations WHERE migration_id >= 42
       `;
+      if (
+        history.some(
+          (row) =>
+            (row.migration_id === 42 && row.name === "ForkProjectionCompatibility") ||
+            (row.migration_id === 43 && row.name === "ProjectionThreadMessagePhase"),
+        )
+      ) {
+        yield* ForkCompatibility;
+      }
+      if (
+        history.some(
+          (row) => row.migration_id === 77 && row.name === "ForkUpstreamProjectionCompatibility",
+        )
+      ) {
+        yield* RepairBooleanSettledOverride;
+        yield* sql`UPDATE effect_sql_migrations SET name = 'RepairBooleanSettledOverride' WHERE migration_id = 77`;
+        return [[77, "RepairBooleanSettledOverride"]] as const;
+      }
       if (
         !history.some(
           (row) => row.migration_id === 53 && row.name === "ForkUpstreamProjectionCompatibility",
@@ -25,12 +44,14 @@ export const reconcileForkMigrations = Effect.fn("reconcileForkMigrations")(func
       ) {
         return [];
       }
-      const valid = history.every(
-        (row) =>
-          (row.migration_id === 53 && row.name === "ForkUpstreamProjectionCompatibility") ||
-          (row.migration_id === 54 && row.name === "ProjectionThreadsAutoSettleDisabledAt") ||
-          (row.migration_id === 55 && row.name === "PullRequestFilesViewed"),
-      );
+      const valid = history
+        .filter((row) => row.migration_id >= 53)
+        .every(
+          (row) =>
+            (row.migration_id === 53 && row.name === "ForkUpstreamProjectionCompatibility") ||
+            (row.migration_id === 54 && row.name === "ProjectionThreadsAutoSettleDisabledAt") ||
+            (row.migration_id === 55 && row.name === "PullRequestFilesViewed"),
+        );
       if (!valid) {
         return yield* new Migrator.MigrationError({
           kind: "BadState",

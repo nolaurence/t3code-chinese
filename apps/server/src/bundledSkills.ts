@@ -63,14 +63,13 @@ export const registerBundledSkillsExtraRoot = Effect.fn("registerBundledSkillsEx
         extraRoots: [extraRoot],
       })
       .pipe(
-        Effect.catch((error) => {
-          if (isCodexAppServerRequestError(error) && error.code === -32601) {
-            return Effect.logDebug(
+        Effect.catchIf(
+          (error) => isCodexAppServerRequestError(error) && error.code === -32601,
+          () =>
+            Effect.logDebug(
               "Codex App Server does not support bundled Skill roots; continuing without them.",
-            );
-          }
-          return Effect.fail(error);
-        }),
+            ),
+        ),
       );
   },
 );

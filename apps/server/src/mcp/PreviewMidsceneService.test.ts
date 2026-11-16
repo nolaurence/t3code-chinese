@@ -15,7 +15,7 @@ import * as Fiber from "effect/Fiber";
 import * as Ref from "effect/Ref";
 import * as TestClock from "effect/testing/TestClock";
 
-import type { McpInvocationScope } from "./McpInvocationContext.ts";
+import type { McpThreadInvocationScope } from "./McpInvocationContext.ts";
 import * as PreviewAutomationBroker from "./PreviewAutomationBroker.ts";
 import * as PreviewMidsceneService from "./PreviewMidsceneService.ts";
 import * as PreviewMidsceneRuntime from "./preview-midscene/PreviewMidsceneRuntime.ts";
@@ -25,11 +25,15 @@ const threadId = ThreadId.make("thread-midscene-service-test");
 const tabId = PreviewTabId.make("tab-midscene-service-test");
 const providerInstanceId = ProviderInstanceId.make("codex");
 
-const scope: McpInvocationScope = {
+const scope: McpThreadInvocationScope = {
   environmentId,
-  threadId,
-  providerSessionId: "provider-session-midscene-service-test",
-  providerInstanceId,
+  client: undefined,
+  requestNamespace: "midscene-test",
+  thread: {
+    threadId,
+    providerInstanceId,
+    providerSessionId: "provider-session-midscene-service-test",
+  },
   capabilities: new Set(["preview"]),
   issuedAt: 1,
 };
@@ -325,7 +329,7 @@ it.effect("preserves typed broker failures raised by Midscene device actions", (
     operation: "click",
     environmentId,
     threadId,
-    providerSessionId: scope.providerSessionId,
+    providerSessionId: scope.thread!.providerSessionId,
     providerInstanceId,
   });
   const broker = makeBroker((request) => {

@@ -71,3 +71,17 @@ it.effect("leaves an unknown fork migration history unchanged", () =>
     assert.deepEqual(yield* sql`SELECT * FROM effect_sql_migrations ORDER BY migration_id`, before);
   }).pipe(Effect.provide(databaseLayer)),
 );
+
+it.effect("upgrades the fork's migration 77 to upstream migrations", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* runMigrations({ toMigrationInclusive: 76 });
+    yield* ForkCompatibility;
+    yield* sql`INSERT INTO effect_sql_migrations (migration_id, name) VALUES (77, 'ForkUpstreamProjectionCompatibility')`;
+    yield* runMigrations();
+    assert.deepEqual(yield* sql`SELECT name FROM effect_sql_migrations WHERE migration_id = 77`, [
+      { name: "RepairBooleanSettledOverride" },
+    ]);
+    assert.deepEqual(yield* runMigrations(), []);
+  }).pipe(Effect.provide(databaseLayer)),
+);

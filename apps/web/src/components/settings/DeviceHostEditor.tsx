@@ -24,7 +24,6 @@ import {
 } from "./deviceHostConnectionChecks";
 import { useI18n } from "../../i18n";
 
-
 export function DeviceHostEditor({
   host,
   isNew,
@@ -109,7 +108,7 @@ function DeviceHostEditorForm({
         <DialogTitle>{isNew ? t("deviceHosts.addTitle") : t("deviceHosts.editTitle")}</DialogTitle>
         <DialogDescription>
           {targets.length === 1
-            ? t("deviceHosts.connectFromOne", { environment: targets[0]?.label })
+            ? t("deviceHosts.connectFromOne", { environment: targets[0]?.label ?? "" })
             : t("deviceHosts.connectFromMany", { count: targets.length })}{" "}
           {t("deviceHosts.skipSameMachine")}
         </DialogDescription>
@@ -146,7 +145,9 @@ function DeviceHostEditorForm({
           open={host.port !== undefined || host.identityFile !== undefined || undefined}
           className="text-sm"
         >
-          <summary className="cursor-pointer text-muted-foreground">{t("deviceHosts.sshOptions")}</summary>
+          <summary className="cursor-pointer text-muted-foreground">
+            {t("deviceHosts.sshOptions")}
+          </summary>
           <div className="mt-3 grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
             <label className="block space-y-1.5">
               <span>{t("deviceHosts.identityFile")}</span>
@@ -182,9 +183,7 @@ function DeviceHostEditorForm({
               />
             </label>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {t("deviceHosts.optionsHint")}
-          </p>
+          <p className="mt-2 text-xs text-muted-foreground">{t("deviceHosts.optionsHint")}</p>
         </details>
         <Collapsible
           open={checksOpen}

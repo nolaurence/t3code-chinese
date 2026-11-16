@@ -34,7 +34,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
-import type { McpInvocationScope } from "./McpInvocationContext.ts";
+import type { McpThreadInvocationScope } from "./McpInvocationContext.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as PreviewAutomationBroker from "./PreviewAutomationBroker.ts";
 import * as PreviewMidsceneRuntime from "./preview-midscene/PreviewMidsceneRuntime.ts";
@@ -60,23 +60,21 @@ type SemanticInput =
   | PreviewMidsceneQueryInput
   | PreviewMidsceneAssertInput;
 
-class PreviewMidsceneBrokerFailure extends Error {
-  readonly error: PreviewAutomationErrorType;
-
+class PreviewMidsceneBrokerFailure extends Schema.TaggedError<PreviewMidsceneBrokerFailure>()(
+  "PreviewMidsceneBrokerFailure",
+  { error: PreviewAutomationError },
+) {
   constructor(error: PreviewAutomationErrorType) {
-    super(error.message);
-    this.error = error;
+    super({ error });
   }
 }
 
-class PreviewMidsceneStageFailure extends Error {
-  readonly stage: PreviewMidsceneExecutionError["stage"];
-  readonly error: unknown;
-
+class PreviewMidsceneStageFailure extends Schema.TaggedError<PreviewMidsceneStageFailure>()(
+  "PreviewMidsceneStageFailure",
+  { stage: Schema.Literals(["initialize", "execute", "cleanup"]), error: Schema.Defect() },
+) {
   constructor(stage: PreviewMidsceneExecutionError["stage"], error: unknown) {
-    super(error instanceof Error ? error.message : String(error));
-    this.stage = stage;
-    this.error = error;
+    super({ stage, error });
   }
 }
 
@@ -210,15 +208,15 @@ interface SemanticExecution<A> {
 
 export interface PreviewMidsceneServiceShape {
   readonly act: (
-    scope: McpInvocationScope,
+    scope: McpThreadInvocationScope,
     input: PreviewMidsceneActInput,
   ) => Effect.Effect<PreviewMidsceneActResult, PreviewMidsceneError>;
   readonly query: (
-    scope: McpInvocationScope,
+    scope: McpThreadInvocationScope,
     input: PreviewMidsceneQueryInput,
   ) => Effect.Effect<PreviewMidsceneQueryResult, PreviewMidsceneError>;
   readonly assert: (
-    scope: McpInvocationScope,
+    scope: McpThreadInvocationScope,
     input: PreviewMidsceneAssertInput,
   ) => Effect.Effect<PreviewMidsceneAssertResult, PreviewMidsceneError>;
 }
@@ -228,13 +226,13 @@ export class PreviewMidsceneService extends Context.Service<
   PreviewMidsceneServiceShape
 >()("t3/mcp/PreviewMidsceneService") {}
 
-export const makeWithEnvironment = (
-  environment: NodeJS.ProcessEnv,
-  midsceneSettings: Effect.Effect<MidsceneSettings, ServerSettingsError> = Effect.succeed(
-    DEFAULT_SERVER_SETTINGS.midscene,
-  ),
-) =>
-  Effect.gen(function* PreviewMidsceneServiceMake() {
+export const makeWithEnvironment = Effect.fn("PreviewMidsceneService.makeWithEnvironment")(
+  function* (
+    environment: NodeJS.ProcessEnv,
+    midsceneSettings: Effect.Effect<MidsceneSettings, ServerSettingsError> = Effect.succeed(
+      DEFAULT_SERVER_SETTINGS.midscene,
+    ),
+  ) {
     const broker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
     const runtimeService = yield* PreviewMidsceneRuntime.PreviewMidsceneRuntime;
     const targetLocks = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
@@ -256,7 +254,7 @@ export const makeWithEnvironment = (
       });
 
     const invokeBroker = <A>(
-      scope: McpInvocationScope,
+      scope: McpThreadInvocationScope,
       operation: PreviewAutomationOperation,
       input: unknown,
       tabId?: PreviewTabId,
@@ -270,7 +268,7 @@ export const makeWithEnvironment = (
       });
 
     const resolveTarget = Effect.fn("PreviewMidsceneService.resolveTarget")(function* (
-      scope: McpInvocationScope,
+      scope: McpThreadInvocationScope,
       input: SemanticInput,
       operation: PreviewMidsceneOperation,
     ) {
@@ -316,7 +314,7 @@ export const makeWithEnvironment = (
     });
 
     const execute = <A>(
-      scope: McpInvocationScope,
+      scope: McpThreadInvocationScope,
       input: SemanticInput,
       operation: PreviewMidsceneOperation,
       run: (
@@ -452,7 +450,8 @@ export const makeWithEnvironment = (
     });
 
     return PreviewMidsceneService.of({ act, query, assert });
-  });
+  },
+);
 
 export const make = Effect.gen(function* PreviewMidsceneServiceMakeLive() {
   const serverSettings = yield* ServerSettings.ServerSettingsService;

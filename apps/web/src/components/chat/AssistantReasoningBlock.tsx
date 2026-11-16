@@ -19,7 +19,7 @@ export function AssistantReasoningBlock({
   streaming: boolean;
   markdownCwd: string | undefined;
   threadRef: ScopedThreadRef | undefined;
-  skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
+  skills: ReadonlyArray<ServerProviderSkill>;
   initialOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {

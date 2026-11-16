@@ -61,6 +61,17 @@ function contrastRatio(first: string, second: string): number {
 }
 
 describe("theme files", () => {
+  it("gives non-Latin theme names distinct stable ids", () => {
+    const file = {
+      version: THEME_FILE_VERSION,
+      appearance: "dark",
+      colors: { canvas: "#101820" },
+    };
+    const night = parseThemeFile({ ...file, name: "夜" });
+    expect(parseThemeFile({ ...file, name: "朝" }).id).not.toBe(night.id);
+    expect(parseThemeFile({ ...file, name: " 夜 " }).id).toBe(night.id);
+  });
+
   it("keeps built-in and standard search pairs readable and distinct from inline code", () => {
     const toOklab = converter("oklab");
     const distance = (first: string, second: string) => {
@@ -91,7 +102,11 @@ describe("theme files", () => {
   });
 
   it("keeps stock dark controls in the DSH surface hierarchy", () => {
-    expectThemeColors(getStandardThemeColors("dark"), {
+    expect(
+      Object.fromEntries(
+        Object.entries(getStandardThemeColors("dark")).map(([key, value]) => [key, asHex(value)]),
+      ),
+    ).toMatchObject({
       canvas: "#151517",
       surface: "#232324",
       surfaceRaised: "#2c2c2e",
@@ -635,8 +650,8 @@ describe("context chip colors", () => {
 
   it("reads at 5:1 on the standard surfaces as index.css paints them", () => {
     const painted = {
-      light: ["#fcfcfc", "#ffffff", "#ebebed"],
-      dark: ["#000000", "#0a0a0a", "#111111", "#141414", "#1e1e1e"],
+      light: ["#ffffff", "#edf3fe"],
+      dark: ["#151517", "#232324", "#2c2c2e"],
     } as const;
     const properties = new Map<string, string>();
     vi.stubGlobal("window", { localStorage: { getItem: () => null } });

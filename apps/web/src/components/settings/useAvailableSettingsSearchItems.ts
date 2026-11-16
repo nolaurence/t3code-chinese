@@ -1,7 +1,6 @@
-import { useMemo } from "react";
 import { AuthEnvironmentMaintainScope } from "@t3tools/contracts";
 
-import { usePrimaryCloudLinkState } from "~/cloud/primaryCloudLinkState";
+import { usePrimaryCloudLinkState } from "~/cloud/cloudLinkState";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { useI18n } from "~/i18n";
 import { isElectron } from "~/env";
@@ -13,14 +12,13 @@ import { useEnvironmentQuery } from "~/state/query";
 import { useEnvironmentScope } from "~/state/session";
 import { isWslSettingsRowVisible } from "./ConnectionsSettings.logic";
 import { isProviderSettingsEnvironmentAvailable } from "./ProviderSettingsPanel.logic";
-import type { SettingsScopeSearch } from "./settingsScope";
 import {
   filterAvailableSettingsSearchItems,
   getThreadAutoSettlementSearchAvailability,
   localizeSettingsSearchItems,
 } from "./settingsSearch";
 
-export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch = {}) {
+export function useAvailableSettingsSearchItems() {
   const { t } = useI18n();
   const { environments } = useEnvironments();
   // Explicit booleans keep flags out of the filter cache so environment updates do not rebuild the list.
@@ -33,15 +31,18 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
         hasServerConfig: environment.serverConfig !== null,
       }),
     ) === true;
-  const hasMacProviderSettingsEnvironment =
+  // Any machine that offers it; the row then shows for a settings scope where all selected ones do.
+  const hasFastWorktreeCheckoutEnvironment =
     environments.some(
       (environment) =>
-        (scopeSearch.machine === undefined || environment.environmentId === scopeSearch.machine) &&
-        environment.serverConfig?.environment.platform.os === "darwin" &&
-        isProviderSettingsEnvironmentAvailable({
-          connectionPhase: environment.connection.phase,
-          hasServerConfig: true,
-        }),
+        environment.connection.phase === "connected" &&
+        environment.serverConfig?.environment.capabilities.fastWorktreeCheckout === true,
+    ) === true;
+  const hasTextGeneratorsEnvironment =
+    environments.some(
+      (environment) =>
+        environment.serverConfig !== null &&
+        environment.serverConfig.managedPolicy?.limits?.providers?.allowedDrivers === undefined,
     ) === true;
   const hasThreadAutoSettlement =
     getThreadAutoSettlementSearchAvailability(environments).eligibleEnvironmentIds.length > 0;
@@ -62,35 +63,19 @@ export function useAvailableSettingsSearchItems(scopeSearch: SettingsScopeSearch
   const wslSettingsRowVisible =
     isWslSettingsRowVisible({ state: desktopWsl.data, error: desktopWsl.error }) === true;
 
-  return useMemo(
-    () =>
-      localizeSettingsSearchItems(
-        t,
-        filterAvailableSettingsSearchItems({
-          localEnvironmentDisabled,
-          hasCloudPublicConfig: cloudPublicConfig,
-          hasEnvironment,
-          hasProviderSettingsEnvironment,
-          hasMacProviderSettingsEnvironment,
-          canManageLocalBackend,
-          isWslSettingsRowVisible: wslSettingsRowVisible,
-          hasThreadAutoSettlement,
-          managedTunnelActive,
-          hasPeerLinkHost,
-        }),
-      ),
-    [
-      canManageLocalBackend,
-      cloudPublicConfig,
-      hasEnvironment,
-      hasMacProviderSettingsEnvironment,
-      hasPeerLinkHost,
-      hasProviderSettingsEnvironment,
-      hasThreadAutoSettlement,
-      localEnvironmentDisabled,
-      managedTunnelActive,
-      t,
-      wslSettingsRowVisible,
-    ],
-  );
+  const items = filterAvailableSettingsSearchItems({
+    localEnvironmentDisabled,
+    hasCloudPublicConfig: cloudPublicConfig,
+    hasEnvironment,
+    hasProviderSettingsEnvironment,
+    canManageLocalBackend,
+    isWslSettingsRowVisible: wslSettingsRowVisible,
+    hasThreadAutoSettlement,
+    managedTunnelActive,
+    hasPeerLinkHost,
+    hasFastWorktreeCheckoutEnvironment,
+    hasTextGeneratorsEnvironment,
+    hasPrimaryEnvironment: primaryEnvironmentId !== null,
+  });
+  return localizeSettingsSearchItems(t, items);
 }

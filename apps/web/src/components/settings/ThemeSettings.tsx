@@ -189,8 +189,15 @@ function ThemeLibraryCard({
                           <button
                             aria-label={
                               options.length > 1
-                                ? t("theme.library.chooseVariant", { appearance: mode, count: options.length, name: selected.option.label })
-                                : t("theme.library.useCurrentVariant", { appearance: mode, name: selected.option.label })
+                                ? t("theme.library.chooseVariant", {
+                                    appearance: mode,
+                                    count: options.length,
+                                    name: selected.option.label,
+                                  })
+                                : t("theme.library.useCurrentVariant", {
+                                    appearance: mode,
+                                    name: selected.option.label,
+                                  })
                             }
                             aria-pressed={isActive}
                             className="absolute left-1/2 top-2 z-20 flex size-14 items-center justify-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-5 focus-visible:outline-foreground/60"
@@ -246,7 +253,10 @@ function ThemeLibraryCard({
                               return (
                                 <ThemeVariantTooltip
                                   key={option.label}
-                                  label={t("theme.library.useForMode", { name: option.label, appearance: mode })}
+                                  label={t("theme.library.useForMode", {
+                                    name: option.label,
+                                    appearance: mode,
+                                  })}
                                 >
                                   <button
                                     aria-label={`Use ${option.label} for ${mode} mode${optionIsActive ? ", currently active" : ""}`}
@@ -381,7 +391,9 @@ function ThemeLibraryCard({
                           <Button
                             aria-label={
                               variantNavigation
-                                ? t("theme.library.removeFromCollection", { name: variantNavigation.collectionLabel })
+                                ? t("theme.library.removeFromCollection", {
+                                    name: variantNavigation.collectionLabel,
+                                  })
                                 : t("providers.modelRemoveAria", { model: theme.label })
                             }
                             size="icon-xs"
@@ -411,7 +423,7 @@ function ThemeLibraryCard({
           ? "Use the first variants for light and dark"
           : cardModes.length > 1
             ? "Use for both light and dark"
-            : t("theme.library.useModeOnly", { appearance: cardModes[0] })}
+            : t("theme.library.useModeOnly", { appearance: cardModes[0] ?? "" })}
       </TooltipPopup>
     </Tooltip>
   );
@@ -677,7 +689,11 @@ export function ThemeLibrary({
         const isActive = appearanceMode === mode;
         return (
           <button
-            aria-label={mode === "system" ? "Follow the system appearance" : t("theme.library.useMode", { appearance: mode })}
+            aria-label={
+              mode === "system"
+                ? "Follow the system appearance"
+                : t("theme.library.useMode", { appearance: mode })
+            }
             aria-pressed={isActive}
             className={cn(
               // The accent ring marks the picked tile; focus is a neutral ring set inside it with a gap.
@@ -907,8 +923,10 @@ export function ThemeLibrary({
           <AlertDialogHeader>
             <AlertDialogTitle>
               {canRemoveCollection
-                ? t("theme.library.removeCollectionTitle", { name: removeDialogCollectionLabel })
-                : t("theme.removeNamedTitle", { label: removeDialogTheme?.label })}
+                ? t("theme.library.removeCollectionTitle", {
+                    name: removeDialogCollectionLabel ?? "",
+                  })
+                : t("theme.removeNamedTitle", { label: removeDialogTheme?.label ?? "" })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {canRemoveCollection
@@ -967,7 +985,9 @@ export function ThemeLibrary({
             </div>
           ) : null}
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>{t("common.cancel")}</AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline" />}>
+              {t("common.cancel")}
+            </AlertDialogClose>
             <Button
               disabled={themeIdsToRemove.length === 0}
               variant="destructive"

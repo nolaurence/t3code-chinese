@@ -2,6 +2,9 @@ import { expect, it } from "@effect/vitest";
 import { EnvironmentId, PreviewTabId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+import { layerInProcessMcpServer, toolkitRegistration } from "../../McpHttpServer.ts";
+import { liveThreadsLayer } from "../../McpToolAccess.testkit.ts";
 import { McpSchema, McpServer } from "effect/ai";
 
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
@@ -24,6 +27,8 @@ const usage = {
 
 const client = McpSchema.McpServerClient.of({
   clientId: 1,
+  clientCapabilities: {},
+  clientInfo: { name: "midscene-toolkit-test", version: "1.0.0" },
   protocolVersion: "2025-06-18",
   initializePayload: {
     protocolVersion: "2025-06-18",
@@ -35,12 +40,15 @@ const client = McpSchema.McpServerClient.of({
 
 const invocation = (capabilities: ReadonlySet<McpInvocationContext.McpCapability>) => ({
   environmentId,
-  threadId,
-  providerSessionId: "provider-session-midscene-toolkit-test",
-  providerInstanceId,
+  client: undefined,
+  requestNamespace: "midscene-test",
+  thread: {
+    threadId,
+    providerInstanceId,
+    providerSessionId: "provider-session-midscene-toolkit-test",
+  },
   capabilities,
   issuedAt: 1,
-  expiresAt: Number.MAX_SAFE_INTEGER,
 });
 
 it.effect("requires preview capability before delegating to the Midscene service", () => {
@@ -53,10 +61,14 @@ it.effect("requires preview capability before delegating to the Midscene service
     query: () => Effect.succeed({ tabId, value: null, usage }),
     assert: () => Effect.succeed({ tabId, pass: true, reason: null, usage }),
   });
-  const TestLayer = McpServer.toolkit(PreviewMidsceneToolkit).pipe(
-    Layer.provide(PreviewMidsceneToolkitHandlersLive),
+  const TestLayer = toolkitRegistration(
+    PreviewMidsceneToolkit,
+    PreviewMidsceneToolkitHandlersLive,
+  ).pipe(
+    Layer.provide(liveThreadsLayer),
+    Layer.provide(NodeCrypto.layer),
     Layer.provide(Layer.succeed(PreviewMidsceneService.PreviewMidsceneService, service)),
-    Layer.provideMerge(McpServer.McpServer.layer),
+    Layer.provideMerge(layerInProcessMcpServer),
   );
 
   return Effect.gen(function* () {
@@ -96,10 +108,14 @@ it.effect("delegates act, query, and assert with the authenticated invocation sc
       return Effect.succeed({ tabId, pass: false, reason: "Dialog is still visible", usage });
     },
   });
-  const TestLayer = McpServer.toolkit(PreviewMidsceneToolkit).pipe(
-    Layer.provide(PreviewMidsceneToolkitHandlersLive),
+  const TestLayer = toolkitRegistration(
+    PreviewMidsceneToolkit,
+    PreviewMidsceneToolkitHandlersLive,
+  ).pipe(
+    Layer.provide(liveThreadsLayer),
+    Layer.provide(NodeCrypto.layer),
     Layer.provide(Layer.succeed(PreviewMidsceneService.PreviewMidsceneService, service)),
-    Layer.provideMerge(McpServer.McpServer.layer),
+    Layer.provideMerge(layerInProcessMcpServer),
   );
 
   return Effect.gen(function* () {

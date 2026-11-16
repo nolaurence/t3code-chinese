@@ -1,5 +1,7 @@
 import type { PullRequestReaction, PullRequestReactionContent } from "@t3tools/contracts";
-import type { Translate } from "~/i18n";
+type ReactionMessage =
+  `pullRequest.reaction.${PullRequestReactionContent | "twoActors" | "manyActors" | "otherOne" | "others" | "personOne" | "people" | "you" | "tooltip"}`;
+type Translate = (key: ReactionMessage, values?: Record<string, string | number>) => string;
 
 export const PULL_REQUEST_REACTION_ORDER: ReadonlyArray<PullRequestReactionContent> = [
   "thumbs-up",

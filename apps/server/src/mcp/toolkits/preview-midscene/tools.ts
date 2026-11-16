@@ -1,4 +1,5 @@
 import {
+  OrchestratorMcpFailure,
   PreviewMidsceneActInput,
   PreviewMidsceneActResult,
   PreviewMidsceneAssertInput,
@@ -7,12 +8,15 @@ import {
   PreviewMidsceneQueryInput,
   PreviewMidsceneQueryResult,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { Tool, Toolkit } from "effect/ai";
 
+import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
 import * as PreviewMidsceneService from "../../PreviewMidsceneService.ts";
 
 const dependencies = [
+  ThreadManagementService.ThreadManagementService,
   McpInvocationContext.McpInvocationContext,
   PreviewMidsceneService.PreviewMidsceneService,
 ];
@@ -32,7 +36,7 @@ export const PreviewMidsceneActTool = semanticBrowserTool(
       "Use Midscene visual reasoning to complete one semantic workflow in the built-in browser. Prefer deterministic preview tools when a reliable locator is already available. This sends current preview screenshots to the configured Midscene model provider.",
     parameters: PreviewMidsceneActInput,
     success: PreviewMidsceneActResult,
-    failure: PreviewMidsceneError,
+    failure: Schema.Union([PreviewMidsceneError, OrchestratorMcpFailure]),
     dependencies,
   })
     .annotate(Tool.Title, "Act on preview with Midscene")
@@ -47,7 +51,7 @@ export const PreviewMidsceneQueryTool = readonlySemanticBrowserTool(
       "Use Midscene visual reasoning to extract structured information from the currently visible built-in browser page without changing it. This sends current preview screenshots to the configured Midscene model provider.",
     parameters: PreviewMidsceneQueryInput,
     success: PreviewMidsceneQueryResult,
-    failure: PreviewMidsceneError,
+    failure: Schema.Union([PreviewMidsceneError, OrchestratorMcpFailure]),
     dependencies,
   }).annotate(Tool.Title, "Query preview with Midscene"),
 );
@@ -58,7 +62,7 @@ export const PreviewMidsceneAssertTool = readonlySemanticBrowserTool(
       "Use Midscene visual reasoning to verify one observable condition in the currently visible built-in browser page without changing it. This sends current preview screenshots to the configured Midscene model provider.",
     parameters: PreviewMidsceneAssertInput,
     success: PreviewMidsceneAssertResult,
-    failure: PreviewMidsceneError,
+    failure: Schema.Union([PreviewMidsceneError, OrchestratorMcpFailure]),
     dependencies,
   }).annotate(Tool.Title, "Assert preview with Midscene"),
 );
