@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { sessionHasLegacyPermissions, type EnvironmentId } from "@t3tools/contracts";
 import type { AnyRouter } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
@@ -43,12 +44,11 @@ function showPermissionNotice(
   };
   const id = toastManager.add({
     title: `Permissions have changed for ${label}`,
-    description:
-      "This connection still uses the old permissions, so some actions may no longer be available. Pair again using a new link with the permissions you need.",
+    description: translateCurrent("toast.feedback.thisConnectionStillUsesThe"),
     timeout: 0,
     onClose: persistDismissal,
     actionProps: {
-      children: "Open Sharing & access",
+      children: translateCurrent("toast.feedback.openSharingAccess"),
       onClick: () => {
         dismiss();
         void router.navigate({ to: "/settings/access" });
@@ -56,7 +56,7 @@ function showPermissionNotice(
     },
     data: {
       actionLayout: "stacked-end",
-      secondaryActionProps: { children: "Dismiss", onClick: dismiss },
+      secondaryActionProps: { children: translateCurrent("desktop.ssh.dismiss"), onClick: dismiss },
       secondaryActionVariant: "ghost",
     },
   });

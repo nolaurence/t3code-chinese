@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
 import { MonitorIcon, MoonIcon, PaletteIcon, SunIcon } from "lucide-react";
 
@@ -29,8 +30,8 @@ export function notifyThemeSaveFailure(): void {
   toastManager.add(
     stackedThreadToast({
       type: "error",
-      title: "Couldn't save theme selection",
-      description: "Try again.",
+      title: translateCurrent("toast.feedback.couldntSaveThemeSelection"),
+      description: translateCurrent("theme.tryAgain"),
     }),
   );
 }

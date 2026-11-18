@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
@@ -248,7 +249,11 @@ const filesViewedStore = createFilesViewedStore({
       { reportFailure: false },
     ),
   refresh: (target) => appAtomRegistry.refresh(filesViewedAtom(target)),
-  reportFailure: () => toastManager.add({ type: "error", title: "Could not update viewed files" }),
+  reportFailure: () =>
+    toastManager.add({
+      type: "error",
+      title: translateCurrent("toast.feedback.couldNotUpdateViewedFiles"),
+    }),
 });
 
 export function filesViewedScope(target: FilesViewedTarget): FilesViewedScopeHandle {

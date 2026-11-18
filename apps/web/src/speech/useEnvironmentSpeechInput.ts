@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   cancelEnvironmentSpeechModelDownload,
   downloadEnvironmentSpeechModel,
@@ -348,8 +349,8 @@ export function useEnvironmentSpeechInput(input: HookInput) {
       onPostProcessingError: () =>
         toastManager.add({
           type: "warning",
-          title: "Transcript cleanup failed",
-          description: "The original transcript was added.",
+          title: translateCurrent("toast.feedback.transcriptCleanupFailed"),
+          description: translateCurrent("toast.feedback.theOriginalTranscriptWasAdded"),
         }),
       readDraft,
       commitDraft: (text, selection) => {
@@ -506,7 +507,7 @@ export function useEnvironmentSpeechInput(input: HookInput) {
       setQueuedStart(null);
       toastManager.add({
         type: "error",
-        title: "Could not start voice input",
+        title: translateCurrent("toast.feedback.couldNotStartVoiceInput"),
         description: error instanceof Error ? error.message : String(error),
       });
       return;
@@ -520,7 +521,7 @@ export function useEnvironmentSpeechInput(input: HookInput) {
     if (!latestStatus.supported) {
       toastManager.add({
         type: "error",
-        title: "Voice input is not available",
+        title: translateCurrent("toast.feedback.voiceInputIsNotAvailable"),
         description: latestStatus.reason,
       });
       return;

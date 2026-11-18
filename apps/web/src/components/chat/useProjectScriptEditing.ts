@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import type {
   KeybindingCommand,
   ProjectId,
@@ -258,8 +259,9 @@ export function useProjectScriptEditing(input: {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Could not delete action",
-          description: error instanceof Error ? error.message : "An unexpected error occurred.",
+          title: translateCurrent("scripts.deleteFailed"),
+          description:
+            error instanceof Error ? error.message : translateCurrent("update.unexpectedError"),
         }),
       );
     }

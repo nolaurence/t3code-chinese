@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useRef, useSyncExternalStore, use } from "react";
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
@@ -438,8 +439,8 @@ export function useUpdateEnvironmentModelPreferences(environmentId: EnvironmentI
     } catch {
       toastManager.add({
         type: "error",
-        title: "Model preferences not saved",
-        description: "Could not load saved model preferences. Try again.",
+        title: translateCurrent("toast.feedback.modelPreferencesNotSaved"),
+        description: translateCurrent("toast.feedback.couldNotLoadSavedModel"),
       });
       return;
     }
@@ -465,8 +466,8 @@ export function useToggleEnvironmentModelFavorite(environmentId: EnvironmentId |
       } catch {
         toastManager.add({
           type: "error",
-          title: "Favorites not saved",
-          description: "Could not load saved model preferences. Try again.",
+          title: translateCurrent("toast.feedback.favoritesNotSaved"),
+          description: translateCurrent("toast.feedback.couldNotLoadSavedModel"),
         });
         return;
       }
@@ -594,7 +595,7 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null) {
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Setting not saved",
+        title: translateCurrent("settings.scope.notSaved"),
         description: `Could not save on ${label}: ${error instanceof Error ? error.message : "The save failed. Try reconnecting and saving again."}`,
       });
     }
@@ -616,7 +617,7 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null) {
       options?.onFailed?.();
       toastManager.add({
         type: "warning",
-        title: "Setting not saved",
+        title: translateCurrent("settings.scope.notSaved"),
         description: `This connection lacks permission to change settings on ${environments.find((target) => target.environmentId === environmentId)?.label ?? "the selected environment"}.`,
       });
     }
@@ -627,7 +628,7 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null) {
         options?.onFailed?.();
         return toastManager.add({
           type: "warning",
-          title: "Setting not saved",
+          title: translateCurrent("settings.scope.notSaved"),
           description,
         });
       };
@@ -718,7 +719,10 @@ function useUpdateSettingsTarget(environmentId: EnvironmentId | null) {
               .map(({ label }) => label);
             toastManager.add({
               type: "error",
-              title: saved.length > 0 ? "Setting saved on some environments" : "Setting not saved",
+              title:
+                saved.length > 0
+                  ? translateCurrent("settings.scope.savedOnSome")
+                  : translateCurrent("settings.scope.notSaved"),
               description: [
                 ...failures,
                 ...(saved.length > 0 ? [`Saved on ${saved.join(", ")}.`] : []),

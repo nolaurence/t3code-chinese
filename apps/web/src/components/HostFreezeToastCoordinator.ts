@@ -1,4 +1,4 @@
-import { hostFreezeNotice } from "@t3tools/client-runtime/connection";
+import { translateCurrent } from "../i18n/messages";
 
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { environmentSummaries } from "../state/presentation";
@@ -22,10 +22,21 @@ export function startHostFreezeToasts(): () => void {
             .get(environmentSummaries.identitiesAtom)
             .find((identity) => identity.environmentId === environmentId)?.label ??
           config.environment.label;
-        const notice = hostFreezeNotice(label, stall);
-        if (notice !== null) {
-          toastManager.add({ type: "warning", ...notice });
-        }
+        const { loadAverage, cpuCount } = stall;
+        toastManager.add({
+          type: "warning",
+          title: translateCurrent("notifications.host.froze", {
+            host: label,
+            seconds: Math.round(stall.durationMs / 1000),
+          }),
+          description:
+            loadAverage !== undefined && loadAverage > cpuCount
+              ? translateCurrent("notifications.host.overloaded", {
+                  load: Math.round(loadAverage),
+                  cores: cpuCount,
+                })
+              : translateCurrent("notifications.host.busy", { host: label }),
+        });
       }
     },
     { immediate: true },

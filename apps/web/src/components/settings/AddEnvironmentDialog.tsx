@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { pipe } from "effect/Function";
 import { ChevronsLeftRightEllipsisIcon, PlusIcon, TerminalIcon } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
@@ -179,7 +180,9 @@ export function AddEnvironmentDialog({
     handleOpenChange(false);
     toastManager.add({
       type: "success",
-      title: routeTarget ? "Route added" : "Environment connected",
+      title: routeTarget
+        ? translateCurrent("toast.feedback.routeAdded")
+        : translateCurrent("connections.environment.connected"),
       description: routeTarget
         ? `${routeTarget.label} can now be reached over SSH ${target.alias}.`
         : `${target.alias} is ready over an SSH-managed tunnel.`,
@@ -219,7 +222,7 @@ export function AddEnvironmentDialog({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Could not add backend",
+          title: translateCurrent("connections.error.addBackendTitle"),
           description: message,
         }),
       );
@@ -239,7 +242,7 @@ export function AddEnvironmentDialog({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not add backend",
+            title: translateCurrent("connections.error.addBackendTitle"),
             description: message,
           }),
         );
@@ -253,13 +256,13 @@ export function AddEnvironmentDialog({
       routeTarget
         ? {
             type: "success",
-            title: "Route added",
+            title: translateCurrent("toast.feedback.routeAdded"),
             description: `${routeTarget.label} now has another way to connect.`,
           }
         : {
             type: "success",
-            title: "Backend added",
-            description: "The environment is saved and will reconnect on app startup.",
+            title: translateCurrent("connections.backend.added"),
+            description: translateCurrent("connections.backend.addedDescription"),
           },
     );
     setIsAddingSavedBackend(false);
@@ -448,7 +451,7 @@ export function AddEnvironmentDialog({
     handleOpenChange(false);
     toastManager.add({
       type: "success",
-      title: "Route added",
+      title: translateCurrent("toast.feedback.routeAdded"),
       description: `${routeTarget.label} falls back to T3 Connect when its other routes are unreachable.`,
     });
   };

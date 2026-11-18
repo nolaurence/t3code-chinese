@@ -127,6 +127,7 @@ function scrollResultIntoView(row: HTMLElement | null) {
 function settingsGroupHeading(heading: string, t: Translate): string {
   if (heading === "Agents") return t("panel.agents");
   if (heading === "Connections") return t("settings.nav.connections");
+  if (heading === "Code") return t("settings.nav.code");
   return heading;
 }
 
@@ -137,7 +138,7 @@ function SettingsSectionIcon({ to }: { to: SettingsPath }) {
 
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const { t } = useI18n();
-  const navArea = workspaceAreaProps("settings-nav", 0, "Settings sections");
+  const navArea = workspaceAreaProps("settings-nav", 0, t("settings.nav.sections"));
   const navigate = useNavigate();
   const currentHash = useLocation({ select: (location) => location.hash });
   const activePath = SETTINGS_DETAIL_PAGE_PARENTS[pathname] ?? pathname;
@@ -299,7 +300,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                 onBlur={() => {
                   if (!isSearching) setCompactSearchOpen(false);
                 }}
-                placeholder="Search"
+                placeholder={t("settings.search.placeholder")}
                 aria-label={t("settings.search.aria")}
                 role="combobox"
                 aria-autocomplete="list"
@@ -391,14 +392,16 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                 <div
                   {...sectionNavigation.containerProps}
                   role="tree"
-                  aria-label="Settings sections"
+                  aria-label={t("settings.nav.sections")}
                   className="flex flex-col gap-4"
                 >
                   {SETTINGS_NAV_GROUPS.map((group, index) => (
                     <div
                       key={group.heading ?? index}
                       role="group"
-                      aria-label={group.heading ? settingsGroupHeading(group.heading, t) : undefined}
+                      aria-label={
+                        group.heading ? settingsGroupHeading(group.heading, t) : undefined
+                      }
                       className="flex flex-col gap-1 max-md:border-t max-md:border-sidebar-border max-md:pt-4 max-md:first:border-t-0 max-md:first:pt-0"
                     >
                       {group.heading ? (

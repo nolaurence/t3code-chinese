@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { AuthOrchestrationOperateScope, type ProjectIconOverride } from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
@@ -148,7 +149,7 @@ export function reportProjectFailure(title: string, result: AtomCommandResult<un
     stackedThreadToast({
       type: "error",
       title,
-      description: error instanceof Error ? error.message : "An error occurred.",
+      description: error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
     }),
   );
 }

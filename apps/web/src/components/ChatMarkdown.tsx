@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { clientHostEnvironmentAtom } from "../state/clientHostEnvironment";
 import { buildFileLinkParentSuffixByPath, fileLinkLabel } from "@t3tools/shared/fileLinks";
 import {
@@ -618,7 +619,7 @@ function useChatMarkdownState({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Media unavailable",
+            title: translateCurrent("toast.feedback.mediaUnavailable"),
             description,
           }),
         );
@@ -725,7 +726,7 @@ function useChatMarkdownState({
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Unable to open link in browser",
+              title: translateCurrent("toast.feedback.unableToOpenLinkIn"),
               description: error.message,
             }),
           );
@@ -1274,9 +1275,12 @@ const CHAT_MARKDOWN_COMPONENTS = {
                       type: "error",
                       title:
                         operation === "link-pull-request-to-thread"
-                          ? "Unable to link pull request"
-                          : "Unable to unlink pull request",
-                      description: cause instanceof Error ? cause.message : "The request failed.",
+                          ? translateCurrent("toast.feedback.unableToLinkPullRequest")
+                          : translateCurrent("toast.feedback.unableToUnlinkPullRequest"),
+                      description:
+                        cause instanceof Error
+                          ? cause.message
+                          : translateCurrent("toast.feedback.theRequestFailed"),
                     }),
                   );
                 }

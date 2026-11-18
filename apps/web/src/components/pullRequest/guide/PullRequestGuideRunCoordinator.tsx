@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n";
 import type { AnyRouter } from "@tanstack/react-router";
 import type { PullRequestReviewGuideResult } from "@t3tools/contracts";
 import { CircleAlertIcon, CircleCheckIcon } from "lucide-react";
@@ -89,7 +90,9 @@ function watchGuideRun(
     const looking = document.visibilityState === "visible" && document.hasFocus();
     if (looking && isGuideShown(runKey)) return;
 
-    const title = failure === null ? "Review guide ready" : "Review guide failed";
+    const title = translateCurrent(
+      failure === null ? "notifications.guide.ready" : "notifications.guide.failed",
+    );
     const body =
       watch.title ??
       observedPullRequestTitle(registry, watch.environmentId, watch.reference) ??
@@ -129,7 +132,7 @@ function watchGuideRun(
             ),
         },
         actionProps: {
-          children: "Open guide",
+          children: translateCurrent("settings.details.pullRequestGuideRunCoordinator.openGuide"),
           onClick: () => {
             toastManager.close(toastId);
             open();

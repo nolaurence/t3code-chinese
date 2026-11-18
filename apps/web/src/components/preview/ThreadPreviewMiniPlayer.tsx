@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { FILL_PREVIEW_VIEWPORT, type ScopedThreadRef } from "@t3tools/contracts";
 import { previewPdfAssetUrl } from "@t3tools/shared/preview";
 import { useEnvironmentHttpBaseUrl } from "~/state/environments";
@@ -251,8 +252,11 @@ function BrowserMiniPlayer({ threadRef, tabId, miniPlayer }: Props & { readonly 
     } catch (error) {
       toastManager.add({
         type: "error",
-        title: serverTab ? "Unable to pop out preview" : "Unable to update popped-out preview",
-        description: error instanceof Error ? error.message : "An error occurred.",
+        title: serverTab
+          ? translateCurrent("toast.feedback.unableToPopOutPreview")
+          : translateCurrent("preview.error.updatePoppedOut"),
+        description:
+          error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
       });
     }
   };

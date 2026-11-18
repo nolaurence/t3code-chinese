@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import type {
   EnvironmentId,
@@ -99,7 +100,10 @@ export function PullRequestStackMenu({
     setConfirmation(null);
     const toastId = toastManager.add({
       type: "loading",
-      title: action === "merge" ? "Merging stack..." : "Rebasing stack...",
+      title:
+        action === "merge"
+          ? translateCurrent("toast.feedback.mergingStack")
+          : translateCurrent("toast.feedback.rebasingStack"),
     });
     const result = await runAction({
       environmentId,
@@ -117,7 +121,10 @@ export function PullRequestStackMenu({
     if (result._tag === "Failure") {
       toastManager.update(toastId, {
         type: "error",
-        title: action === "merge" ? "Could not merge the stack" : "Could not rebase the stack",
+        title:
+          action === "merge"
+            ? translateCurrent("toast.feedback.couldNotMergeTheStack")
+            : translateCurrent("toast.feedback.couldNotRebaseTheStack"),
         description: readableFailure(
           squashAtomCommandFailure(result),
           action === "merge"
@@ -128,7 +135,10 @@ export function PullRequestStackMenu({
     } else {
       toastManager.update(toastId, {
         type: "success",
-        title: action === "merge" ? "Stack merge request completed" : "Stack rebased",
+        title:
+          action === "merge"
+            ? translateCurrent("toast.feedback.stackMergeRequestCompleted")
+            : translateCurrent("toast.feedback.stackRebased"),
         description:
           action === "merge"
             ? `${hostLabel} merged the stack or added it to its merge queue.`

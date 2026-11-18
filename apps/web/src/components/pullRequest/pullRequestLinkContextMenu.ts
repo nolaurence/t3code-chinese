@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import type { ContextMenuItem } from "@t3tools/contracts";
 import {
   type SourceControlDefinition,
@@ -59,8 +60,8 @@ export async function showPullRequestLinkContextMenu({
       type: "error",
       title:
         action === "copy-link"
-          ? (t?.("pullRequest.copyLinkFailed") ?? "Could not copy the link")
-          : (t?.("pullRequest.openLinkFailed") ?? "Could not open the link"),
+          ? (t?.("pullRequest.copyLinkFailed") ?? translateCurrent("pullRequest.copyLinkFailed"))
+          : (t?.("pullRequest.openLinkFailed") ?? translateCurrent("pullRequest.openLinkFailed")),
     });
   }
 }

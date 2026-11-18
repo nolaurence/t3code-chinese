@@ -74,14 +74,15 @@ function getTimestampFormatter(
   timestampFormat: TimestampFormat,
   includeSeconds: boolean,
   timeZone?: string,
+  locale = timestampLocale,
 ): Intl.DateTimeFormat {
-  const cacheKey = `${timestampFormat}:${includeSeconds ? "seconds" : "minutes"}:${timeZone ?? ""}`;
+  const cacheKey = `${timestampFormat}:${includeSeconds ? "seconds" : "minutes"}:${timeZone ?? ""}:${locale ?? ""}`;
   const cachedFormatter = timestampFormatterCache.get(cacheKey);
   if (cachedFormatter) {
     return cachedFormatter;
   }
 
-  const formatter = new Intl.DateTimeFormat(timestampLocale, {
+  const formatter = new Intl.DateTimeFormat(locale, {
     ...getTimestampFormatOptions(timestampFormat, includeSeconds),
     ...(timeZone ? { timeZone } : {}),
   });
@@ -131,10 +132,14 @@ export function formatChatTimestampTooltip(
   return `${time}, ${day}${ordinalSuffix(day)} ${month} ${year}`;
 }
 
-export function formatShortTimestamp(isoDate: string, timestampFormat: TimestampFormat): string {
+export function formatShortTimestamp(
+  isoDate: string,
+  timestampFormat: TimestampFormat,
+  locale?: string,
+): string {
   const date = parseTimestampDate(isoDate);
   if (!date) return "";
-  return getTimestampFormatter(timestampFormat, false).format(date);
+  return getTimestampFormatter(timestampFormat, false, undefined, locale).format(date);
 }
 
 const numericDateOptions: Intl.DateTimeFormatOptions = { month: "numeric", day: "numeric" };

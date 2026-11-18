@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import {
   AuthEnvironmentMaintainScope,
@@ -281,7 +282,9 @@ export function ServerUpdateAction({
       toastManager.add({
         type: "success",
         title:
-          installation?.kind === "npm-global" ? "Update command copied" : "Relaunch command copied",
+          installation?.kind === "npm-global"
+            ? translateCurrent("serverUpdate.commandCopied")
+            : translateCurrent("toast.feedback.relaunchCommandCopied"),
         description:
           installation?.kind === "npm-global"
             ? `Run \`${command}\` on ${serverLabel}, then restart t3 with your usual options.`
@@ -291,7 +294,7 @@ export function ServerUpdateAction({
     onError: (error) => {
       toastManager.add({
         type: "error",
-        title: "Could not copy update command",
+        title: translateCurrent("serverUpdate.copyCommandFailed"),
         description: error.message,
       });
     },

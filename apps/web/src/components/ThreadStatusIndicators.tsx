@@ -1,3 +1,4 @@
+import { useI18n, type MessageKey } from "../i18n";
 import { pipe } from "effect/Function";
 import {
   scopeProjectRef,
@@ -603,6 +604,18 @@ export function ThreadWorktreeIndicator({
   );
 }
 
+const THREAD_STATUS_LABEL_KEYS = {
+  Working: "sidebar.status.working",
+  Connecting: "sidebar.status.connecting",
+  Completed: "sidebar.status.completed",
+  Failed: "sidebar.status.failed",
+  "Pending Approval": "sidebar.status.pendingApproval",
+  "Awaiting Input": "sidebar.status.awaitingInput",
+  "Guest Request": "sidebar.status.guestRequest",
+  Waiting: "sidebar.status.waiting",
+  "Plan Ready": "sidebar.status.planReady",
+} as const satisfies Record<ThreadStatusPill["label"], MessageKey>;
+
 function ThreadStatusLabel({
   status,
   compact = false,
@@ -610,6 +623,8 @@ function ThreadStatusLabel({
   status: ThreadStatusPill;
   compact?: boolean;
 }) {
+  const { t } = useI18n();
+  const label = t(THREAD_STATUS_LABEL_KEYS[status.label]);
   if (compact) {
     return (
       <Tooltip>
@@ -617,7 +632,7 @@ function ThreadStatusLabel({
           render={
             <span
               role="img"
-              aria-label={status.label}
+              aria-label={label}
               className={`inline-flex size-3.5 shrink-0 items-center justify-center ${status.colorClass}`}
             />
           }
@@ -628,7 +643,7 @@ function ThreadStatusLabel({
             }`}
           />
         </TooltipTrigger>
-        <TooltipPopup side="top">{status.label}</TooltipPopup>
+        <TooltipPopup side="top">{label}</TooltipPopup>
       </Tooltip>
     );
   }
@@ -639,7 +654,7 @@ function ThreadStatusLabel({
         render={
           <span
             role="img"
-            aria-label={status.label}
+            aria-label={label}
             className={`inline-flex items-center gap-1 text-3xs ${status.colorClass}`}
           />
         }
@@ -649,9 +664,9 @@ function ThreadStatusLabel({
             status.pulse ? "motion-safe:animate-status-pulse" : ""
           }`}
         />
-        <span className="hidden md:inline">{status.label}</span>
+        <span className="hidden md:inline">{label}</span>
       </TooltipTrigger>
-      <TooltipPopup side="top">{status.label}</TooltipPopup>
+      <TooltipPopup side="top">{label}</TooltipPopup>
     </Tooltip>
   );
 }

@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   AuthOrchestrationOperateScope,
   type EditorId,
@@ -40,8 +41,11 @@ export function KeybindingsConfigWarning({
             toastManager.add(
               stackedThreadToast({
                 type: "error",
-                title: "Unable to open keybindings file",
-                description: error instanceof Error ? error.message : "Unknown error opening file.",
+                title: translateCurrent("root.keybindings.openFailed"),
+                description:
+                  error instanceof Error
+                    ? error.message
+                    : translateCurrent("root.keybindings.openUnknown"),
               }),
             );
           }}

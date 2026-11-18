@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/shell";
 import { resolveLatestMergeBackRun } from "@t3tools/client-runtime/state/thread-workflows";
@@ -77,14 +78,14 @@ export default function SideChatPane(props: {
     if (result._tag === "Success") {
       toastManager.add({
         type: "success",
-        title: "Brought back",
-        description: "The main thread gets this side chat with your next message there.",
+        title: translateCurrent("toast.feedback.broughtBack"),
+        description: translateCurrent("toast.feedback.theMainThreadGetsThis"),
       });
     } else if (!isAtomCommandInterrupted(result)) {
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Could not bring back the side chat",
+        title: translateCurrent("toast.feedback.couldNotBringBackThe"),
         ...(error instanceof Error ? { description: error.message } : {}),
       });
     }
@@ -120,7 +121,7 @@ export default function SideChatPane(props: {
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Could not delete the side chat",
+        title: translateCurrent("toast.feedback.couldNotDeleteTheSide"),
         ...(error instanceof Error ? { description: error.message } : {}),
       });
     }

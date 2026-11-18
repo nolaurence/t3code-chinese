@@ -78,6 +78,7 @@ function isGroupingSelection(value: unknown): value is SidebarProjectGroupingMod
 
 // Grouping overrides are client settings, so they stay editable without project write access.
 function CheckoutGroupingSelect({ member }: { member: SidebarProjectGroupMember }) {
+  const { t } = useI18n();
   const overrideKey = derivePhysicalProjectKey(member);
   const globalMode = useClientSettings((settings) => settings.sidebarProjectGroupingMode);
   const selection = useClientSettings(
@@ -100,8 +101,8 @@ function CheckoutGroupingSelect({ member }: { member: SidebarProjectGroupMember 
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Could not save grouping rule",
-              description: error instanceof Error ? error.message : "An error occurred.",
+              title: t("settings.details.projects.couldNotSaveGrouping"),
+              description: error instanceof Error ? error.message : t("common.errorGeneric"),
             }),
           );
         });
@@ -123,7 +124,7 @@ function CheckoutGroupingSelect({ member }: { member: SidebarProjectGroupMember 
       </SelectTrigger>
       <SelectPopup align="end" alignItemWithTrigger={false}>
         <SelectItem hideIndicator value="inherit">
-          Use global default
+          {t("sidebar.useGlobalDefault")}
         </SelectItem>
         <SelectItem hideIndicator value="repository">
           {PROJECT_GROUPING_MODE_LABELS.repository}
@@ -437,8 +438,7 @@ function ProjectDetail({
   const checkoutChoices = (
     <SettingsSection title={t("projectSettings.checkouts")}>
       <p className="px-3 py-2.5 text-xs text-muted-foreground sm:px-4">
-        Grouping rule decides how each checkout joins project groups in the sidebar. Changing it can
-        move a checkout to a different project.
+        {t("settings.details.projects.groupingRuleDecidesHow")}
       </p>
       {Array.from(checkoutsByEnvironment, ([environmentId, members]) => {
         if (checkoutsByEnvironment.size === 1) {
@@ -511,9 +511,7 @@ function ProjectDetail({
       <SettingsPageContainer className="gap-6">
         <Alert variant="info">
           <InfoIcon aria-hidden />
-          <AlertDescription>
-            Can't find a setting? Keep this project picked above and hop to any other settings page.
-          </AlertDescription>
+          <AlertDescription>{t("settings.details.projects.cantFindASetting")}</AlertDescription>
         </Alert>
         <SettingsSection id="project-overview" title={t("projectSettings.project")} hideTitle>
           {!canEditGroup ? (
@@ -529,7 +527,7 @@ function ProjectDetail({
             resetAction={
               canResetScratchTitle ? (
                 <SettingResetButton
-                  label="project name"
+                  label={t("settings.details.projects.projectName")}
                   disabled={!canEditGroup}
                   onClick={() =>
                     void updateAllMembers(
@@ -612,8 +610,8 @@ function ProjectDetail({
           {canOrganize ? (
             <>
               <SettingsRow
-                title="Pin"
-                description="Pinned projects come first in project pickers."
+                title={t("sidebar.pin")}
+                description={t("settings.details.projects.pinnedProjectsComeFirst")}
                 control={
                   <Switch
                     checked={group.pinned}
@@ -624,12 +622,12 @@ function ProjectDetail({
                         checked ? "Failed to pin project" : "Failed to unpin project",
                       )
                     }
-                    aria-label="Pin project"
+                    aria-label={t("settings.details.projects.pinProject")}
                   />
                 }
               />
               <SettingsRow
-                title="Archive"
+                title={t("sidebar.archive")}
                 description={
                   group.archived
                     ? "Hidden from project pickers. Threads and files are kept."

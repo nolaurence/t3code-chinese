@@ -7,7 +7,8 @@ import {
   type SnoozePreset,
 } from "@t3tools/client-runtime/state/thread-settled";
 
-import type { MessageKey, Translate } from "../i18n";
+import { createTranslator, readLocalePreference, type Translate } from "../i18n";
+import { snoozePresentation } from "../i18n/snooze";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { serverEnvironment } from "../state/server";
 import { formatShortTimestamp, parseTimestampDate } from "../timestampFormat";
@@ -16,14 +17,6 @@ import { toastManager } from "./ui/toast";
 export { snoozeWakeLabel, type SnoozePreset };
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
-
-const SNOOZE_PRESET_LABEL_KEYS: Partial<Record<string, MessageKey>> = {
-  hour: "sidebar.snooze.hour",
-  "three-hours": "sidebar.snooze.threeHours",
-  evening: "sidebar.snooze.evening",
-  tomorrow: "sidebar.snooze.tomorrow",
-  "next-week": "sidebar.snooze.nextWeek",
-};
 
 function timeOfDayLabel(date: Date, timestampFormat: TimestampFormat): string {
   return formatShortTimestamp(date.toISOString(), timestampFormat);
@@ -34,17 +27,8 @@ export function resolveSnoozePresets(
   now: Date,
   timestampFormat: TimestampFormat,
   environmentId: EnvironmentId,
-  t?: Translate,
 ): ReadonlyArray<SnoozePreset> {
-  return resolveSharedSnoozePresets(now, snoozeOptions(timestampFormat, environmentId)).map(
-    (preset) => localizeSnoozePreset(preset, t),
-  );
-}
-
-function localizeSnoozePreset(preset: SnoozePreset, t?: Translate): SnoozePreset {
-  const key = SNOOZE_PRESET_LABEL_KEYS[preset.id];
-  if (!t || !key) return preset;
-  return { ...preset, label: t(key) };
+  return resolveSharedSnoozePresets(now, snoozeOptions(timestampFormat, environmentId));
 }
 
 /** A shown menu choice as picked; see the shared `pickSnoozePreset`. */
@@ -61,10 +45,11 @@ export function pickSnoozePreset(
     ...snoozeOptions(timestampFormat, environmentId),
   });
   if (!picked) {
+    const t = createTranslator(readLocalePreference());
     toastManager.add({
       type: "warning",
-      title: "Could not snooze thread",
-      description: "That snooze time has passed. Choose another time.",
+      title: t("sidebar.snooze.couldNot"),
+      description: t("sidebar.snooze.passed"),
     });
   }
   return picked;
@@ -98,8 +83,9 @@ function snoozeOptions(timestampFormat: TimestampFormat, environmentId: Environm
   const presets = appAtomRegistry.get(
     serverEnvironment.settingsValueAtom(environmentId),
   )?.snoozePresets;
+  const locale = readLocalePreference();
   return {
+    ...snoozePresentation(timestampFormat, locale, createTranslator(locale)),
     ...(presets ? { presets } : {}),
-    formatTime: (date: Date) => formatShortTimestamp(date.toISOString(), timestampFormat),
   };
 }

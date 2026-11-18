@@ -1,3 +1,4 @@
+import { useI18n, translateCurrent } from "~/i18n";
 import { useAtomValue } from "@effect/atom-react";
 import { Fragment, useState, type ReactNode } from "react";
 import * as Cause from "effect/Cause";
@@ -113,7 +114,7 @@ function hostStatus(
   state: DeviceServiceState | undefined,
   hostId: string,
 ): SourceStatus | undefined {
-  if (!state) return { tone: "pending", label: "Loading" };
+  if (!state) return { tone: "pending", label: translateCurrent("common.loading") };
   const status = state.hostStatuses[hostId];
   switch (status?.status) {
     case "ready": {
@@ -124,9 +125,17 @@ function hostStatus(
     }
     case "installing":
     case "starting":
-      return { tone: "pending", label: "Starting", detail: status.detail };
+      return {
+        tone: "pending",
+        label: translateCurrent("resourceTelemetry.status.starting"),
+        detail: status.detail,
+      };
     case "failed":
-      return { tone: "error", label: "Failed", detail: status.detail };
+      return {
+        tone: "error",
+        label: translateCurrent("agents.status.failed"),
+        detail: status.detail,
+      };
     default:
       return undefined;
   }
@@ -143,6 +152,7 @@ export function DeviceSourcesSettings(props: {
   readonly supportsEas: boolean;
   readonly supportsSimlock: boolean;
 }) {
+  const { t } = useI18n();
   const { scope, environments, connectedEnvironments, environment: primary } = useSettingsScope();
   const projectScope = scope.kind === "project" || scope.kind === "checkout";
   const update = useAtomCommand(serverEnvironment.updateSettings, { reportFailure: false });
@@ -238,7 +248,7 @@ export function DeviceSourcesSettings(props: {
     } catch (error) {
       toastManager.add({
         type: "error",
-        title: "Device host not saved",
+        title: translateCurrent("settings.details.deviceSources.notSaved"),
         description: error instanceof Error ? error.message : String(error),
       });
     }
@@ -322,7 +332,7 @@ export function DeviceSourcesSettings(props: {
               return `${target.label}: ${result?.status === "failed" ? result.error : "failed"}`;
             })
             .join("\n")
-        : "Connected or already available locally on each selected environment.",
+        : t("deviceHosts.checkPassedDescription"),
     });
   };
 
@@ -332,12 +342,17 @@ export function DeviceSourcesSettings(props: {
   const rowActions = (onEdit: () => void, onRemove: () => void, extra?: ReactNode) => (
     <>
       <Button size="sm" variant="outline" disabled={disabled} onClick={onEdit}>
-        Edit
+        {t("common.edit")}
       </Button>
       <Menu>
         <MenuTrigger
           render={
-            <Button size="icon-sm" variant="ghost-muted" disabled={disabled} aria-label="More" />
+            <Button
+              size="icon-sm"
+              variant="ghost-muted"
+              disabled={disabled}
+              aria-label={t("preview.more")}
+            />
           }
         >
           <MoreVertical />
@@ -345,7 +360,7 @@ export function DeviceSourcesSettings(props: {
         <MenuPopup align="end">
           {extra}
           <MenuItem variant="destructive" onClick={onRemove}>
-            Remove
+            {t("common.remove")}
           </MenuItem>
         </MenuPopup>
       </Menu>
@@ -357,11 +372,11 @@ export function DeviceSourcesSettings(props: {
   rows.push({
     key: "local",
     shared: false,
-    title: "Local simulators",
+    title: t("settings.details.devices.localSimulators"),
     description:
       members.length > 1
-        ? "Simulators and emulators installed on each environment's own machine."
-        : "Simulators and emulators installed on this environment's machine.",
+        ? t("settings.details.devices.simulatorsAndEmulatorsInstalled")
+        : t("settings.details.devices.simulatorsAndEmulatorsInstalled2"),
     environments: active.map((member) => {
       const local = member.state?.hosts.find((host) => host.kind === "local");
       const status = local ? hostStatus(member.state, local.id) : hostStatus(member.state, "");
@@ -375,7 +390,7 @@ export function DeviceSourcesSettings(props: {
             ? {
                 ...status,
                 action: {
-                  label: "Refresh",
+                  label: t("common.refresh"),
                   run: () => void list({ environmentId: member.environmentId, input: {} }),
                 },
               }
@@ -416,7 +431,7 @@ export function DeviceSourcesSettings(props: {
         if (!held)
           return { environmentId: member.environmentId, label: member.label, added: false };
         const status = testing.has(host.id)
-          ? ({ tone: "pending", label: "Testing connection" } as const)
+          ? ({ tone: "pending", label: t("settings.details.devices.testingConnection") } as const)
           : hostStatus(member.state, held.host.id);
         return {
           environmentId: member.environmentId,
@@ -427,8 +442,11 @@ export function DeviceSourcesSettings(props: {
             status?.tone === "error" && member.state?.supportsHostRetry
               ? {
                   ...status,
-                  label: "Can't connect",
-                  action: { label: "Retry", run: () => retry(member.environmentId, held.host.id) },
+                  label: t("settings.details.devices.cantConnect"),
+                  action: {
+                    label: t("providerUpdate.action.retry"),
+                    run: () => retry(member.environmentId, held.host.id),
+                  },
                 }
               : status,
         };
@@ -437,7 +455,7 @@ export function DeviceSourcesSettings(props: {
         () =>
           setEditing({ kind: "ssh", host, original: host, ...(grouped ? {} : { only: holders }) }),
         () => void saveSsh(host, true, host, holders),
-        <MenuItem onClick={() => void testSsh(host)}>Test connection</MenuItem>,
+        <MenuItem onClick={() => void testSsh(host)}>{t("deviceHosts.testConnection")}</MenuItem>,
       ),
     });
   }
@@ -524,7 +542,8 @@ export function DeviceSourcesSettings(props: {
       <MenuTrigger
         render={<Button size="sm" variant="outline" disabled={disabled || editing !== null} />}
       >
-        <PlusIcon className="size-3.5" /> Add source
+        <PlusIcon className="size-3.5" />
+        {" " + t("settings.details.devices.addSource")}
         <ChevronDownIcon className="size-3.5" />
       </MenuTrigger>
       <MenuPopup align="end">
@@ -537,7 +556,7 @@ export function DeviceSourcesSettings(props: {
             })
           }
         >
-          Machine over SSH
+          {t("settings.details.devices.machineOverSSH")}
         </MenuItem>
         {props.supportsEas ? (
           <MenuItem
@@ -551,7 +570,7 @@ export function DeviceSourcesSettings(props: {
               })
             }
           >
-            EAS Simulator
+            {t("settings.details.devices.eASSimulator")}
           </MenuItem>
         ) : null}
         {props.supportsSimlock && simlockEnabled ? (
@@ -560,7 +579,7 @@ export function DeviceSourcesSettings(props: {
               setEditing({ kind: "simlock", host: newSimlockDeviceHost(randomUUID()), isNew: true })
             }
           >
-            Simlock pool (alpha)
+            {t("settings.details.devices.simlockPoolAlpha")}
           </MenuItem>
         ) : null}
       </MenuPopup>
@@ -568,7 +587,11 @@ export function DeviceSourcesSettings(props: {
   );
 
   return (
-    <SettingsSection id="device-sources" title="Device sources" headerAction={addMenu}>
+    <SettingsSection
+      id="device-sources"
+      title={t("settings.details.devices.deviceSources")}
+      headerAction={addMenu}
+    >
       {rows.map((row) => (
         <DeviceSourceRow key={row.key} row={row} />
       ))}
@@ -743,6 +766,7 @@ function PlatformIcon(props: {
 }
 
 function DeviceSourceRow(props: { row: SourceRow }) {
+  const { t } = useI18n();
   const { row } = props;
   const several = row.environments.length > 1;
   const issues = row.environments.filter(
@@ -780,7 +804,9 @@ function DeviceSourceRow(props: { row: SourceRow }) {
             </span>
             {environment.status.tone === "warning" && environment.status.detail ? (
               <Popover>
-                <PopoverTrigger render={<InlineButton />}>Details</PopoverTrigger>
+                <PopoverTrigger render={<InlineButton />}>
+                  {t("preview.unreachable.details")}
+                </PopoverTrigger>
                 <PopoverPopup side="bottom" align="start" width="lg" padding="compact">
                   <p className="whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">
                     {environment.status.detail}

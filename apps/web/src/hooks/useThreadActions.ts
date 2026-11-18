@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   parseScopedThreadKey,
   scopeProjectRef,
@@ -192,8 +193,9 @@ export async function navigateAfterThreadDeletion(navigate: () => Promise<void>)
     toastManager.add(
       stackedThreadToast({
         type: "error",
-        title: "Thread deleted, but navigation failed",
-        description: error instanceof Error ? error.message : "An error occurred.",
+        title: translateCurrent("toast.feedback.threadDeletedButNavigationFailed"),
+        description:
+          error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
       }),
     );
   }
@@ -679,8 +681,8 @@ export function useThreadActions() {
         stackedThreadToast({
           type: "error",
           title: removalFailed
-            ? "Failed to delete worktree"
-            : "Worktree deleted, but Git status refresh failed",
+            ? translateCurrent("toast.feedback.failedToDeleteWorktree")
+            : translateCurrent("toast.feedback.worktreeDeletedButGitStatus"),
           description: removalFailed
             ? `Could not remove ${displayWorktreePath ?? orphanedWorktreePath}. ${message}`
             : message,

@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
@@ -310,17 +311,17 @@ export function usePullRequestHandoffs({
     if (opened === null) {
       toastManager.add({
         type: "error",
-        title: "Could not open a thread",
-        description: "Try again from the project, or open a thread first.",
+        title: translateCurrent("pullRequest.handoff.openThreadFailed"),
+        description: translateCurrent("pullRequest.handoff.openThreadFailedDescription"),
       });
       return;
     }
     toastManager.add({
       type: "success",
-      title: "Asked in a thread",
+      title: translateCurrent("pullRequest.handoff.askedInThread"),
       description:
         task.prompt.length > 0
-          ? "The question is in the composer. Read it over, then send."
+          ? translateCurrent("toast.feedback.theQuestionIsInThe")
           : `The ${terminology.singular} is in the composer. Type your question, then send.`,
     });
   };
@@ -347,8 +348,8 @@ export function usePullRequestHandoffs({
       setHandoff(null);
       toastManager.update(toastId, {
         type: "error",
-        title: "Could not open a thread for the checkout",
-        description: "Try again from the project, or open a thread first.",
+        title: translateCurrent("pullRequest.checkout.openThreadFailed"),
+        description: translateCurrent("pullRequest.handoff.openThreadFailedDescription"),
       });
       return;
     }
@@ -380,7 +381,7 @@ export function usePullRequestHandoffs({
       setHandoff(null);
       toastManager.update(toastId, {
         type: "error",
-        title: "Checked out, but the thread stayed where it was",
+        title: translateCurrent("pullRequest.checkout.threadNotMoved"),
         description: `The checkout is ready on \`${prepared.value.branch}\`. Point a thread at it from the branch picker, then ask again.`,
       });
       return;
@@ -392,7 +393,10 @@ export function usePullRequestHandoffs({
         prepared.value.isOnPullRequestHead
           ? {
               type: "success",
-              title: mode === "local" ? "Checked out here" : "Checked out",
+              title:
+                mode === "local"
+                  ? translateCurrent("pullRequest.checkout.checkedOutHere")
+                  : translateCurrent("pullRequest.checkout.checkedOut"),
               description:
                 mode === "local"
                   ? `This repository is on the ${terminology.singular}'s branch, with a thread open on it.`
@@ -408,8 +412,8 @@ export function usePullRequestHandoffs({
       prepared.value.isOnPullRequestHead
         ? {
             type: "success",
-            title: "Checkout ready",
-            description: "The task is in the composer. Read it over, then send.",
+            title: translateCurrent("pullRequest.checkout.ready"),
+            description: translateCurrent("toast.feedback.theTaskIsInThe"),
           }
         : offHeadPullRequestCheckoutToast(terminology),
     );

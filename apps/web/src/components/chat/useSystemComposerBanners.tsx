@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { type EnvironmentId } from "@t3tools/contracts";
 import { type EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
@@ -94,8 +95,11 @@ export function useSystemComposerBanners(input: SystemComposerBannersInput) {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Could not reconnect environment",
-          description: error instanceof Error ? error.message : "Failed to reconnect.",
+          title: translateCurrent("chat.environment.reconnectFailed"),
+          description:
+            error instanceof Error
+              ? error.message
+              : translateCurrent("chat.environment.reconnectFailedDescription"),
         }),
       );
     }
@@ -122,8 +126,11 @@ export function useSystemComposerBanners(input: SystemComposerBannersInput) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not disconnect server",
-            description: error instanceof Error ? error.message : "Failed to disconnect.",
+            title: translateCurrent("toast.feedback.couldNotDisconnectServer"),
+            description:
+              error instanceof Error
+                ? error.message
+                : translateCurrent("toast.feedback.failedToDisconnect"),
           }),
         );
       }

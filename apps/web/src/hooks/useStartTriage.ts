@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   type AtomCommandResult,
@@ -47,10 +48,13 @@ export function useStartTriage() {
     toastManager.add(
       stackedThreadToast({
         type: "error",
-        title: "Could not start triage",
+        title: translateCurrent("toast.feedback.couldNotStartTriage"),
         description: `${description} Run ${TRIAGE_CLI_COMMAND} in a terminal on that machine instead.`,
         timeout: 0,
-        actionProps: { children: "Copy command", onClick: () => void copyTriageCliCommand() },
+        actionProps: {
+          children: translateCurrent("providers.copyCommand"),
+          onClick: () => void copyTriageCliCommand(),
+        },
         // "Copy command" is the copy that helps here, not the error text.
         data: { hideCopyButton: true },
       }),
@@ -92,7 +96,7 @@ export function useStartTriage() {
     const pendingTimer = setTimeout(() => {
       pendingToastId = toastManager.add({
         type: "loading",
-        title: "Starting triage…",
+        title: translateCurrent("toast.feedback.startingTriage"),
         timeout: 0,
       });
     }, 400);

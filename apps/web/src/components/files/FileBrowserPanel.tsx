@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { RefreshIcon } from "~/components/ui/refresh-icon";
 import type {
   ContextMenuItem as TreeContextMenuItem,
@@ -215,14 +216,15 @@ export default function FileBrowserPanel({
             await writeTextToClipboard(mention);
             toastManager.add({
               type: "success",
-              title: "Mention copied",
+              title: translateCurrent("files.mentionCopied"),
               description: relativePath,
             });
           } catch (error) {
             toastManager.add({
               type: "error",
-              title: "Failed to copy mention",
-              description: error instanceof Error ? error.message : "An error occurred.",
+              title: translateCurrent("files.copyMentionFailed"),
+              description:
+                error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
             });
           }
           return;
@@ -232,8 +234,8 @@ export default function FileBrowserPanel({
           if (!composer) {
             toastManager.add({
               type: "error",
-              title: "Unable to add to chat",
-              description: "Open a chat for this project and try again.",
+              title: translateCurrent("files.addToChatFailed"),
+              description: translateCurrent("files.openProjectChatFirst"),
             });
             return;
           }
@@ -241,8 +243,8 @@ export default function FileBrowserPanel({
           if (!inserted) {
             toastManager.add({
               type: "error",
-              title: "Unable to add to chat",
-              description: "The chat isn't ready to accept input right now.",
+              title: translateCurrent("files.addToChatFailed"),
+              description: translateCurrent("files.chatNotReady"),
             });
           }
         }

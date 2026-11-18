@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   type DesktopBridge,
   type DesktopPendingSnapShot,
@@ -374,8 +375,8 @@ export function SnapShotCoordinator() {
               "missing-project",
               stackedThreadToast({
                 type: "error",
-                title: "Snapshot taken, but no project is available",
-                description: "Add a project, then capture the window again.",
+                title: translateCurrent("toast.feedback.snapshotTakenButNoProject"),
+                description: translateCurrent("toast.feedback.addAProjectThenCapture"),
               }),
             );
             continue;
@@ -398,7 +399,7 @@ export function SnapShotCoordinator() {
               "delivery",
               stackedThreadToast({
                 type: "error",
-                title: "Snapshot failed",
+                title: translateCurrent("toast.feedback.snapshotFailed"),
                 description: `Capture ${item.id}: ${
                   error instanceof Error ? error.message : "Try the capture again."
                 }`,
@@ -414,8 +415,11 @@ export function SnapShotCoordinator() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Snapshot failed",
-            description: error instanceof Error ? error.message : "Try the capture again.",
+            title: translateCurrent("toast.feedback.snapshotFailed"),
+            description:
+              error instanceof Error
+                ? error.message
+                : translateCurrent("toast.feedback.tryTheCaptureAgain"),
           }),
         );
       })
@@ -483,8 +487,8 @@ export function SnapShotCoordinator() {
             toastManager.add(
               stackedThreadToast({
                 type: "error",
-                title: "Snapshot failed",
-                description: state.message ?? "Try the capture again.",
+                title: translateCurrent("toast.feedback.snapshotFailed"),
+                description: state.message ?? translateCurrent("toast.feedback.tryTheCaptureAgain"),
               }),
             );
           });

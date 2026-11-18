@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { AuthSettingsWriteScope, EnvironmentAuthorizationError } from "@t3tools/contracts";
 import { readEnvironmentScope } from "../../state/session";
 import {
@@ -41,8 +42,13 @@ function reportScriptFailure(result: AtomCommandResult<unknown, unknown>, t?: Tr
     const error = squashAtomCommandFailure(result);
     toastManager.add({
       type: "error",
-      title: t?.("projectSettings.saveActionsFailed") ?? "Failed to save project actions",
-      description: error instanceof Error ? error.message : (t?.("common.errorGeneric") ?? "An error occurred."),
+      title:
+        t?.("projectSettings.saveActionsFailed") ??
+        translateCurrent("projectSettings.saveActionsFailed"),
+      description:
+        error instanceof Error
+          ? error.message
+          : (t?.("common.errorGeneric") ?? translateCurrent("common.errorGeneric")),
     });
   }
   return mapAtomCommandResult(result, () => undefined);

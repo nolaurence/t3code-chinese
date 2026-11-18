@@ -92,7 +92,7 @@ export interface SettingsSearchAvailability {
   readonly hasPrimaryEnvironment?: boolean;
 }
 
-export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
+const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/diagnostics": "Diagnostics",
   "/settings/projects": "Projects",
   "/settings/general": "General",
@@ -131,6 +131,18 @@ export const SETTINGS_SECTION_LABEL_KEYS: Partial<Record<SettingsPath, MessageKe
   "/settings/connections": "settings.search.remoteEnvironments",
   "/settings/about": "settings.about.title",
   "/settings/archived": "settings.nav.archive",
+  "/settings/projects": "settings.nav.projects",
+  "/settings/chat": "settings.nav.chat",
+  "/settings/diffs": "settings.nav.diffs",
+  "/settings/voice": "settings.nav.voice",
+  "/settings/threads": "settings.nav.threads",
+  "/settings/devices": "settings.nav.devices",
+  "/settings/scheduled-tasks": "settings.nav.scheduledTasks",
+  "/settings/worktrees": "settings.nav.worktrees",
+  "/settings/access": "settings.nav.access",
+  "/settings/secrets": "settings.nav.secrets",
+  "/settings/maintenance": "settings.nav.maintenance",
+  "/settings/labs": "settings.nav.labs",
 };
 
 /** Sidebar order. A group without a heading is set apart by space alone. */
@@ -1481,6 +1493,49 @@ export function isSettingsSearchScopeAvailable(
 }
 
 const SETTINGS_SEARCH_TITLE_KEYS: Partial<Record<SettingsSearchItemId, MessageKey>> = {
+  "chat-width": "settings.details.appearance.chatWidth2",
+  "effort-display": "settings.details.appearance.effortDisplay2",
+  "math-rendering": "settings.details.appearance.renderMath",
+  "separate-fonts": "settings.details.typography.separateFonts",
+  "project-order": "settings.details.general.projectOrder2",
+  "working-shelf": "settings.details.general.workingSection",
+  "boring-sidebar": "settings.details.labs.boringSidebarGroupBy",
+  "boring-sidebar-multiline": "settings.details.labs.twolineFolderRows",
+  "tool-call-visibility": "settings.details.general.toolCallsInChat2",
+  "screen-reader-announcements": "settings.details.general.screenReaderAnnouncements2",
+  "guest-links": "settings.details.labs.guestLinks",
+  "linked-environments-beta": "settings.details.labs.linkedEnvironments",
+  "prompt-suggestions-beta": "settings.details.labs.suggestNextPrompt",
+  "worktree-fast-checkout": "settings.details.labs.fastWorktreeCheckout",
+  "voice-transcription-destination": "settings.details.voice.transcribeWith",
+  "voice-microphone": "settings.details.voice.microphone",
+  "dictation-shortcut-mode": "settings.details.voice.dictationShortcut",
+  "speech-dictionary": "settings.details.voice.dictionary",
+  "speech-post-processing-model": "settings.details.voice.cleanupModel",
+  "speech-correction-word": "settings.details.voice.correctionCue",
+  "speech-silence-filtering": "settings.details.voice.silenceFiltering",
+  "remove-filler-words": "settings.details.voice.removeFillerWords",
+  "speech-post-processing": "settings.details.voice.cleanUpTranscripts",
+  "speech-models": "settings.details.voice.transcriptionModels",
+  "transcription-test": "settings.details.voice.testModel",
+  "compact-idle-threads": "settings.details.general.compactIdleThreads2",
+  "composer-rich-text": "settings.details.general.richTextComposer2",
+  "telemetry-export": "settings.details.telemetryExport.openTelemetryExport",
+  "device-sources": "settings.details.devices.deviceSources",
+  "device-platform-support": "settings.details.devices.localSimulators",
+  "browser-recording-key-presses": "settings.details.integrations.showKeyPressesIn",
+  "browser-recording-mouse-presses": "settings.details.integrations.showMousePressesIn",
+  "browser-search-engine": "settings.details.integrations.searchEngine2",
+  "pull-request-links-open-in-app": "settings.details.integrations.openPullRequestsIn2",
+  "review-guide-instructions": "settings.details.sourceControlWriting.reviewGuideInstructions2",
+  "fallback-model": "settings.search.fallbackModel",
+  "thread-title-instructions": "settings.search.threadTitleInstructions",
+  "ghq-clone-layout": "settings.search.cloneIntoHostFolders",
+  "snooze-options": "settings.search.snoozeOptions",
+  "snooze-limited-threads": "settings.search.snoozeUntilLimitsReset",
+  "auto-resume-limited-threads": "settings.search.resumeAfterUsageLimits",
+  "keep-threads-with-pull-requests": "settings.search.keepPullRequests",
+
   "project-defaults": "settings.search.projectDefaults",
   "project-overview": "settings.search.projectOverview",
   "default-model": "settings.search.defaultModel",

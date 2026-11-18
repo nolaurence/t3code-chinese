@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type {
   DesktopPreviewAnnotationVoiceConfig,
@@ -115,7 +116,7 @@ export function PreviewAnnotationSpeech({
         current.current.speech.cancel();
         toastManager.add({
           type: "error",
-          title: "Could not update annotation voice input",
+          title: translateCurrent("toast.feedback.couldNotUpdateAnnotationVoice"),
           description: error instanceof Error ? error.message : String(error),
         });
       }

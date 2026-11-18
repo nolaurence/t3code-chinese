@@ -1,4 +1,23 @@
+import type { MessageKey } from "../i18n/messages";
+import type { SidebarThreadStatus } from "./Sidebar.logic";
+
 export type ThreadNotificationKind = "input" | "completion";
+
+const attentionTitles: Partial<Record<SidebarThreadStatus, MessageKey>> = {
+  approval: "notifications.thread.approval",
+  limited: "notifications.thread.limit",
+  failed: "notifications.thread.failed",
+  request: "notifications.thread.guest",
+};
+
+export function threadNotificationTitleKey(
+  kind: ThreadNotificationKind,
+  status: SidebarThreadStatus,
+): MessageKey {
+  return kind === "completion"
+    ? "notifications.thread.completed"
+    : (attentionTitles[status] ?? "notifications.thread.input");
+}
 
 export interface ThreadNotificationObservation {
   /** Run, status and request key while the thread needs attention, otherwise null. */

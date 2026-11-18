@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { applyPullRequestDraftFilterChange } from "@t3tools/client-runtime/pull-request-query";
 import { Spinner } from "~/components/ui/spinner";
@@ -1424,7 +1425,8 @@ export function PullRequestsPage() {
         toastManager.add({
           type: "error",
           title: `Failed to copy ${shortLabel} link`,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description:
+            error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
         });
       },
     );

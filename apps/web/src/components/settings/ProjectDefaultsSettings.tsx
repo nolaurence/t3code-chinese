@@ -22,9 +22,13 @@ import {
 import { useEnvironmentProviders, useEnvironments } from "../../state/environments";
 import { firstManagedDenial } from "../../state/managedPolicy";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
-import { resolveEnvModeLabel, WORKTREE_SUBMODULES_LABELS } from "../BranchToolbar.logic";
+import { WORKTREE_SUBMODULES_LABELS } from "../BranchToolbar.logic";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
-import { runtimeModeConfig, runtimeModeOptions } from "../chat/runtimeModeConfig";
+import {
+  localizedRuntimeMode,
+  runtimeModeConfig,
+  runtimeModeOptions,
+} from "../chat/runtimeModeConfig";
 import { PULL_REQUEST_MERGE_METHOD_LABELS } from "../pullRequest/pullRequestDetail.logic";
 import { TraitsPicker } from "../chat/TraitsPicker";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -146,12 +150,16 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
         isProjectScope
           ? t("settings.defaults.modelProject")
           : !unavailable && modelSource !== "project" && automaticModel
-            ? "Default model for new threads, selected automatically. Projects can override it."
+            ? t("settings.defaults.automaticModel")
             : t("settings.defaults.modelEnvironment")
       }
       status={
         mixedModel
-          ? `${automaticModel ? "Automatic defaults differ." : "Defaults differ."} Select one environment or choose a shared model to edit effort.`
+          ? t(
+              automaticModel
+                ? "settings.defaults.automaticEffortMixed"
+                : "settings.defaults.effortMixed",
+            )
           : effortDisabledReason
       }
       resetAction={
@@ -174,7 +182,11 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               modelOptionsByInstance={modelOptions}
               triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
               {...(mixedModel
-                ? { triggerLabel: automaticModel ? "Automatic (mixed)" : t("settings.mixed") }
+                ? {
+                    triggerLabel: automaticModel
+                      ? t("settings.defaults.automaticModelMixed")
+                      : t("settings.mixed"),
+                  }
                 : {})}
               getModelDisabledReason={modelDisabledReason}
               onOpenProviderSetup={(instanceId) => {
@@ -219,8 +231,8 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       title={t("projectSettings.workspace")}
       description={
         isProjectScope
-          ? "Where new threads in this project start."
-          : "Where new threads start. Projects and their t3.json can override it."
+          ? t("settings.defaults.workspaceProjectLocation")
+          : t("settings.defaults.workspaceEnvironmentLocation")
       }
       resetAction={
         !isProjectScope && settings.defaultThreadEnvMode !== null ? (
@@ -242,7 +254,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             <SelectValue>
               {(value: string | null) =>
                 value === "local" || value === "worktree"
-                  ? resolveEnvModeLabel(value)
+                  ? t(value === "local" ? "branch.mode.currentCheckout" : "branch.mode.newWorktree")
                   : unavailable
                     ? t("settings.unavailable")
                     : t("settings.mixed")
@@ -250,8 +262,8 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
             </SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
-            <SelectItem value="local">{resolveEnvModeLabel("local")}</SelectItem>
-            <SelectItem value="worktree">{resolveEnvModeLabel("worktree")}</SelectItem>
+            <SelectItem value="local">{t("branch.mode.currentCheckout")}</SelectItem>
+            <SelectItem value="worktree">{t("branch.mode.newWorktree")}</SelectItem>
           </SelectPopup>
         </Select>
       }
@@ -263,12 +275,12 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
       serverScoped
       settingKeys={["fallbackModelSelection"]}
       mixed={mixedFallback}
-      {...searchableSetting("fallback-model")}
-      description="Used for new threads when the default model's provider is out of usage."
+      {...searchableSetting("fallback-model", t)}
+      description={t("settings.defaults.fallbackDescription")}
       resetAction={
         mixedFallback || settings.fallbackModelSelection !== null ? (
           <SettingResetButton
-            label="fallback model"
+            label={t("settings.search.fallbackModel")}
             onClick={() => updateSettings({ fallbackModelSelection: null })}
           />
         ) : null
@@ -284,11 +296,11 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
               instanceEntries={entries}
               modelOptionsByInstance={fallbackModelOptions}
               triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-              triggerAriaLabel="Fallback model"
+              triggerAriaLabel={t("settings.search.fallbackModel")}
               {...(mixedFallback
                 ? { triggerLabel: t("settings.mixed") }
                 : settings.fallbackModelSelection === null
-                  ? { triggerLabel: "None" }
+                  ? { triggerLabel: t("settings.defaults.noFallback") }
                   : {})}
               getModelDisabledReason={modelDisabledReason}
               onInstanceModelChange={(instanceId, model) => {
@@ -296,7 +308,7 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                 if (reason) {
                   toastManager.add({
                     type: "error",
-                    title: "Fallback model not saved",
+                    title: t("settings.defaults.fallbackNotSaved"),
                     description: reason,
                   });
                   return;
@@ -386,12 +398,12 @@ export function ProjectDefaultsSettings({ category }: { category: ProjectSetting
                   <SelectValue>
                     {mixedPermissions
                       ? t("settings.mixed")
-                      : runtimeModeConfig[settings.defaultRuntimeMode].label}
+                      : localizedRuntimeMode(settings.defaultRuntimeMode, t).label}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
                   {runtimeModeOptions.map((mode) => {
-                    const option = runtimeModeConfig[mode];
+                    const option = localizedRuntimeMode(mode, t);
                     const Icon = option.icon;
                     const managedReason = firstManagedDenial(
                       connectedEnvironments.map(

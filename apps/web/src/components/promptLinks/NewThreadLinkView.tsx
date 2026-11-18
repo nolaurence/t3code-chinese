@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   getAddProjectInitialQuery,
@@ -236,8 +237,9 @@ export function NewThreadLinkView({ link }: { readonly link: NewThreadLink }) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Clone failed",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: translateCurrent("commandPalette.cloneFailed"),
+            description:
+              error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
           }),
         );
       }

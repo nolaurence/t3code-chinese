@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import {
   HTML_RENDER_COLUMN_WIDTH,
@@ -95,8 +96,10 @@ export function HtmlRenderFrame(props: {
                       else
                         toastManager.add({
                           type: "error",
-                          title: "Page unavailable",
-                          description: "Reconnect to the environment and try again.",
+                          title: translateCurrent("toast.feedback.pageUnavailable"),
+                          description: translateCurrent(
+                            "toast.feedback.reconnectToTheEnvironmentAnd",
+                          ),
                         });
                     }}
                   />

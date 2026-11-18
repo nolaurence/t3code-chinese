@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { findErrorTraceId } from "@t3tools/client-runtime/errors";
 import {
   type EnvironmentConnectionPresentation,
@@ -154,8 +155,8 @@ export function CloudEnvironmentConnectRows({
       toastManager.add({
         type: "success",
         title: savedWithoutRelay.has(environment.environmentId)
-          ? "T3 Connect route added"
-          : "Environment added",
+          ? translateCurrent("toast.feedback.t3ConnectRouteAdded")
+          : translateCurrent("cloud.environmentAdded"),
         description: savedWithoutRelay.has(environment.environmentId)
           ? `${environment.label} falls back to T3 Connect when its other routes are unreachable.`
           : `Connecting to ${environment.label} through T3 Connect.`,
@@ -172,12 +173,12 @@ export function CloudEnvironmentConnectRows({
     console.error("[t3-connect] Could not connect environment", { message, traceId, cause });
     toastManager.add({
       type: "error",
-      title: "Could not connect environment",
+      title: translateCurrent("cloud.connectFailed"),
       description: message,
       data: traceId
         ? {
             secondaryActionProps: {
-              children: "Copy trace ID",
+              children: translateCurrent("common.copyTraceId"),
               onClick: () => void navigator.clipboard?.writeText(traceId),
             },
           }

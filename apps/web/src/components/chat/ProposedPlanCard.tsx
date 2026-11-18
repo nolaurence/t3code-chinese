@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { proposedPlanTitle, stripDisplayedPlanMarkdown } from "@t3tools/shared/proposedPlanText";
 import { memo, useState, useId } from "react";
 import { findRevealRef } from "./markdownFindContext";
@@ -67,8 +68,11 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Could not copy plan",
-          description: error instanceof Error ? error.message : "An error occurred while copying.",
+          title: translateCurrent("chat.plan.copyFailed"),
+          description:
+            error instanceof Error
+              ? error.message
+              : translateCurrent("chat.plan.copyFailedDescription"),
         }),
       );
     },
@@ -101,8 +105,8 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Workspace path is unavailable",
-          description: "This thread does not have a workspace path to save into.",
+          title: translateCurrent("chat.plan.pathMissing"),
+          description: translateCurrent("chat.plan.pathMissingDescription"),
         }),
       );
       return;
@@ -118,7 +122,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
     if (!relativePath) {
       toastManager.add({
         type: "warning",
-        title: "Enter a workspace path",
+        title: translateCurrent("chat.plan.pathPrompt"),
       });
       return;
     }
@@ -139,7 +143,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
         setIsSaveDialogOpen(false);
         toastManager.add({
           type: "success",
-          title: "Plan saved to workspace",
+          title: translateCurrent("chat.plan.saved"),
           description: result.value.relativePath,
         });
         return;
@@ -149,8 +153,11 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not save plan",
-            description: error instanceof Error ? error.message : "An error occurred while saving.",
+            title: translateCurrent("chat.plan.saveFailed"),
+            description:
+              error instanceof Error
+                ? error.message
+                : translateCurrent("chat.plan.saveFailedDescription"),
           }),
         );
       }

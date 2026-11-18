@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAuth } from "@clerk/react";
 import { useAtomValue } from "@effect/atom-react";
 import type {
@@ -165,8 +166,8 @@ export function WelcomePage({
       toastManager.add({
         id: "welcome-finishing",
         type: "info",
-        title: "Finishing setup",
-        description: "One moment.",
+        title: translateCurrent("toast.feedback.finishingSetup"),
+        description: translateCurrent("toast.feedback.oneMoment"),
       });
       return true;
     },
@@ -202,7 +203,7 @@ export function WelcomePage({
         if (importWarning) {
           toastManager.add({
             type: "warning",
-            title: "Some history was not imported",
+            title: translateCurrent("toast.feedback.someHistoryWasNotImported"),
             description: importWarning,
             timeout: 0,
           });
@@ -1077,7 +1078,7 @@ function OnboardingCodexSetup({
           const cause = squashAtomCommandFailure(result);
           toastManager.add({
             type: "error",
-            title: "Could not save Codex setup",
+            title: translateCurrent("toast.feedback.couldNotSaveCodexSetup"),
             ...(cause instanceof Error ? { description: cause.message } : {}),
           });
         }

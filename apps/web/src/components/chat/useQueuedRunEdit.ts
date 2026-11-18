@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import {
   makeQueuedRunEditStore,
@@ -277,7 +278,7 @@ export function useQueuedRunEdit(input: {
           toastManager.add(
             stackedThreadToast({
               type: recovery === "kept" ? "info" : "warning",
-              title: "Queued message is no longer queued",
+              title: translateCurrent("toast.feedback.queuedMessageIsNoLonger"),
               description:
                 recovery === "kept"
                   ? `Your unsaved edit${where} was kept in the composer.`

@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   type EnvironmentId,
   type ProjectId,
@@ -89,8 +90,9 @@ export function useThreadLinkedPullRequest(input: {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Unable to update the thread pull request",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: translateCurrent("toast.feedback.unableToUpdateTheThread"),
+          description:
+            error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
         }),
       );
     });

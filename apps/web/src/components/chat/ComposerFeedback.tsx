@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   codexFeedbackNotice,
   type CodexFeedbackSubmission,
@@ -31,8 +32,11 @@ export function feedbackBannerItem(
               (error: unknown) => {
                 toastManager.add({
                   type: "error",
-                  title: "Could not copy thread ID",
-                  description: error instanceof Error ? error.message : "An error occurred.",
+                  title: translateCurrent("chat.feedback.copyFailed"),
+                  description:
+                    error instanceof Error
+                      ? error.message
+                      : translateCurrent("common.errorGeneric"),
                 });
               },
             );

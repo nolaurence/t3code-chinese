@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   isModifierPairShortcut,
   type DesktopCaptureConfigApplied,
@@ -121,7 +122,7 @@ export function CaptureShortcutConfig({
       if (!applied.warning && preview.operation === "install" && onComplete) {
         toastManager.add({
           type: "success",
-          title: "Shortcut saved",
+          title: translateCurrent("snapShot.shortcutSaved"),
           description: `Use ${preview.shortcut} from another app.`,
         });
         await onComplete();

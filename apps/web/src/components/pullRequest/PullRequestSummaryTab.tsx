@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { parsePullRequestAnchor } from "@t3tools/shared/pullRequestAnchor";
 import { holdLinkedNodeInView } from "./holdLinkedNodeInView";
 import { useAtomValue } from "@effect/atom-react";
@@ -547,7 +548,10 @@ export function PullRequestSummaryTab({
   const openCheck = (url: string) => {
     void openLink(url).catch((error: unknown) => {
       console.error(error);
-      toastManager.add({ type: "error", title: "Unable to open check details" });
+      toastManager.add({
+        type: "error",
+        title: translateCurrent("toast.feedback.unableToOpenCheckDetails"),
+      });
     });
   };
 
@@ -643,7 +647,11 @@ export function PullRequestSummaryTab({
     descriptionSavesRunning.current -= 1;
     const saved = result._tag === "Success";
     setDescriptionDraft((draft) => settleDescriptionSave(draft, key, saved));
-    if (!saved) toastManager.add({ type: "error", title: "Could not save the description" });
+    if (!saved)
+      toastManager.add({
+        type: "error",
+        title: translateCurrent("pullRequest.description.saveFailed"),
+      });
     if (descriptionSavesRunning.current === 0) onRefresh();
     return saved;
   };
@@ -676,7 +684,10 @@ export function PullRequestSummaryTab({
       });
       setCommentSaving(false);
       if (result._tag === "Failure") {
-        toastManager.add({ type: "error", title: "Could not save the comment" });
+        toastManager.add({
+          type: "error",
+          title: translateCurrent("pullRequest.comment.saveFailed"),
+        });
         return;
       }
       setCommentScope(null);

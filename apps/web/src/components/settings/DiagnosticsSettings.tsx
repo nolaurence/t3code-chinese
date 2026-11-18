@@ -45,8 +45,7 @@ import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { TelemetryExportSettings } from "./TelemetryExportSettings";
-import { useI18n, type Translate } from "../../i18n";
-
+import { translateCurrent, useI18n, type Translate } from "../../i18n";
 
 const NUMBER_FORMAT = new Intl.NumberFormat();
 
@@ -232,7 +231,9 @@ function TraceIdCell({ traceId }: { traceId: string }) {
             </Button>
           }
         />
-        <TooltipPopup side="top">{copied ? t("diagnostics.copied") : t("diagnostics.copyFullTrace")}</TooltipPopup>
+        <TooltipPopup side="top">
+          {copied ? t("diagnostics.copied") : t("diagnostics.copyFullTrace")}
+        </TooltipPopup>
       </Tooltip>
     </div>
   );
@@ -251,7 +252,7 @@ function formatProcessType(process: ServerProcessDiagnosticsEntry, t?: Translate
   if (/\b(codex|claude|opencode|cursor)\b/i.test(process.command)) {
     return t?.("diagnostics.process.agent") ?? "Agent";
   }
-  return "Process";
+  return translateCurrent("diagnostics.column.process");
 }
 
 function ProcessNameCell({
@@ -276,7 +277,11 @@ function ProcessNameCell({
         <Button
           size="icon-micro"
           variant="ghost-muted"
-          aria-label={isExpanded ? t("diagnostics.process.collapse", { name }) : t("diagnostics.process.expand", { name })}
+          aria-label={
+            isExpanded
+              ? t("diagnostics.process.collapse", { name })
+              : t("diagnostics.process.expand", { name })
+          }
           onClick={() => onToggle(process.pid)}
         >
           {isExpanded ? (
@@ -375,11 +380,15 @@ function ProcessDiagnosticsTable({
             <tr>
               <th className="px-4 py-2 font-semibold sm:pl-5">{t("diagnostics.column.name")}</th>
               <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.cpu")}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.memory")}</th>
+              <th className="px-3 py-2 text-right font-semibold">
+                {t("diagnostics.column.memory")}
+              </th>
               <th className="px-3 py-2 font-semibold">{t("diagnostics.column.command")}</th>
               <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.pid")}</th>
               <th className="px-3 py-2 font-semibold">{t("diagnostics.column.type")}</th>
-              <th className="p-2 text-right font-semibold sm:pr-4">{t("diagnostics.column.kill")}</th>
+              <th className="p-2 text-right font-semibold sm:pr-4">
+                {t("diagnostics.column.kill")}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -514,7 +523,10 @@ function ProcessResourceHistoryChart({
                   <div className="flex h-full min-w-1 flex-1 items-end">
                     <div
                       className="relative h-full w-full"
-                      aria-label={t("diagnostics.resource.cpuSummary", { average: bucket.avgCpuPercent.toFixed(1), peak: bucket.maxCpuPercent.toFixed(1) })}
+                      aria-label={t("diagnostics.resource.cpuSummary", {
+                        average: bucket.avgCpuPercent.toFixed(1),
+                        peak: bucket.maxCpuPercent.toFixed(1),
+                      })}
                     >
                       <div
                         className="absolute inset-x-0 bottom-0 rounded-t-sm bg-foreground/15 transition-colors"
@@ -602,14 +614,24 @@ function ProcessResourceHistoryTable({
           </colgroup>
           <thead className="sticky top-0 z-10 border-b border-border/60 bg-card text-2xs uppercase tracking-widest text-muted-foreground/70">
             <tr>
-              <th className="px-4 py-2 font-semibold sm:pl-5">Process</th>
-              <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.cpuTime")}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.current")}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.average")}</th>
+              <th className="px-4 py-2 font-semibold sm:pl-5">{t("diagnostics.column.process")}</th>
+              <th className="px-3 py-2 text-right font-semibold">
+                {t("diagnostics.column.cpuTime")}
+              </th>
+              <th className="px-3 py-2 text-right font-semibold">
+                {t("diagnostics.column.current")}
+              </th>
+              <th className="px-3 py-2 text-right font-semibold">
+                {t("diagnostics.column.average")}
+              </th>
               <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.peak")}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t("diagnostics.column.maxMemory")}</th>
+              <th className="px-3 py-2 text-right font-semibold">
+                {t("diagnostics.column.maxMemory")}
+              </th>
               <th className="px-3 py-2 font-semibold">{t("diagnostics.column.command")}</th>
-              <th className="px-3 py-2 text-right font-semibold sm:pr-5">{t("diagnostics.column.pid")}</th>
+              <th className="px-3 py-2 text-right font-semibold sm:pr-5">
+                {t("diagnostics.column.pid")}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
@@ -678,17 +700,25 @@ function DiagnosticsLastChecked({ checkedAt }: { checkedAt: DateTime.Utc | null 
   }
 
   if (relative.status === "invalid") {
-    return <span className="text-2xs text-muted-foreground/50">{t("diagnostics.checkedUnavailable")}</span>;
+    return (
+      <span className="text-2xs text-muted-foreground/50">
+        {t("diagnostics.checkedUnavailable")}
+      </span>
+    );
   }
 
   return (
     <span className="text-2xs text-muted-foreground/60">
       {relative.suffix ? (
         <>
-          Checked <span className="font-mono tabular-nums">{relative.value}</span> {relative.suffix}
+          {t("providers.checked") + " "}
+          <span className="font-mono tabular-nums">{relative.value}</span> {relative.suffix}
         </>
       ) : (
-        <>Checked {relative.value}</>
+        <>
+          {t("providers.checked") + " "}
+          {relative.value}
+        </>
       )}
     </span>
   );
@@ -992,9 +1022,7 @@ function DiagnosticsSettingsBody() {
           signalingPid={signalingPid}
           onSignal={signalProcess}
           emptyLabel={
-            isProcessInitialLoading
-              ? t("diagnostics.live.loading")
-              : t("diagnostics.process.empty")
+            isProcessInitialLoading ? t("diagnostics.live.loading") : t("diagnostics.process.empty")
           }
         />
       </SettingsSection>
@@ -1103,7 +1131,10 @@ function DiagnosticsSettingsBody() {
         }
       >
         <StatsGrid>
-          <StatBlock label={t("diagnostics.trace.spans")} value={data ? formatCount(data.recordCount) : "..."} />
+          <StatBlock
+            label={t("diagnostics.trace.spans")}
+            value={data ? formatCount(data.recordCount) : "..."}
+          />
           <StatBlock
             label={t("diagnostics.trace.failures")}
             value={data ? formatCount(data.failureCount) : "..."}
@@ -1143,7 +1174,9 @@ function DiagnosticsSettingsBody() {
                 <AlertTriangleIcon className="size-3.5 h-lh shrink-0" />
                 <span>
                   {traceDiagnosticsPartialFailure
-                    ? t("diagnostics.trace.partialFailure", { error: traceDiagnosticsError.message })
+                    ? t("diagnostics.trace.partialFailure", {
+                        error: traceDiagnosticsError.message,
+                      })
                     : traceDiagnosticsError.message}
                 </span>
               </div>
@@ -1160,7 +1193,14 @@ function DiagnosticsSettingsBody() {
 
       <SettingsSection title={t("diagnostics.failures.latest")}>
         {data && data.latestFailures.length > 0 ? (
-          <DiagnosticsTable headers={[t("diagnostics.column.span"), t("diagnostics.column.cause"), t("diagnostics.column.duration"), t("diagnostics.column.ended")]}>
+          <DiagnosticsTable
+            headers={[
+              t("diagnostics.column.span"),
+              t("diagnostics.column.cause"),
+              t("diagnostics.column.duration"),
+              t("diagnostics.column.ended"),
+            ]}
+          >
             {data.latestFailures.map((failure) => (
               <tr key={`${failure.traceId}:${failure.spanId}`}>
                 <td className="px-4 py-3 align-top text-xs font-medium text-foreground first:sm:pl-5">
@@ -1179,14 +1219,23 @@ function DiagnosticsSettingsBody() {
             ))}
           </DiagnosticsTable>
         ) : (
-          <EmptyRows label={isInitialLoading ? t("diagnostics.failures.loading") : t("diagnostics.failures.empty")} />
+          <EmptyRows
+            label={
+              isInitialLoading ? t("diagnostics.failures.loading") : t("diagnostics.failures.empty")
+            }
+          />
         )}
       </SettingsSection>
 
       <SettingsSection title={t("diagnostics.failures.common")}>
         {data && data.commonFailures.length > 0 ? (
           <DiagnosticsTable
-            headers={[t("diagnostics.column.span"), t("diagnostics.column.count"), t("diagnostics.column.cause"), t("diagnostics.column.lastSeen")]}
+            headers={[
+              t("diagnostics.column.span"),
+              t("diagnostics.column.count"),
+              t("diagnostics.column.cause"),
+              t("diagnostics.column.lastSeen"),
+            ]}
             minTableWidth="min-w-[760px]"
           >
             {data.commonFailures.map((failure) => (
@@ -1208,7 +1257,11 @@ function DiagnosticsSettingsBody() {
           </DiagnosticsTable>
         ) : (
           <EmptyRows
-            label={isInitialLoading ? t("diagnostics.failures.groupsLoading") : t("diagnostics.failures.groupsEmpty")}
+            label={
+              isInitialLoading
+                ? t("diagnostics.failures.groupsLoading")
+                : t("diagnostics.failures.groupsEmpty")
+            }
           />
         )}
       </SettingsSection>
@@ -1216,7 +1269,12 @@ function DiagnosticsSettingsBody() {
       <SettingsSection title={t("diagnostics.spans.slowest")}>
         {data && data.slowestSpans.length > 0 ? (
           <DiagnosticsTable
-            headers={[t("diagnostics.column.span"), t("diagnostics.column.duration"), t("diagnostics.column.ended"), t("diagnostics.column.trace")]}
+            headers={[
+              t("diagnostics.column.span"),
+              t("diagnostics.column.duration"),
+              t("diagnostics.column.ended"),
+              t("diagnostics.column.trace"),
+            ]}
             minTableWidth="min-w-[900px]"
             columnWidths={["w-[44%]", "w-[14%]", "w-[12%]", "w-[30%]"]}
           >
@@ -1238,7 +1296,11 @@ function DiagnosticsSettingsBody() {
             ))}
           </DiagnosticsTable>
         ) : (
-          <EmptyRows label={isInitialLoading ? t("diagnostics.spans.loadingSlow") : t("diagnostics.spans.empty")} />
+          <EmptyRows
+            label={
+              isInitialLoading ? t("diagnostics.spans.loadingSlow") : t("diagnostics.spans.empty")
+            }
+          />
         )}
       </SettingsSection>
 
@@ -1261,11 +1323,21 @@ function DiagnosticsSettingsBody() {
               </colgroup>
               <thead className="border-b border-border/60 text-2xs uppercase tracking-widest text-muted-foreground/70">
                 <tr>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold sm:pl-5">{t("diagnostics.column.time")}</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">{t("diagnostics.column.level")}</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">{t("diagnostics.column.span")}</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">{t("diagnostics.column.message")}</th>
-                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold sm:pr-5">{t("diagnostics.column.trace")}</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold sm:pl-5">
+                    {t("diagnostics.column.time")}
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">
+                    {t("diagnostics.column.level")}
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">
+                    {t("diagnostics.column.span")}
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold">
+                    {t("diagnostics.column.message")}
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-2.5 font-semibold sm:pr-5">
+                    {t("diagnostics.column.trace")}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -1302,7 +1374,9 @@ function DiagnosticsSettingsBody() {
           </ScrollArea>
         ) : (
           <EmptyRows
-            label={isInitialLoading ? t("diagnostics.logs.loadingRecent") : t("diagnostics.logs.empty")}
+            label={
+              isInitialLoading ? t("diagnostics.logs.loadingRecent") : t("diagnostics.logs.empty")
+            }
           />
         )}
       </SettingsSection>
@@ -1310,7 +1384,13 @@ function DiagnosticsSettingsBody() {
       <SettingsSection title={t("diagnostics.spans.topNames")}>
         {data && data.topSpansByCount.length > 0 ? (
           <DiagnosticsTable
-            headers={[t("diagnostics.column.span"), t("diagnostics.column.count"), t("diagnostics.trace.failures"), t("diagnostics.column.average"), t("diagnostics.column.max")]}
+            headers={[
+              t("diagnostics.column.span"),
+              t("diagnostics.column.count"),
+              t("diagnostics.trace.failures"),
+              t("diagnostics.column.average"),
+              t("diagnostics.column.max"),
+            ]}
             minTableWidth="min-w-[760px]"
             columnWidths={["w-[48%]", "w-[13%]", "w-[13%]", "w-[13%]", "w-[13%]"]}
           >
@@ -1335,7 +1415,11 @@ function DiagnosticsSettingsBody() {
             ))}
           </DiagnosticsTable>
         ) : (
-          <EmptyRows label={isInitialLoading ? t("diagnostics.spans.loadingNames") : t("diagnostics.spans.empty")} />
+          <EmptyRows
+            label={
+              isInitialLoading ? t("diagnostics.spans.loadingNames") : t("diagnostics.spans.empty")
+            }
+          />
         )}
       </SettingsSection>
       {exportFormEnvironmentId === environmentId && <TelemetryExportSettings />}

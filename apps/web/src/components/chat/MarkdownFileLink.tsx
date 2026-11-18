@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAssetUrlState } from "../../assets/assetUrls";
 import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
 import {
@@ -90,8 +91,9 @@ export const MarkdownFileLink = memo(function MarkdownFileLink({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Unable to open file",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: translateCurrent("git.openFileFailed"),
+            description:
+              error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
           }),
         );
       } catch (cause) {
@@ -102,8 +104,9 @@ export const MarkdownFileLink = memo(function MarkdownFileLink({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Unable to open file",
-            description: cause instanceof Error ? cause.message : "An error occurred.",
+            title: translateCurrent("git.openFileFailed"),
+            description:
+              cause instanceof Error ? cause.message : translateCurrent("common.errorGeneric"),
           }),
         );
       }
@@ -140,8 +143,9 @@ export const MarkdownFileLink = memo(function MarkdownFileLink({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Unable to open file in browser",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: translateCurrent("files.openBrowserFailed"),
+            description:
+              error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
           }),
         );
       } catch (cause) {
@@ -152,8 +156,9 @@ export const MarkdownFileLink = memo(function MarkdownFileLink({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Unable to open file in browser",
-            description: cause instanceof Error ? cause.message : "An error occurred.",
+            title: translateCurrent("files.openBrowserFailed"),
+            description:
+              cause instanceof Error ? cause.message : translateCurrent("common.errorGeneric"),
           }),
         );
       }
@@ -178,8 +183,9 @@ export const MarkdownFileLink = memo(function MarkdownFileLink({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Unable to reveal file",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: translateCurrent("toast.feedback.unableToRevealFile"),
+            description:
+              error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
           }),
         );
       } catch (cause) {
@@ -190,8 +196,9 @@ export const MarkdownFileLink = memo(function MarkdownFileLink({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Unable to reveal file",
-            description: cause instanceof Error ? cause.message : "An error occurred.",
+            title: translateCurrent("toast.feedback.unableToRevealFile"),
+            description:
+              cause instanceof Error ? cause.message : translateCurrent("common.errorGeneric"),
           }),
         );
       }
@@ -204,7 +211,7 @@ export const MarkdownFileLink = memo(function MarkdownFileLink({
         stackedThreadToast({
           type: "error",
           title: `Failed to copy ${title.toLowerCase()}`,
-          description: "Clipboard API unavailable.",
+          description: translateCurrent("preview.error.clipboardUnavailable"),
         }),
       );
       return;
@@ -237,7 +244,8 @@ export const MarkdownFileLink = memo(function MarkdownFileLink({
           stackedThreadToast({
             type: "error",
             title: `Failed to copy ${title.toLowerCase()}`,
-            description: error instanceof Error ? error.message : "An error occurred.",
+            description:
+              error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
           }),
         );
       },

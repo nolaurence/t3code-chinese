@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { ChildThreadApprovals } from "./chat/ChildThreadApprovals";
 import { workspaceAreaProps } from "../lib/workspaceFocus";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
@@ -629,8 +630,8 @@ export default function ChatView(props: ChatViewProps) {
     if (!inserted) {
       toastManager.add({
         type: "warning",
-        title: "The composer is not ready",
-        description: "Try citing the selection after the connection or pending input is resolved.",
+        title: translateCurrent("toast.feedback.theComposerIsNotReady"),
+        description: translateCurrent("toast.feedback.tryCitingTheSelectionAfter"),
       });
     }
     return inserted;
@@ -1460,7 +1461,10 @@ export default function ChatView(props: ChatViewProps) {
   const downloadFileAttachment = async (attachment: ChatFileAttachment) => {
     const connection = readPreparedConnection(environmentId);
     if (!connection) {
-      toastManager.add({ type: "error", title: "The environment is not connected." });
+      toastManager.add({
+        type: "error",
+        title: translateCurrent("toast.feedback.theEnvironmentIsNotConnected"),
+      });
       return;
     }
 
@@ -1479,7 +1483,10 @@ export default function ChatView(props: ChatViewProps) {
       toastManager.add({
         type: "error",
         title: "Could not download " + attachment.name,
-        description: error instanceof Error ? error.message : "The attachment is unavailable.",
+        description:
+          error instanceof Error
+            ? error.message
+            : translateCurrent("toast.feedback.theAttachmentIsUnavailable"),
       });
     }
   };
@@ -1842,8 +1849,8 @@ export default function ChatView(props: ChatViewProps) {
     if (prompt !== null && !composer.insertTextAtEnd(prompt, { ensureLeadingBoundary: true })) {
       toastManager.add({
         type: "error",
-        title: "Unable to add to chat",
-        description: "The composer is busy; try again once it is ready.",
+        title: translateCurrent("files.addToChatFailed"),
+        description: translateCurrent("chat.composer.busyDescription"),
       });
       return;
     }
@@ -3243,7 +3250,7 @@ export default function ChatView(props: ChatViewProps) {
   } satisfies PanelLayoutControlsProps;
   const panelToggleControls = (
     <PanelLayoutControls
-{...panelToggleControlProps}
+      {...panelToggleControlProps}
       showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
       rightPanelSide={rightPanelSide}
       showPanelSideSwap={rightPanelOpen && !shouldUsePlanSidebarSheet}
@@ -3254,7 +3261,7 @@ export default function ChatView(props: ChatViewProps) {
   );
   const threadPanelHeaderControl = <ThreadPanelHeaderControl {...panelToggleControlProps} />;
   const panelLayoutControls = (
-<WorkspaceTitlebarControls
+    <WorkspaceTitlebarControls
       showMaximizeControl={!shouldUsePlanSidebarSheet}
       rightPanelOpen={rightPanelOpen}
       animationsActive={panelAnimationsActive}
@@ -3282,7 +3289,7 @@ export default function ChatView(props: ChatViewProps) {
     addFolders: addDroppedFoldersToComposer,
   });
 
-const content = (
+  const content = (
     <div
       ref={setWorkspaceLayoutElement}
       className={cn(
@@ -3300,7 +3307,9 @@ const content = (
           state={deviceState}
         />
       )}
-      {rightPanelControlsAtRoot && rightPanelSide !== "left" && !embedded ? panelLayoutControls : null}
+      {rightPanelControlsAtRoot && rightPanelSide !== "left" && !embedded
+        ? panelLayoutControls
+        : null}
       <div
         className={cn(
           "flex min-h-0 min-w-0 flex-col overflow-x-hidden",
@@ -3964,19 +3973,19 @@ const content = (
           getShortcutContext={getShortcutContextStable}
           maximized={rightPanelMaximized}
           layoutControls={
-            shouldUsePlanSidebarSheet
-              ? rightPanelOpen
-                ? (
-                    <div className="mr-px flex items-center gap-1">
-                      <RightPanelMaximizeControl
-                        maximized={rightPanelMaximized}
-                        onToggle={toggleRightPanelMaximizedStable}
-                      />
-                      {panelToggleControls}
-                    </div>
-                  )
-                : null
-              : panelLayoutControlsInPanel
+            shouldUsePlanSidebarSheet ? (
+              rightPanelOpen ? (
+                <div className="mr-px flex items-center gap-1">
+                  <RightPanelMaximizeControl
+                    maximized={rightPanelMaximized}
+                    onToggle={toggleRightPanelMaximizedStable}
+                  />
+                  {panelToggleControls}
+                </div>
+              ) : null
+            ) : (
+              panelLayoutControlsInPanel
+            )
           }
           surfaces={renderedRightPanelSurfaces}
           environmentId={activeThreadRef.environmentId}

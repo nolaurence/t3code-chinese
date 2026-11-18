@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { translate } from "../i18n/messages";
 
 import {
   createThreadNotificationGate,
   RELEASED_COMPLETION_GRACE_MS,
+  threadNotificationTitleKey,
   type ThreadNotificationObservation,
 } from "./ThreadNotificationCoordinator.logic";
 
@@ -26,6 +28,18 @@ const woke = (at: number): ThreadNotificationObservation => ({
   backgroundWake: true,
 });
 const visible = { archived: false, quiet: false };
+
+it("selects localized attention titles without losing the completion precedence", () => {
+  expect(translate("zh-CN", threadNotificationTitleKey("input", "approval"))).toBe(
+    "\u9700\u8981\u5ba1\u6279",
+  );
+  expect(translate("zh-CN", threadNotificationTitleKey("input", "limited"))).toBe(
+    "\u5df2\u8fbe\u5230\u7528\u91cf\u9650\u5236",
+  );
+  const completedTitle = threadNotificationTitleKey("completion", "approval");
+  expect(translate("zh-CN", completedTitle)).toBe("\u4efb\u52a1\u5df2\u5b8c\u6210");
+  expect(translate("en", completedTitle)).toBe("Thread completed");
+});
 
 function fakeTimers(): Disposable {
   vi.useFakeTimers();

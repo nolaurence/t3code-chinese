@@ -36,7 +36,7 @@ export function snapShotSetupSummary(
       ? (t?.("snapShot.checkAccessInSetup") ?? "Check capture access in setup")
       : (t?.("snapShot.installHelperToContinue") ?? "Install the capture helper to continue");
   if (captureSetupBackend(state) === "picker")
-    return t?.("snapShot.manualOnly") ?? "Manual capture only — you'll choose a window each time";
+    return t?.("snapShot.manualOnly") ?? "Manual capture only. You'll choose a window each time";
   if (!enabled) return t?.("snapShot.enableToContinue") ?? "Enable capture to continue";
   if (state.shortcutPending)
     return state.linuxBackend === "hyprland"

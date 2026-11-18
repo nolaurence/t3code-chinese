@@ -10,6 +10,7 @@ export {
 export {
   createTranslator,
   translate,
+  translateCurrent,
   type MessageKey,
   type Translate,
   type TranslateValues,

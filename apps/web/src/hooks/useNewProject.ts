@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   getNewProjectRepository,
@@ -81,7 +82,7 @@ export function useNewProject() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not create the project",
+            title: translateCurrent("toast.feedback.couldNotCreateTheProject"),
             description: errorMessage(squashAtomCommandFailure(result)),
           }),
         );
@@ -115,7 +116,7 @@ export function useNewProject() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Failed to open project",
+          title: translateCurrent("commandPalette.openProjectFailed"),
           description: `${errorMessage(error)} It will appear in the sidebar once this client catches up.`,
         }),
       );
@@ -126,7 +127,7 @@ export function useNewProject() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Failed to open project",
+          title: translateCurrent("commandPalette.openProjectFailed"),
           description: errorMessage(error),
         }),
       );

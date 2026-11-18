@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useRef } from "react";
 
 import { APP_VERSION } from "../../branding";
@@ -16,7 +17,7 @@ export function AboutVersionTitle() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Could not copy version",
+          title: translateCurrent("toast.feedback.couldNotCopyVersion"),
           description: error.message,
         }),
       );

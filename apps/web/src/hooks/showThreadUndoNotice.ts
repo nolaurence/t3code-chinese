@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
@@ -94,7 +95,8 @@ function refreshNotice() {
               stackedThreadToast({
                 type: "error",
                 title: failureTitle,
-                description: error instanceof Error ? error.message : "An error occurred.",
+                description:
+                  error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
               }),
             );
           };

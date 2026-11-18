@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   parsePullRequestAnchor,
   pullRequestAnchorMatchesUrl,
@@ -259,7 +260,10 @@ function ConversationCard({
     });
     setSaving(false);
     if (result._tag === "Failure") {
-      toastManager.add({ type: "error", title: "Could not save the comment" });
+      toastManager.add({
+        type: "error",
+        title: translateCurrent("pullRequest.comment.saveFailed"),
+      });
       return;
     }
     setEditing(false);

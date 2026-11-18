@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import { threadKey } from "@t3tools/client-runtime/state/entities";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
@@ -629,7 +630,7 @@ export function ThreadRelationshipsPanel(props: {
     if (result._tag === "Failure") {
       mergeErrorToastId.current = toastManager.add({
         type: "error",
-        title: "Could not merge back",
+        title: translateCurrent("toast.feedback.couldNotMergeBack"),
       });
       return;
     }
@@ -651,7 +652,7 @@ export function ThreadRelationshipsPanel(props: {
     if (result._tag === "Failure") {
       detachErrorToastId.current = toastManager.add({
         type: "error",
-        title: "Could not disconnect agent session",
+        title: translateCurrent("toast.feedback.couldNotDisconnectAgentSession"),
       });
     }
   };
@@ -668,7 +669,10 @@ export function ThreadRelationshipsPanel(props: {
     });
     setStoppingId(null);
     if (result._tag === "Failure") {
-      toastManager.add({ type: "error", title: "Could not stop subagent" });
+      toastManager.add({
+        type: "error",
+        title: translateCurrent("toast.feedback.couldNotStopSubagent"),
+      });
     }
   };
 
@@ -681,7 +685,10 @@ export function ThreadRelationshipsPanel(props: {
     });
     setStoppingId(null);
     if (result._tag === "Failure") {
-      toastManager.add({ type: "error", title: "Could not stop workflow" });
+      toastManager.add({
+        type: "error",
+        title: translateCurrent("toast.feedback.couldNotStopWorkflow"),
+      });
     }
   };
 

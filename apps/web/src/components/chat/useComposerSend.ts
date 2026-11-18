@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { isClearComposerCommand, parseSideChatCommand } from "@t3tools/shared/composerTrigger";
 import { armFreshSession, disarmFreshSession, readFreshSessionArm } from "./freshSessionArms";
 import {
@@ -395,8 +396,8 @@ export function useComposerSend(input: ComposerSendInput) {
       toastManager.add(
         stackedThreadToast({
           type: "info",
-          title: "Annotation attached to draft",
-          description: "Sending is unavailable right now. Finish the current action, then send.",
+          title: translateCurrent("chat.annotation.attached"),
+          description: translateCurrent("chat.annotation.sendUnavailable"),
         }),
       );
     };
@@ -435,8 +436,8 @@ export function useComposerSend(input: ComposerSendInput) {
       toastManager.add({
         ...stackedThreadToast({
           type: "warning",
-          title: "Not connected: message not sent",
-          description: "Reconnecting to the environment. Try again once it is connected.",
+          title: translateCurrent("chat.message.notSentDisconnected"),
+          description: translateCurrent("chat.message.reconnecting"),
         }),
         id: `chat-send-environment-unavailable:${toastSlot}`,
       });
@@ -455,7 +456,7 @@ export function useComposerSend(input: ComposerSendInput) {
       toastManager.add(
         stackedThreadToast({
           type: "warning",
-          title: "Side chat not started",
+          title: translateCurrent("toast.feedback.sideChatNotStarted"),
           description: sideChatDisabledReason,
         }),
       );
@@ -474,8 +475,8 @@ export function useComposerSend(input: ComposerSendInput) {
         toastManager.add(
           stackedThreadToast({
             type: "warning",
-            title: "Side chats take text only",
-            description: "Remove the attachments and context, then send it again.",
+            title: translateCurrent("toast.feedback.sideChatsTakeTextOnly"),
+            description: translateCurrent("toast.feedback.removeTheAttachmentsAndContext"),
           }),
         );
         return;
@@ -530,9 +531,8 @@ export function useComposerSend(input: ComposerSendInput) {
       toastManager.add(
         stackedThreadToast({
           type: "warning",
-          title: "Choose models and a base branch",
-          description:
-            "Multiple models need a new thread in a Git project. Each gets its own worktree.",
+          title: translateCurrent("toast.feedback.chooseModelsAndABase"),
+          description: translateCurrent("toast.feedback.multipleModelsNeedANew"),
         }),
       );
       return;
@@ -578,7 +578,7 @@ export function useComposerSend(input: ComposerSendInput) {
       toastManager.add(
         stackedThreadToast({
           type: "warning",
-          title: "Attached thread is on another machine",
+          title: translateCurrent("toast.feedback.attachedThreadIsOnAnother"),
           description: `This machine's agent can't read "${strandedThread.title}". Remove it, or switch back to ${owner} to send.`,
         }),
       );
@@ -633,8 +633,8 @@ export function useComposerSend(input: ComposerSendInput) {
         toastManager.add(
           stackedThreadToast({
             type: "warning",
-            title: "Start a Codex thread first",
-            description: "Send a message before you submit feedback.",
+            title: translateCurrent("chat.feedback.startFirst"),
+            description: translateCurrent("chat.feedback.startFirstDescription"),
           }),
         );
         return;
@@ -711,8 +711,8 @@ export function useComposerSend(input: ComposerSendInput) {
       toastManager.add(
         stackedThreadToast({
           type: "warning",
-          title: "Choose a project first",
-          description: "This draft no longer points to an available project.",
+          title: translateCurrent("chat.project.chooseFirst"),
+          description: translateCurrent("chat.project.draftUnavailable"),
         }),
       );
       return;
@@ -1031,7 +1031,7 @@ export function useComposerSend(input: ComposerSendInput) {
           toastManager.add({
             type: "info",
             title: notice,
-            description: "Send again when it's ready.",
+            description: translateCurrent("toast.feedback.sendAgainWhenItsReady"),
           });
         }
         return;
@@ -1271,7 +1271,7 @@ export function useComposerSend(input: ComposerSendInput) {
           toastManager.add(
             stackedThreadToast({
               type: "warning",
-              title: "Could not open a fresh composer",
+              title: translateCurrent("toast.feedback.couldNotOpenAFresh"),
               description: error instanceof Error ? error.message : undefined,
             }),
           );
@@ -1302,10 +1302,10 @@ export function useComposerSend(input: ComposerSendInput) {
             toastManager.add(
               stackedThreadToast({
                 type: "success",
-                title: "Started in background",
+                title: translateCurrent("chat.background.started"),
                 timeout: 5_000,
                 actionProps: {
-                  children: "Open",
+                  children: translateCurrent("chat.open"),
                   onClick: () => {
                     void navigate({
                       to: "/$environmentId/$threadId",
@@ -1376,11 +1376,12 @@ export function useComposerSend(input: ComposerSendInput) {
               type: "error",
               title:
                 submissionIntent === "background"
-                  ? "Background task failed"
-                  : "Could not start thread",
-              description: error instanceof Error ? error.message : "Failed to send message.",
+                  ? translateCurrent("toast.feedback.backgroundTaskFailed")
+                  : translateCurrent("toast.feedback.couldNotStartThread"),
+              description:
+                error instanceof Error ? error.message : translateCurrent("chat.error.sendFailed"),
               actionProps: {
-                children: "Open draft",
+                children: translateCurrent("toast.feedback.openDraft"),
                 onClick: () => {
                   void navigate({ to: "/draft/$draftId", params: { draftId } });
                 },

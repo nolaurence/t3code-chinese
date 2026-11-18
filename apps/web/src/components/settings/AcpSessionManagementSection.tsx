@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   AuthOrchestrationOperateScope,
   AuthProvidersManageScope,
@@ -40,7 +41,10 @@ function reportFailure(title: string, result: AtomCommandResult<unknown, unknown
   toastManager.add({
     type: "error",
     title,
-    description: error instanceof Error ? error.message : "The ACP operation failed.",
+    description:
+      error instanceof Error
+        ? error.message
+        : translateCurrent("toast.feedback.theACPOperationFailed"),
   });
 }
 
@@ -229,7 +233,9 @@ function InstanceSessionManagement(
       );
       toastManager.add({
         type: "success",
-        title: result.value.imported ? "ACP session imported" : "ACP session already imported",
+        title: result.value.imported
+          ? translateCurrent("toast.feedback.aCPSessionImported")
+          : translateCurrent("toast.feedback.aCPSessionAlreadyImported"),
       });
       return;
     }
@@ -261,7 +267,10 @@ function InstanceSessionManagement(
       setSessions((current) =>
         current.filter((candidate) => candidate.sessionId !== session.sessionId),
       );
-      toastManager.add({ type: "success", title: "ACP session deleted" });
+      toastManager.add({
+        type: "success",
+        title: translateCurrent("toast.feedback.aCPSessionDeleted"),
+      });
       return;
     }
     reportFailure("Could not delete ACP session", result);
@@ -313,7 +322,7 @@ function InstanceSessionManagement(
     if (!parsedHeaders.ok) {
       toastManager.add({
         type: "error",
-        title: "Invalid provider headers",
+        title: translateCurrent("toast.feedback.invalidProviderHeaders"),
         description: parsedHeaders.error,
       });
       return;
@@ -334,7 +343,10 @@ function InstanceSessionManagement(
     if (generation !== projectGeneration.current) return;
     setSavingProviderId(null);
     if (result._tag === "Success") {
-      toastManager.add({ type: "success", title: "ACP provider configured" });
+      toastManager.add({
+        type: "success",
+        title: translateCurrent("toast.feedback.aCPProviderConfigured"),
+      });
       await loadProviders(provider.providerId);
       return;
     }
@@ -363,7 +375,10 @@ function InstanceSessionManagement(
     if (generation !== projectGeneration.current) return;
     setSavingProviderId(null);
     if (result._tag === "Success") {
-      toastManager.add({ type: "success", title: "ACP provider disabled" });
+      toastManager.add({
+        type: "success",
+        title: translateCurrent("toast.feedback.aCPProviderDisabled"),
+      });
       await loadProviders(provider.providerId);
       return;
     }
@@ -381,7 +396,10 @@ function InstanceSessionManagement(
     if (result._tag === "Success") {
       setSessions([]);
       setNextCursor(null);
-      toastManager.add({ type: "success", title: "Logged out of ACP agent" });
+      toastManager.add({
+        type: "success",
+        title: translateCurrent("toast.feedback.loggedOutOfACPAgent"),
+      });
       return;
     }
     reportFailure("Could not log out of ACP agent", result);

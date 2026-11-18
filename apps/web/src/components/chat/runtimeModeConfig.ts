@@ -10,6 +10,7 @@ import {
   ShieldCheckIcon,
   ShieldOffIcon,
 } from "lucide-react";
+import type { MessageKey, Translate } from "../../i18n";
 
 export const runtimeModeConfig: Record<
   RuntimeMode,
@@ -39,6 +40,18 @@ export const runtimeModeConfig: Record<
 };
 
 export const runtimeModeOptions = Object.keys(runtimeModeConfig) as RuntimeMode[];
+
+const runtimeModeMessageKeys = {
+  "approval-required": ["chat.access.supervised", "chat.access.supervisedDescription"],
+  "auto-accept-edits": ["chat.access.autoAccept", "chat.access.autoAcceptDescription"],
+  auto: ["chat.access.auto", "chat.access.autoDescription"],
+  "full-access": ["chat.access.full", "chat.access.fullDescription"],
+} as const satisfies Record<RuntimeMode, readonly [MessageKey, MessageKey]>;
+
+export function localizedRuntimeMode(mode: RuntimeMode, t: Translate) {
+  const [label, description] = runtimeModeMessageKeys[mode];
+  return { ...runtimeModeConfig[mode], label: t(label), description: t(description) };
+}
 
 /** The modes a provider supports (all when it reports none) and the mode a thread really runs in. */
 export function resolveCompatibleRuntimeMode(

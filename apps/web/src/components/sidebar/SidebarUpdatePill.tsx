@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   type DesktopBridge,
   type DesktopUpdateState,
@@ -394,7 +395,7 @@ function SidebarUpdateControl() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Could not update everything",
+          title: translateCurrent("toast.feedback.couldNotUpdateEverything"),
           description: error instanceof Error ? error.message : t("update.unexpectedError"),
         }),
       );

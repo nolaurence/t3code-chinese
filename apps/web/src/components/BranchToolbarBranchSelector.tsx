@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { ThreadDetailsControl } from "./chat/ThreadDetailsControl";
 import { ComposerContextLabel } from "./ComposerContextLabel";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
@@ -332,7 +333,7 @@ export function BranchToolbarBranchSelector({
         if (!didCopy) return;
         toastManager.add({
           type: "success",
-          title: "Branch name copied",
+          title: translateCurrent("branch.nameCopied"),
           description: branchName,
         });
       },
@@ -340,7 +341,7 @@ export function BranchToolbarBranchSelector({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Failed to copy branch name",
+            title: translateCurrent("branch.copyNameFailed"),
             description: toBranchActionErrorMessage(error),
           }),
         );
@@ -370,8 +371,8 @@ export function BranchToolbarBranchSelector({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Action unavailable",
-          description: "This connection cannot change the thread's branch.",
+          title: translateCurrent("toast.feedback.actionUnavailable"),
+          description: translateCurrent("toast.feedback.thisConnectionCannotChangeThe"),
         }),
       );
       return;
@@ -437,7 +438,7 @@ export function BranchToolbarBranchSelector({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Failed to switch ref.",
+            title: translateCurrent("branch.switchFailed"),
             description: toBranchActionErrorMessage(squashAtomCommandFailure(checkoutResult)),
           }),
         );
@@ -474,7 +475,7 @@ export function BranchToolbarBranchSelector({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Failed to create and switch ref.",
+            title: translateCurrent("branch.createFailed"),
             description: toBranchActionErrorMessage(squashAtomCommandFailure(createBranchResult)),
           }),
         );

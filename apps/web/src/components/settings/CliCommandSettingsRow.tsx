@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useState } from "react";
 
 import {
@@ -33,7 +34,8 @@ export function useDesktopCliCommand() {
           stackedThreadToast({
             type: "error",
             title: FAILURE_TITLES[action],
-            description: error instanceof Error ? error.message : "Something went wrong.",
+            description:
+              error instanceof Error ? error.message : translateCurrent("rootError.title"),
           }),
         );
       })

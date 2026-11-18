@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   parsePullRequestAnchor,
   pullRequestDiffPathMatches,
@@ -1022,7 +1023,7 @@ function PullRequestCodeTab({
         if (result._tag === "Failure") {
           toastManager.add({
             type: "error",
-            title: "More comments could not be loaded",
+            title: translateCurrent("pullRequest.comments.loadMoreFailed"),
           });
           return null;
         }

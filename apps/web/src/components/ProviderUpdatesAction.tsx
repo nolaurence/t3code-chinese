@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { AuthProvidersManageScope, PROVIDER_DISPLAY_NAMES } from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
@@ -50,7 +51,7 @@ export function useCheckProviderUpdates() {
     toastManager.add(
       stackedThreadToast({
         type: "error",
-        title: "Could not check provider updates",
+        title: translateCurrent("toast.feedback.couldNotCheckProviderUpdates"),
         description: <span className="whitespace-pre-line">{lines.join("\n")}</span>,
       }),
     );

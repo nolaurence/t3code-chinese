@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { requestCustomSnooze } from "../components/CustomSnoozeDialog";
 import { openGuestShareDialog } from "../components/chat/guestShareDialogState";
@@ -48,12 +49,17 @@ import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { canTurnThreadIntoProject, useThreadActions } from "./useThreadActions";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 function failureToast(title: string, error: unknown) {
   toastManager.add(
@@ -119,7 +125,11 @@ export function useThreadActionMenu(input: {
   });
   const { copyToClipboard: copyThreadIdToClipboard } = useCopyToClipboard<{ threadId: ThreadId }>({
     onCopy: ({ threadId }) => {
-      toastManager.add({ type: "success", title: t("sidebar.threadIdCopied"), description: threadId });
+      toastManager.add({
+        type: "success",
+        title: t("sidebar.threadIdCopied"),
+        description: threadId,
+      });
     },
     onError: (error) => failureToast(t("sidebar.copyThreadIdFailed"), error),
   });
@@ -247,7 +257,9 @@ export function useThreadActionMenu(input: {
           await reportFailure(t("sidebar.pinThreadFailed"), () => pinThread(threadRef));
           return;
         case "unpin": {
-          await reportFailure(t("sidebar.unpinThreadFailed"), () => confirmAndUnpinThread(threadRef));
+          await reportFailure(t("sidebar.unpinThreadFailed"), () =>
+            confirmAndUnpinThread(threadRef),
+          );
           return;
         }
         case "auto-settle:enabled":
@@ -279,7 +291,7 @@ export function useThreadActionMenu(input: {
           if (result._tag === "Success") {
             toastManager.add({
               type: "success",
-              title: "Project created",
+              title: translateCurrent("toast.feedback.projectCreated"),
               description: thread.title,
             });
           } else if (!isAtomCommandInterrupted(result)) {
@@ -340,10 +352,7 @@ export function useThreadActionMenu(input: {
           if (confirmThreadDelete) {
             const confirmed = await settlePromise(() =>
               api.dialogs.confirm(
-                [
-                  `Delete thread "${thread.title}"?`,
-                  t("sidebar.clearHistorySingle"),
-                ].join("\n"),
+                [`Delete thread "${thread.title}"?`, t("sidebar.clearHistorySingle")].join("\n"),
                 { variant: "destructive" },
               ),
             );

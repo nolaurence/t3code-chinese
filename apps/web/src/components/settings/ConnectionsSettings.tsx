@@ -167,6 +167,7 @@ export function ConnectionsSettings({ view }: { readonly view: "environments" | 
 }
 
 function AccessSettings() {
+  const { t } = useI18n();
   // A link that names an environment, such as the MCP wizard's, opens the page on it. The
   // settings layout remounts this page when the link changes.
   const linkedEnvironmentId = useSearch({
@@ -181,14 +182,18 @@ function AccessSettings() {
   const picker =
     candidates.length > 1 && accessEnvironmentId !== null ? (
       <div className="flex min-w-0 items-center gap-1.5 px-3 text-sm text-muted-foreground sm:px-4">
-        <span className="shrink-0">Showing access for</span>
+        <span className="shrink-0">{t("settings.details.connections.showingAccessFor")}</span>
         <Select
           value={accessEnvironmentId}
           onValueChange={(next) => {
             if (next !== null) setSelectedEnvironmentId(next);
           }}
         >
-          <SelectTrigger size="sm" className="w-auto max-w-72" aria-label="Environment">
+          <SelectTrigger
+            size="sm"
+            className="w-auto max-w-72"
+            aria-label={t("providers.setup.environment")}
+          >
             <SelectValue>
               {(value: EnvironmentId) => {
                 const environment = candidates.find(
@@ -215,7 +220,9 @@ function AccessSettings() {
                     {settingsScopeEnvironmentLabel(environment, candidates)}
                   </span>
                   {environment.connection.phase !== "connected" ? (
-                    <span className="shrink-0 text-xs text-muted-foreground">Offline</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {t("connections.status.offline")}
+                    </span>
                   ) : null}
                 </span>
               </SelectItem>
@@ -901,7 +908,7 @@ function ConnectionsSettingsContent({
       return (
         <SettingsRow
           {...searchableSetting("wsl-backend", t)}
-          description="WSL is unavailable, so Windows is running instead. Turn WSL off to clear this preference."
+          description={t("settings.details.connections.wSLIsUnavailableSo")}
           status={
             desktopWslError ? (
               <span className="block text-destructive">{desktopWslError}</span>
@@ -941,7 +948,8 @@ function ConnectionsSettingsContent({
               <span className="block text-destructive">{desktopWslError}</span>
             ) : desktopWslState.preflightError ? (
               <span className="block text-destructive">
-                WSL backend couldn't start: {desktopWslState.preflightError}
+                {t("settings.details.connections.wSLBackendCouldntStart") + " "}
+                {desktopWslState.preflightError}
               </span>
             ) : null
           }
@@ -963,7 +971,7 @@ function ConnectionsSettingsContent({
               </SelectTrigger>
               <SelectPopup align="end" alignItemWithTrigger={false}>
                 <SelectItem hideIndicator value={BACKEND_VALUE_WSL_OFF}>
-                  Off
+                  {t("common.off")}
                 </SelectItem>
                 {desktopWslState.distros.length === 0 ? (
                   <SelectItem hideIndicator value={BACKEND_VALUE_DEFAULT_WSL}>
@@ -984,7 +992,7 @@ function ConnectionsSettingsContent({
         {desktopWslState.enabled ? (
           <SettingsRow
             title={t("connections.wsl.only")}
-            description="Run only the WSL backend. T3 Code restarts when this changes."
+            description={t("settings.details.connections.runOnlyTheWSL")}
             className="bg-muted/20 pl-7 sm:pl-8"
             control={
               <Switch
@@ -1306,7 +1314,7 @@ function ConnectionsSettingsContent({
                   renderAuthorizedClients()
                 ) : (
                   <p className="px-4 py-3 text-xs text-muted-foreground">
-                    This connection can create access links but cannot view authorized clients.
+                    {t("settings.details.connections.thisConnectionCanCreate")}
                   </p>
                 )}
               </ScrollArea>
@@ -1517,8 +1525,7 @@ function ConnectionsSettingsContent({
               <DialogHeader>
                 <DialogTitle>{t("connections.tailscale.setupQuestion")}</DialogTitle>
                 <DialogDescription>
-                  T3 Code will restart the local backend with Tailscale Serve enabled and ask
-                  Tailscale to proxy HTTPS traffic to this backend.
+                  {t("settings.details.connections.t3CodeWillRestart")}
                 </DialogDescription>
               </DialogHeader>
               <DialogPanel>
@@ -1589,8 +1596,8 @@ function ConnectionsSettingsContent({
       ) : (
         <SettingsSection {...searchableSetting("connections-environment", t)}>
           <SettingsRow
-            title="No environment selected"
-            description="Connect an environment to view its settings and access."
+            title={t("settings.details.connections.noEnvironmentSelected")}
+            description={t("settings.details.connections.connectAnEnvironmentTo")}
           />
         </SettingsSection>
       )}
@@ -1602,7 +1609,7 @@ function ConnectionsSettingsContent({
   return (
     <SettingsPageContainer>
       {desktopBridge ? (
-        <SettingsSection id="this-app" title="This app">
+        <SettingsSection id="this-app" title={t("settings.details.connections.thisApp")}>
           <LocalEnvironmentSetting />
         </SettingsSection>
       ) : null}

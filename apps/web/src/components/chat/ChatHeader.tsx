@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   AuthOrchestrationOperateScope,
   type EnvironmentId,
@@ -178,7 +179,7 @@ export const ChatHeader = memo(function ChatHeader({
       originalTitle: renamingTitle ?? activeThreadTitle,
     });
     if (resolution.action === "reject-empty") {
-      toastManager.add({ type: "warning", title: "Thread title cannot be empty" });
+      toastManager.add({ type: "warning", title: translateCurrent("sidebar.threadTitleEmpty") });
       return;
     }
     if (resolution.action === "noop") return;
@@ -190,8 +191,9 @@ export const ChatHeader = memo(function ChatHeader({
         const error = squashAtomCommandFailure(result);
         toastManager.add({
           type: "error",
-          title: "Failed to rename thread",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: translateCurrent("sidebar.renameThreadFailed"),
+          description:
+            error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
         });
       }
     });

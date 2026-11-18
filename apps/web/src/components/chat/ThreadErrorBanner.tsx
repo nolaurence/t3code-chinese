@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import type { OrchestrationV2ProviderFailureClass } from "@t3tools/contracts";
 import {
   CHATGPT_USAGE_LIMIT_CODE,
@@ -19,10 +20,14 @@ export function copyAdminRequest() {
     () =>
       toastManager.add({
         type: "success",
-        title: "Request copied",
-        description: "Send it to your workspace admin.",
+        title: translateCurrent("toast.feedback.requestCopied"),
+        description: translateCurrent("toast.feedback.sendItToYourWorkspace"),
       }),
-    () => toastManager.add({ type: "error", title: "Could not copy the request" }),
+    () =>
+      toastManager.add({
+        type: "error",
+        title: translateCurrent("toast.feedback.couldNotCopyTheRequest"),
+      }),
   );
 }
 

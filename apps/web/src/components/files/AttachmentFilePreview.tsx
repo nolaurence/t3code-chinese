@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { filePreviewDelimiter } from "@t3tools/shared/delimitedPreview";
 import type { AssetResource, EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
@@ -266,8 +267,11 @@ export function AttachmentFilePreview(props: {
         const cause = Cause.squash(result.cause);
         toastManager.add({
           type: "error",
-          title: "Could not save file",
-          description: cause instanceof Error ? cause.message : "Please try again.",
+          title: translateCurrent("toast.feedback.couldNotSaveFile"),
+          description:
+            cause instanceof Error
+              ? cause.message
+              : translateCurrent("toast.feedback.pleaseTryAgain"),
         });
       }
       setSaving(false);
@@ -439,8 +443,8 @@ export function AttachmentFilePreview(props: {
               if (!copy) {
                 toastManager.add({
                   type: "error",
-                  title: "Could not copy file",
-                  description: "Wait for the file to finish loading before copying.",
+                  title: translateCurrent("toast.feedback.couldNotCopyFile"),
+                  description: translateCurrent("toast.feedback.waitForTheFileTo"),
                 });
                 return;
               }
@@ -449,8 +453,9 @@ export function AttachmentFilePreview(props: {
                 .catch((cause: unknown) =>
                   toastManager.add({
                     type: "error",
-                    title: "Could not copy file",
-                    description: cause instanceof Error ? cause.message : "Try again.",
+                    title: translateCurrent("toast.feedback.couldNotCopyFile"),
+                    description:
+                      cause instanceof Error ? cause.message : translateCurrent("theme.tryAgain"),
                   }),
                 );
             }}

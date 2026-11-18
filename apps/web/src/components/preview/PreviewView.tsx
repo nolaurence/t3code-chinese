@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
@@ -255,7 +256,7 @@ export function PreviewView({
       if (isBrowserSettingsReadError(error)) {
         toastManager.add({
           type: "error",
-          title: "Unable to open browser",
+          title: translateCurrent("toast.feedback.unableToOpenBrowser"),
           description: error.message,
         });
       }
@@ -272,12 +273,12 @@ export function PreviewView({
     } catch (error) {
       toastManager.add({
         type: "error",
-        title: "Could not open this address",
+        title: translateCurrent("toast.feedback.couldNotOpenThisAddress"),
         description: isPreviewUrlNormalizationError(error)
-          ? "Enter an http or https URL."
+          ? translateCurrent("toast.feedback.enterAnHttpOrHttps")
           : error instanceof Error
             ? error.message
-            : "An error occurred.",
+            : translateCurrent("common.errorGeneric"),
       });
     }
   };
@@ -294,12 +295,12 @@ export function PreviewView({
     } catch (error) {
       toastManager.add({
         type: "error",
-        title: "Could not open this address",
+        title: translateCurrent("toast.feedback.couldNotOpenThisAddress"),
         description: isPreviewUrlNormalizationError(error)
-          ? "Enter an http or https URL."
+          ? translateCurrent("toast.feedback.enterAnHttpOrHttps")
           : error instanceof Error
             ? error.message
-            : "An error occurred.",
+            : translateCurrent("common.errorGeneric"),
       });
     }
   };
@@ -319,8 +320,9 @@ export function PreviewView({
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Unable to change the browser tab",
-        description: error instanceof Error ? error.message : "An error occurred.",
+        title: translateCurrent("toast.feedback.unableToChangeTheBrowser"),
+        description:
+          error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
       });
       return;
     }
@@ -420,8 +422,9 @@ export function PreviewView({
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Unable to move the browser tab",
-        description: error instanceof Error ? error.message : "An error occurred.",
+        title: translateCurrent("toast.feedback.unableToMoveTheBrowser"),
+        description:
+          error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
       });
       return;
     }
@@ -489,8 +492,9 @@ export function PreviewView({
     void operation(runtimeTabId).catch((error) => {
       toastManager.add({
         type: "error",
-        title: "Unable to update popped-out preview",
-        description: error instanceof Error ? error.message : "An error occurred.",
+        title: translateCurrent("preview.error.updatePoppedOut"),
+        description:
+          error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
       });
     });
   };
@@ -511,8 +515,8 @@ export function PreviewView({
                 toastId,
                 stackedThreadToast({
                   type: "error",
-                  title: "Unable to copy recording path",
-                  description: "Clipboard API unavailable.",
+                  title: translateCurrent("preview.error.copyRecordingPath"),
+                  description: translateCurrent("preview.error.clipboardUnavailable"),
                   actionProps: revealAction,
                 }),
               );
@@ -533,8 +537,11 @@ export function PreviewView({
                   toastId,
                   stackedThreadToast({
                     type: "error",
-                    title: "Unable to copy recording path",
-                    description: error instanceof Error ? error.message : "An error occurred.",
+                    title: translateCurrent("preview.error.copyRecordingPath"),
+                    description:
+                      error instanceof Error
+                        ? error.message
+                        : translateCurrent("common.errorGeneric"),
                     actionProps: revealAction,
                   }),
                 );
@@ -551,11 +558,13 @@ export function PreviewView({
               toastId,
               stackedThreadToast({
                 type: "success",
-                title: "Recording saved",
+                title: translateCurrent("preview.recordingSaved"),
                 actionProps: revealAction,
                 data: {
                   secondaryActionProps: {
-                    children: pathCopied ? "Copied!" : "Copy path",
+                    children: pathCopied
+                      ? translateCurrent("cloud.cli.copied")
+                      : translateCurrent("preview.copyPath"),
                     disabled: pathCopied,
                     onClick: copyPath,
                   },
@@ -568,11 +577,11 @@ export function PreviewView({
           toastId = toastManager.add(
             stackedThreadToast({
               type: "success",
-              title: "Recording saved",
+              title: translateCurrent("preview.recordingSaved"),
               actionProps: revealAction,
               data: {
                 secondaryActionProps: {
-                  children: "Copy path",
+                  children: translateCurrent("preview.copyPath"),
                   onClick: copyPath,
                 },
                 secondaryActionVariant: "outline",
@@ -583,8 +592,9 @@ export function PreviewView({
         (error) => {
           toastManager.add({
             type: "error",
-            title: "Unable to stop recording",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: translateCurrent("preview.error.stopRecording"),
+            description:
+              error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
           });
         },
       );
@@ -596,7 +606,7 @@ export function PreviewView({
         if (isBrowserRecordingStartCancelledError(error)) return;
         toastManager.add({
           type: "error",
-          title: "Unable to start recording",
+          title: translateCurrent("preview.error.startRecording"),
           description,
         });
       });
@@ -624,7 +634,9 @@ export function PreviewView({
               title,
               description,
               actionProps: {
-                children: imageCopied ? "Copied!" : "Copy image",
+                children: imageCopied
+                  ? translateCurrent("cloud.cli.copied")
+                  : translateCurrent("preview.copyImage"),
                 disabled: imageCopied,
                 onClick: copyImage,
               },
@@ -633,7 +645,9 @@ export function PreviewView({
                   {
                     id: "copy-path",
                     props: {
-                      children: pathCopied ? "Copied!" : "Copy path",
+                      children: pathCopied
+                        ? translateCurrent("cloud.cli.copied")
+                        : translateCurrent("preview.copyPath"),
                       disabled: pathCopied,
                       onClick: copyPath,
                     },
@@ -700,9 +714,9 @@ export function PreviewView({
         toastId = toastManager.add(
           stackedThreadToast({
             type: "success",
-            title: "Screenshot saved",
+            title: translateCurrent("preview.screenshotSaved"),
             actionProps: {
-              children: "Copy image",
+              children: translateCurrent("preview.copyImage"),
               onClick: copyImage,
             },
             data: {
@@ -710,7 +724,7 @@ export function PreviewView({
                 {
                   id: "copy-path",
                   props: {
-                    children: "Copy path",
+                    children: translateCurrent("preview.copyPath"),
                     onClick: copyPath,
                   },
                 },
@@ -726,8 +740,9 @@ export function PreviewView({
       (error) => {
         toastManager.add({
           type: "error",
-          title: "Unable to capture screenshot",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: translateCurrent("preview.error.captureScreenshot"),
+          description:
+            error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
         });
       },
     );
@@ -801,8 +816,8 @@ export function PreviewView({
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not capture the picked element",
-            description: "The annotation was kept without the screenshot.",
+            title: translateCurrent("toast.feedback.couldNotCaptureThePicked"),
+            description: translateCurrent("toast.feedback.theAnnotationWasKeptWithout"),
           }),
         );
       }

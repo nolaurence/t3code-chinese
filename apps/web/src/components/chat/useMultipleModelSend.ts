@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   type EnvironmentId,
   type ModelSelection,
@@ -251,12 +252,11 @@ export function useMultipleModelSend(input: MultipleModelSendInput) {
         const recoveryToastId = toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "A background prompt could not be sent",
-            description:
-              "Your newer draft is unchanged. Restore the failed prompt when this composer is empty.",
+            title: translateCurrent("toast.feedback.aBackgroundPromptCouldNot"),
+            description: translateCurrent("toast.feedback.yourNewerDraftIsUnchanged"),
             timeout: 0,
             actionProps: {
-              children: "Restore prompt",
+              children: translateCurrent("toast.feedback.restorePrompt"),
               onClick: () => {
                 if (
                   !draftId ||
@@ -267,8 +267,7 @@ export function useMultipleModelSend(input: MultipleModelSendInput) {
                   )
                 ) {
                   toastManager.update(recoveryToastId, {
-                    description:
-                      "Return to the original draft and send or clear its current prompt before restoring.",
+                    description: translateCurrent("toast.feedback.returnToTheOriginalDraft"),
                   });
                   return;
                 }

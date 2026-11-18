@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { ThreadDetailsControl } from "./chat/ThreadDetailsControl";
 import { useAtomMount, useAtomValue } from "@effect/atom-react";
 import {
@@ -1243,8 +1244,9 @@ export default function GitActionsControl({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Action failed",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: translateCurrent("git.actionFailed"),
+          description:
+            error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
           timeout: errorToastTiming.timeout,
           ...(scopedToastData !== undefined ? { data: scopedToastData } : {}),
         }),
@@ -1317,8 +1319,9 @@ export default function GitActionsControl({
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Pull failed",
-              description: error instanceof Error ? error.message : "An error occurred.",
+              title: translateCurrent("git.pullFailed"),
+              description:
+                error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
               timeout: errorToastTiming.timeout,
               ...(threadToastData !== undefined ? { data: threadToastData } : {}),
             }),
@@ -1388,7 +1391,7 @@ export default function GitActionsControl({
     if (workingTreeRoot === null) {
       toastManager.add({
         type: "error",
-        title: "Editor opening is unavailable.",
+        title: translateCurrent("git.editorUnavailable"),
         data: threadToastData,
       });
       return;
@@ -1403,8 +1406,9 @@ export default function GitActionsControl({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Unable to open file",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: translateCurrent("git.openFileFailed"),
+          description:
+            error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
           ...(threadToastData !== undefined ? { data: threadToastData } : {}),
         }),
       );
@@ -1441,8 +1445,9 @@ export default function GitActionsControl({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Git initialization failed",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: translateCurrent("git.initFailed"),
+          description:
+            error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
           ...(threadToastData !== undefined ? { data: threadToastData } : {}),
         }),
       );

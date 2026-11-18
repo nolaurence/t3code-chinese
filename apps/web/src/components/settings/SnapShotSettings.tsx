@@ -352,10 +352,10 @@ export function SnapShotSettings() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection id="snap-shot" title="SnapShots">
+      <SettingsSection id="snap-shot" title={t("settings.search.snapShots")}>
         <SettingsUnavailableGroup message={unavailableMessage}>
           <SettingsRow
-            {...searchableSetting("snap-shot-enabled")}
+            {...searchableSetting("snap-shot-enabled", t)}
             description={snapShotDescription(state, t)}
             status={
               bridge
@@ -395,7 +395,7 @@ export function SnapShotSettings() {
           {settings.snapShotEnabled && captureAvailable ? (
             <>
               <SettingsRow
-                {...searchableSetting("snap-shot-accessibility")}
+                {...searchableSetting("snap-shot-accessibility", t)}
                 description={t("snapShot.includeTextDescription")}
                 status={snapShotAccessibilityUnavailableMessage(state, t)}
                 control={
@@ -405,7 +405,8 @@ export function SnapShotSettings() {
                       settings.snapShotIncludeAccessibility
                     }
                     disabled={
-                      !captureAvailable || Boolean(snapShotAccessibilityUnavailableMessage(state, t))
+                      !captureAvailable ||
+                      Boolean(snapShotAccessibilityUnavailableMessage(state, t))
                     }
                     aria-label={t("snapShot.includeTextAria")}
                     onCheckedChange={(checked) => void saveIncludeAccessibility(checked)}
@@ -413,7 +414,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-shortcut")}
+                {...searchableSetting("snap-shot-shortcut", t)}
                 description={
                   state?.linuxBackend === "picker"
                     ? t("snapShot.chooseWindowDescription")
@@ -473,7 +474,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-sound")}
+                {...searchableSetting("snap-shot-sound", t)}
                 description={t("snapShot.soundDescription")}
                 control={
                   <Menu>
@@ -487,7 +488,10 @@ export function SnapShotSettings() {
                         "Off"
                       ) : soundSelection === "soft-pop" ? (
                         <>
-                          Whoosh <span className="text-muted-foreground">(Default)</span>
+                          {t("snapShot.soundWhoosh") + " "}
+                          <span className="text-muted-foreground">
+                            {t("settings.details.snapShot.default")}
+                          </span>
                         </>
                       ) : (
                         "Click"
@@ -501,11 +505,14 @@ export function SnapShotSettings() {
                         value={soundSelection}
                       >
                         <MenuRadioItem closeOnClick value="off">
-                          Off
+                          {t("common.off")}
                         </MenuRadioItem>
                         <div className={soundOptionRowClassName}>
                           <MenuRadioItem closeOnClick value="soft-pop">
-                            Whoosh <span className="text-muted-foreground">(Default)</span>
+                            {t("snapShot.soundWhoosh") + " "}
+                            <span className="text-muted-foreground">
+                              {t("settings.details.snapShot.default")}
+                            </span>
                           </MenuRadioItem>
                           <MenuItem
                             aria-label={t("snapShot.playWhoosh")}
@@ -517,7 +524,7 @@ export function SnapShotSettings() {
                         </div>
                         <div className={soundOptionRowClassName}>
                           <MenuRadioItem closeOnClick value="camera-shutter">
-                            Click
+                            {t("snapShot.soundClick")}
                           </MenuRadioItem>
                           <MenuItem
                             aria-label={t("snapShot.playClick")}
@@ -533,7 +540,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-flash")}
+                {...searchableSetting("snap-shot-flash", t)}
                 description={t("snapShot.flashDescription")}
                 status={feedbackUnavailable}
                 control={
@@ -546,7 +553,7 @@ export function SnapShotSettings() {
                 }
               />
               <SettingsRow
-                {...searchableSetting("snap-shot-animations")}
+                {...searchableSetting("snap-shot-animations", t)}
                 description={t("snapShot.animationsDescription")}
                 status={feedbackUnavailable}
                 control={

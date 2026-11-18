@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import {
   AVAILABLE_CONNECTION_STATE,
@@ -129,12 +130,16 @@ export function ConnectionDiagnosisPanel({
 }) {
   const { copyToClipboard } = useCopyToClipboard({
     target: "connection diagnostics",
-    onCopy: () => toastManager.add({ type: "success", title: "Diagnostics copied" }),
+    onCopy: () =>
+      toastManager.add({
+        type: "success",
+        title: translateCurrent("toast.feedback.diagnosticsCopied"),
+      }),
     onError: (error) =>
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Could not copy diagnostics",
+          title: translateCurrent("toast.feedback.couldNotCopyDiagnostics"),
           description: error.message,
         }),
       ),

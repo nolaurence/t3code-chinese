@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n";
 import {
   type EnvironmentThreadShell,
   type PendingSubagentRequest,
@@ -35,6 +36,7 @@ import { resolveBackgroundThreadRequest } from "./backgroundThreadAnnouncement";
 import { resolveSidebarThreadStatus, type SidebarThreadStatus } from "./Sidebar.logic";
 import {
   createThreadNotificationGate,
+  threadNotificationTitleKey,
   type ThreadNotificationKind,
   type ThreadNotificationObservation,
 } from "./ThreadNotificationCoordinator.logic";
@@ -130,18 +132,7 @@ export function startThreadNotifications(
       environmentId?: string;
       threadId?: string;
     };
-    const title =
-      kind === "completion"
-        ? "Thread completed"
-        : status === "approval"
-          ? "Approval needed"
-          : status === "limited"
-            ? "Usage limit reached"
-            : status === "failed"
-              ? "Thread failed"
-              : status === "request"
-                ? "Guest request"
-                : "Input needed";
+    const title = translateCurrent(threadNotificationTitleKey(kind, status));
     if (hasNotificationSound(mode)) {
       void playNotificationSound(kind, () =>
         hasNotificationSound(getClientSettings().notificationMode),
@@ -175,7 +166,7 @@ export function startThreadNotifications(
             ),
         },
         actionProps: {
-          children: "Open thread",
+          children: translateCurrent("settings.details.threadNotificationCoordinator.openThread"),
           onClick: () => {
             toastManager.close(toastId);
             void router.navigate({

@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { findErrorTraceId } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
@@ -206,8 +207,8 @@ export function T3ConnectUserProfilePage() {
       void refreshRelayEnvironments();
       toastManager.add({
         type: "success",
-        title: "Server deregistered",
-        description: "T3 Connect access was revoked and a host space is now available.",
+        title: translateCurrent("cloud.account.deregistered"),
+        description: translateCurrent("cloud.account.deregisteredDescription"),
       });
       return;
     }
@@ -227,12 +228,12 @@ export function T3ConnectUserProfilePage() {
     toastManager.add(
       stackedThreadToast({
         type: "error",
-        title: "Could not deregister server",
+        title: translateCurrent("cloud.account.deregisterFailedTitle"),
         description: relayFailureReason(cause) ?? message,
         ...(traceId
           ? {
               actionProps: {
-                children: "Copy trace ID",
+                children: translateCurrent("common.copyTraceId"),
                 onClick: () => void navigator.clipboard?.writeText(traceId),
               },
               actionVariant: "outline",

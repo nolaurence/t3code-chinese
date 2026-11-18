@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import {
   isAtomCommandInterrupted,
@@ -155,7 +156,7 @@ function ReclaimRow({
     toastManager.add({
       type: "error",
       title: `Could not reclaim space on ${label}`,
-      description: error instanceof Error ? error.message : "An error occurred.",
+      description: error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
     });
   };
   return (

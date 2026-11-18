@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   CommandId,
   type EnvironmentId,
@@ -107,13 +108,14 @@ export async function startFanoutThread(input: {
       stackedThreadToast({
         type: "error",
         title: `Could not start ${input.model}`,
-        description: error instanceof Error ? error.message : "Failed to send message.",
+        description:
+          error instanceof Error ? error.message : translateCurrent("chat.error.sendFailed"),
         ...(retainedThreadId
           ? {
               timeout: 0,
               data: {
                 secondaryActionProps: {
-                  children: "Allow retry",
+                  children: translateCurrent("toast.feedback.allowRetry"),
                   onClick: () => {
                     void readLocalApi()
                       ?.dialogs.confirm(
@@ -135,7 +137,9 @@ export async function startFanoutThread(input: {
                 },
               },
               actionProps: {
-                children: "Open thread",
+                children: translateCurrent(
+                  "settings.details.threadNotificationCoordinator.openThread",
+                ),
                 onClick: () => input.openThread(retainedThreadId),
               },
             }

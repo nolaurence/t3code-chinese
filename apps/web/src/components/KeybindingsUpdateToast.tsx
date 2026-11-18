@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n";
 import { appAtomRegistry, subscribeAtomChanges } from "../rpc/atomRegistry";
 import { primaryEnvironmentIdAtom } from "../state/primaryEnvironment";
 import { primaryServerConfigAtom, primaryServerConfigEventAtom } from "../state/server";
@@ -15,8 +16,8 @@ export function startKeybindingsUpdateToasts(): () => void {
     if (decision._tag === "Success") {
       toastManager.add({
         type: "success",
-        title: "Keybindings updated",
-        description: "Keybindings configuration reloaded successfully.",
+        title: translateCurrent("root.keybindings.updated"),
+        description: translateCurrent("root.keybindings.updatedDescription"),
       });
       return;
     }
@@ -25,7 +26,7 @@ export function startKeybindingsUpdateToasts(): () => void {
     toastManager.add(
       stackedThreadToast({
         type: "warning",
-        title: "Invalid keybindings configuration",
+        title: translateCurrent("root.keybindings.invalid"),
         description: (
           <KeybindingsConfigWarning
             message={decision.message}

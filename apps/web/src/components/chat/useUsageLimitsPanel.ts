@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import type {
   EnvironmentId,
   ProviderInstanceId,
@@ -63,7 +64,10 @@ export function useUsageLimitsPanel(input: {
       return true;
     }
     setPanel(null);
-    toastManager.add({ type: "info", title: "Usage limits are unavailable for this provider" });
+    toastManager.add({
+      type: "info",
+      title: translateCurrent("toast.feedback.usageLimitsAreUnavailableFor"),
+    });
     return false;
   });
   // Async responses may clear only their originating thread's panel.

@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
@@ -107,15 +108,20 @@ export function DesktopWebLinkCoordinator() {
 
   const reportFailure = (url: string, description = url) =>
     toastManager.add(
-      stackedThreadToast({ type: "error", title: "Could not open the link", description }),
+      stackedThreadToast({
+        type: "error",
+        title: translateCurrent("pullRequest.openLinkFailed"),
+        description,
+      }),
     );
 
   const reportPairingFailure = (error: unknown) =>
     toastManager.add(
       stackedThreadToast({
         type: "error",
-        title: "Could not add backend",
-        description: error instanceof Error ? error.message : "Failed to add backend.",
+        title: translateCurrent("connections.error.addBackendTitle"),
+        description:
+          error instanceof Error ? error.message : translateCurrent("connections.error.addBackend"),
       }),
     );
 
@@ -141,8 +147,8 @@ export function DesktopWebLinkCoordinator() {
     pairedUrlsRef.current.add(pairingUrl);
     toastManager.add({
       type: "success",
-      title: "Backend added",
-      description: "The environment is saved and will reconnect on app startup.",
+      title: translateCurrent("connections.backend.added"),
+      description: translateCurrent("connections.backend.addedDescription"),
     });
   };
 

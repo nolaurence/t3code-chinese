@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { DownloadIcon, CopyIcon, CheckIcon, Code2Icon, EyeIcon, Table2Icon } from "lucide-react";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { Spinner } from "~/components/ui/spinner";
@@ -1237,8 +1238,9 @@ export default function FilePreviewPanel({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Unable to open file in browser",
-          description: error instanceof Error ? error.message : "An error occurred.",
+          title: translateCurrent("files.openBrowserFailed"),
+          description:
+            error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
         }),
       );
     })();
@@ -1451,7 +1453,8 @@ export default function FilePreviewPanel({
             />
           ) : relativePath &&
             absolutePath &&
-            ((isDocument && !isParsedOfficeDocument) || file.readError?.failure === "binary_file") ? (
+            ((isDocument && !isParsedOfficeDocument) ||
+              file.readError?.failure === "binary_file") ? (
             <AttachmentFilePreview
               key={`${environmentId}:${absolutePath}:${workspaceMutationId}:${fileRefreshRevision}`}
               name={relativePath.split(/[\\/]/).at(-1) || relativePath}
@@ -1612,8 +1615,8 @@ export function WorkspaceLargeTextPreview(props: {
   const showError = (cause: unknown) => {
     toastManager.add({
       type: "error",
-      title: "Could not read file",
-      description: cause instanceof Error ? cause.message : "Try again.",
+      title: translateCurrent("toast.feedback.couldNotReadFile"),
+      description: cause instanceof Error ? cause.message : translateCurrent("theme.tryAgain"),
     });
   };
   // Each workspace mutation re-mints the URL, so an edited file loads its new bytes.

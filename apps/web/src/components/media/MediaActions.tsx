@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   formatFilePathForClipboard,
   type MediaActionId,
@@ -175,7 +176,10 @@ export function MediaActions({
         await writeTextToClipboard(clipboardText, reference?.kind === "file" ? "file path" : "URL");
         toastManager.add({
           type: "success",
-          title: action === "copy-url" ? "URL copied" : "Path copied",
+          title:
+            action === "copy-url"
+              ? translateCurrent("toast.feedback.uRLCopied")
+              : translateCurrent("panel.pathCopied"),
         });
       } else if (action === "open-file") {
         assertCanReadMedia();
@@ -183,12 +187,18 @@ export function MediaActions({
       } else if (action === "save" || action === "copy-image") {
         progressToast = toastManager.add({
           type: "loading",
-          title: action === "save" ? `Preparing ${noun} download…` : "Copying image…",
+          title:
+            action === "save"
+              ? `Preparing ${noun} download…`
+              : translateCurrent("toast.feedback.copyingImage"),
         });
         await (action === "save" ? save() : copyImage());
         toastManager.update(progressToast, {
           type: "success",
-          title: action === "save" ? "Download started" : "Image copied",
+          title:
+            action === "save"
+              ? translateCurrent("toast.feedback.downloadStarted")
+              : translateCurrent("toast.feedback.imageCopied"),
         });
       }
     });
@@ -197,7 +207,10 @@ export function MediaActions({
       const toast = stackedThreadToast({
         type: "error",
         title: failureTitle,
-        description: error instanceof Error ? error.message : "The media action failed.",
+        description:
+          error instanceof Error
+            ? error.message
+            : translateCurrent("toast.feedback.theMediaActionFailed"),
       });
       if (progressToast) toastManager.update(progressToast, toast);
       else toastManager.add(toast);

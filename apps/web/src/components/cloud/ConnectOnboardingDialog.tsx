@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAuth } from "@clerk/react";
 import { useAtomValue } from "@effect/atom-react";
 import {
@@ -188,10 +189,10 @@ function ConfiguredConnectOnboardingDialog() {
     if (!ok) return;
     toastManager.add({
       type: "success",
-      title: "T3 Connect enabled",
+      title: translateCurrent("cloud.onboarding.enabled"),
       description: exposeEnvironment
-        ? "This environment is available to your other devices through T3 Connect."
-        : "This environment publishes agent activity to your mobile clients.",
+        ? translateCurrent("cloud.onboarding.environmentAvailable")
+        : translateCurrent("cloud.onboarding.activityPublished"),
     });
     setStep("devices");
   };

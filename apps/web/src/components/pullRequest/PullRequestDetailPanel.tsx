@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   parsePullRequestAnchor,
   pullRequestLinkCommit,
@@ -219,7 +220,7 @@ const PullRequestCodeTab = lazy(loadCodeTab);
 function reportCheckoutCommandError(error: Error) {
   toastManager.add({
     type: "error",
-    title: "Could not copy checkout command",
+    title: translateCurrent("toast.feedback.couldNotCopyCheckoutCommand"),
     description: error.message,
   });
 }
@@ -809,7 +810,10 @@ export function PullRequestDetailPanel({
       toastManager.add({ type: "success", title: `Revert ${terminology.singular} opened` });
     }
     if (action === "delete-branch") {
-      toastManager.add({ type: "success", title: "Branch deleted" });
+      toastManager.add({
+        type: "success",
+        title: translateCurrent("toast.feedback.branchDeleted"),
+      });
     }
     if (pullRequestActionNeedsHostRefresh(action)) {
       void refreshFromHost();
@@ -841,7 +845,10 @@ export function PullRequestDetailPanel({
     });
     if (commentResult._tag === "Failure") {
       setPendingAction(null);
-      toastManager.add({ type: "error", title: "Could not post the comment" });
+      toastManager.add({
+        type: "error",
+        title: translateCurrent("pullRequest.comment.postFailed"),
+      });
       return { commentPosted: false };
     }
     const actionSucceeded = await finishAction(action);
@@ -896,10 +903,10 @@ export function PullRequestDetailPanel({
       writeHandoffToComposer(attachTarget, task);
       toastManager.add({
         type: "success",
-        title: "Added to the composer",
+        title: translateCurrent("pullRequest.handoff.addedComposer"),
         description:
           task.prompt.length > 0
-            ? "The question is in the composer. Read it over, then send."
+            ? translateCurrent("toast.feedback.theQuestionIsInThe")
             : `The ${terminology.singular} is in the composer. Type your question, then send.`,
       });
       return;
@@ -927,17 +934,17 @@ export function PullRequestDetailPanel({
     if (opened === null) {
       toastManager.add({
         type: "error",
-        title: "Could not open a thread",
-        description: "Try again from the project, or open a thread first.",
+        title: translateCurrent("pullRequest.handoff.openThreadFailed"),
+        description: translateCurrent("pullRequest.handoff.openThreadFailedDescription"),
       });
       return;
     }
     toastManager.add({
       type: "success",
-      title: "Asked in a thread",
+      title: translateCurrent("pullRequest.handoff.askedInThread"),
       description:
         task.prompt.length > 0
-          ? "The question is in the composer. Read it over, then send."
+          ? translateCurrent("toast.feedback.theQuestionIsInThe")
           : `The ${terminology.singular} is in the composer. Type your question, then send.`,
     });
   };
@@ -952,8 +959,8 @@ export function PullRequestDetailPanel({
       writeHandoffToComposer(attachTarget, task);
       toastManager.add({
         type: "success",
-        title: "Added to the composer",
-        description: "The task is in the composer. Read it over, then send.",
+        title: translateCurrent("pullRequest.handoff.addedComposer"),
+        description: translateCurrent("toast.feedback.theTaskIsInThe"),
       });
       return;
     }
@@ -988,8 +995,8 @@ export function PullRequestDetailPanel({
       setHandoff(null);
       toastManager.update(toastId, {
         type: "error",
-        title: "Could not open a thread for the checkout",
-        description: "Try again from the project, or open a thread first.",
+        title: translateCurrent("pullRequest.checkout.openThreadFailed"),
+        description: translateCurrent("pullRequest.handoff.openThreadFailedDescription"),
       });
       return;
     }
@@ -1022,7 +1029,7 @@ export function PullRequestDetailPanel({
       // Sending after failed rebinding would use the previous checkout.
       toastManager.update(toastId, {
         type: "error",
-        title: "Checked out, but the thread stayed where it was",
+        title: translateCurrent("pullRequest.checkout.threadNotMoved"),
         description: `The checkout is ready on \`${prepared.value.branch}\`. Point a thread at it from the branch picker, then ask again.`,
       });
       return;
@@ -1034,7 +1041,10 @@ export function PullRequestDetailPanel({
         prepared.value.isOnPullRequestHead
           ? {
               type: "success",
-              title: mode === "local" ? "Checked out here" : "Checked out",
+              title:
+                mode === "local"
+                  ? translateCurrent("pullRequest.checkout.checkedOutHere")
+                  : translateCurrent("pullRequest.checkout.checkedOut"),
               description:
                 mode === "local"
                   ? `This repository is on the ${terminology.singular}'s branch, with a thread open on it.`
@@ -1050,8 +1060,8 @@ export function PullRequestDetailPanel({
       prepared.value.isOnPullRequestHead
         ? {
             type: "success",
-            title: "Checkout ready",
-            description: "The task is in the composer. Read it over, then send.",
+            title: translateCurrent("pullRequest.checkout.ready"),
+            description: translateCurrent("toast.feedback.theTaskIsInThe"),
           }
         : offHeadPullRequestCheckoutToast(terminology),
     );
@@ -1168,7 +1178,10 @@ export function PullRequestDetailPanel({
     // The active editor may be answering a provider question rather than editing this draft.
     if (!hasReference) store.addReviewComment(attachTarget, reference, { insertAtCaret: false });
     store.addReviewComment(attachTarget, comment, { insertAtCaret: false });
-    toastManager.add({ type: "success", title: "Added to the composer" });
+    toastManager.add({
+      type: "success",
+      title: translateCurrent("pullRequest.handoff.addedComposer"),
+    });
   };
 
   const startCheckout = (mode: "worktree" | "local") => {

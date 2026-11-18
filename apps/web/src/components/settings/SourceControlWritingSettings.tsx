@@ -196,12 +196,15 @@ export function SourceControlWritingSettingsSection() {
   );
 
   return (
-    <SettingsSection id="source-control-text-generation" title="Commits & pull requests">
+    <SettingsSection
+      id="source-control-text-generation"
+      title={t("settings.details.sourceControlWriting.commitsPullRequests")}
+    >
       <SettingsRow
         serverScoped
         settingKeys={["sourceControlWritingStyle"]}
         mixed={writingStyleMixed}
-        {...searchableSetting("source-control-writing-style")}
+        {...searchableSetting("source-control-writing-style", t)}
         description={MODE_OPTIONS[style.mode].description}
         resetAction={
           isSourceControlWritingStyleDirty ? (
@@ -234,7 +237,7 @@ export function SourceControlWritingSettingsSection() {
             <SelectTrigger
               size="sm"
               className="w-full sm:w-56"
-              aria-label="Commit and pull request writing"
+              aria-label={t("settings.details.sourceControlWriting.commitAndPullRequest")}
             >
               <SelectValue>
                 {(value: SourceControlWritingStyleMode | null) =>
@@ -319,13 +322,13 @@ export function SourceControlWritingSettingsSection() {
         settingKeys={["reviewGuidesEnabled"]}
         mixed={mixedReviewGuidesEnabled}
         {...searchableSetting("review-guides")}
-        description="Add a Guide tab to pull requests. An agent explains the changes and points out decisions that need review."
+        description={t("settings.details.sourceControlWriting.addAGuideTab")}
         control={
           <Switch
             mixed={mixedReviewGuidesEnabled}
             checked={mixedReviewGuidesEnabled ? false : settings.reviewGuidesEnabled}
             onCheckedChange={(checked) => updateSettings({ reviewGuidesEnabled: Boolean(checked) })}
-            aria-label="Review guides"
+            aria-label={t("settings.details.sourceControlWriting.reviewGuides")}
           />
         }
       />
@@ -336,11 +339,11 @@ export function SourceControlWritingSettingsSection() {
             serverScoped
             settingKeys={["reviewGuideModelSelection"]}
             {...searchableSetting("review-guide-model")}
-            description="Must be a coding agent: it reads the pull request over many steps. Off uses the writer model, or Codex or Claude if that model is a text generator."
+            description={t("settings.details.sourceControlWriting.mustBeACoding")}
             control={
               !hasServerTargets ? (
                 <span className="text-sm text-muted-foreground">
-                  Connect an environment to choose its review guide model.
+                  {t("settings.details.sourceControlWriting.connectAnEnvironmentTo")}
                 </span>
               ) : (
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -361,7 +364,7 @@ export function SourceControlWritingSettingsSection() {
                         if (reason) {
                           toastManager.add({
                             type: "error",
-                            title: "Review guide model not saved",
+                            title: t("settings.details.sourceControlWriting.reviewGuideModelNot"),
                             description: reason,
                           });
                           return;
@@ -411,7 +414,7 @@ export function SourceControlWritingSettingsSection() {
                       if (reason) {
                         toastManager.add({
                           type: "error",
-                          title: "Review guide model not saved",
+                          title: t("settings.details.sourceControlWriting.reviewGuideModelNot"),
                           description: reason,
                         });
                         return;
@@ -424,7 +427,7 @@ export function SourceControlWritingSettingsSection() {
                         ),
                       });
                     }}
-                    aria-label="Use a separate review guide model"
+                    aria-label={t("settings.details.sourceControlWriting.useASeparateReview")}
                   />
                 </div>
               )
@@ -434,12 +437,12 @@ export function SourceControlWritingSettingsSection() {
           <SettingsRow
             serverScoped
             settingKeys={["reviewGuideInstructions"]}
-            {...searchableSetting("review-guide-instructions")}
-            description="Your preferences for review guides: what to show first, dwell on, or skip. The guide's format and coverage stay the same."
+            {...searchableSetting("review-guide-instructions", t)}
+            description={t("settings.details.sourceControlWriting.yourPreferencesForReview")}
             resetAction={
               mixedReviewGuideInstructions || settings.reviewGuideInstructions !== "" ? (
                 <SettingResetButton
-                  label="review guide instructions"
+                  label={t("settings.details.sourceControlWriting.reviewGuideInstructions")}
                   onClick={() => updateSettings({ reviewGuideInstructions: "" })}
                 />
               ) : null
@@ -448,7 +451,7 @@ export function SourceControlWritingSettingsSection() {
             <div className="mt-3 max-w-2xl pb-3.5">
               <Textarea
                 key={`${scopeKey}:${mixedReviewGuideInstructions}:${settings.reviewGuideInstructions}`}
-                aria-label="Review guide instructions"
+                aria-label={t("settings.details.sourceControlWriting.reviewGuideInstructions2")}
                 onChange={() => {
                   reviewGuideInstructionsEdited.current = true;
                 }}
@@ -483,8 +486,8 @@ export function SourceControlWritingSettingsSection() {
           serverScoped
           settingKeys={["sourceControlWritingStyle"]}
           mixed={templatesMixed}
-          {...searchableSetting("follow-change-request-templates")}
-          description="Use the repository's pull request template when it has one."
+          {...searchableSetting("follow-change-request-templates", t)}
+          description={t("settings.details.sourceControlWriting.useTheRepositorysPull")}
           resetAction={
             templatesMixed ||
             style.followChangeRequestTemplates !== defaults.followChangeRequestTemplates ? (
@@ -511,7 +514,7 @@ export function SourceControlWritingSettingsSection() {
                   },
                 })
               }
-              aria-label="Follow pull request templates"
+              aria-label={t("settings.details.sourceControlWriting.followPullRequestTemplates")}
             />
           }
         />
@@ -519,8 +522,8 @@ export function SourceControlWritingSettingsSection() {
         <SettingsRow
           serverScoped
           settingKeys={["sourceControlWriterModelSelection"]}
-          {...searchableSetting("source-control-writer-model")}
-          description="Model for commit messages, pull request text, and branch or bookmark names. When disabled, use the text generation model configured for this environment."
+          {...searchableSetting("source-control-writer-model", t)}
+          description={t("settings.details.sourceControlWriting.modelForCommitMessages")}
           control={
             !hasServerTargets ? (
               <span className="text-sm text-muted-foreground">
@@ -530,7 +533,7 @@ export function SourceControlWritingSettingsSection() {
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {usesDedicatedModel && !canEnableDedicatedModel ? (
                   <span className="text-sm text-muted-foreground">
-                    No text generation providers available.
+                    {t("settings.threads.noTextProviders")}
                   </span>
                 ) : null}
                 {usesDedicatedModel && canEnableDedicatedModel ? (

@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 
 import { Radio as RadioPrimitive } from "@base-ui/react/radio";
@@ -63,7 +64,6 @@ import { ProviderEnvironmentSection } from "./ProviderInstanceCard";
 import { useSecretSources } from "./SecretSourceInput";
 import { useI18n, type Translate } from "../../i18n";
 
-
 const INSTANCE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
 const ACP_REGISTRY_DRIVER_KIND = ProviderDriverKind.make("acpRegistry");
@@ -74,13 +74,22 @@ const DRIVER_OPTIONS = providerClients.definitions.filter(
 const FEATURED_DRIVER_OPTIONS = DRIVER_OPTIONS.filter((option) => option.featured !== false);
 const MORE_DRIVER_OPTIONS = DRIVER_OPTIONS.filter((option) => option.featured === false);
 const EMPTY_CONFIG_DRAFT: Record<string, unknown> = {};
-function validateInstanceId(id: string, existing: ReadonlySet<string>, t?: Translate): string | null {
+function validateInstanceId(
+  id: string,
+  existing: ReadonlySet<string>,
+  t?: Translate,
+): string | null {
   if (id.length === 0) return t?.("providers.instanceIdRequired") ?? "Instance ID is required.";
-  if (id.length > 64) return t?.("providers.instanceIdTooLong") ?? "Instance ID must be 64 characters or fewer.";
+  if (id.length > 64)
+    return t?.("providers.instanceIdTooLong") ?? "Instance ID must be 64 characters or fewer.";
   if (!INSTANCE_ID_PATTERN.test(id)) {
-    return t?.("providers.instanceIdInvalid") ?? "Instance ID must start with a letter and use only letters, digits, '-', or '_'.";
+    return (
+      t?.("providers.instanceIdInvalid") ??
+      "Instance ID must start with a letter and use only letters, digits, '-', or '_'."
+    );
   }
-  if (existing.has(id)) return t?.("providers.instanceIdExists", { id }) ?? `An instance named '${id}' already exists.`;
+  if (existing.has(id))
+    return t?.("providers.instanceIdExists", { id }) ?? `An instance named '${id}' already exists.`;
   return null;
 }
 
@@ -407,7 +416,10 @@ export function AddProviderInstanceDialog({
       toastManager.add({
         type: "error",
         title: t("providers.addFailed"),
-        description: error instanceof Error ? error.message : "The settings update failed.",
+        description:
+          error instanceof Error
+            ? error.message
+            : translateCurrent("settings.details.providers.theSettingsUpdateFailed"),
       });
       return;
     }
@@ -421,7 +433,10 @@ export function AddProviderInstanceDialog({
     toastManager.add({
       type: "success",
       title: t("providers.added"),
-      description: t("providers.addedDescription", { provider: driverOption.label, id: instanceId }),
+      description: t("providers.addedDescription", {
+        provider: driverOption.label,
+        id: instanceId,
+      }),
     });
     onOpenChange(false);
   };
@@ -641,7 +656,9 @@ export function AddProviderInstanceDialog({
                   }
                 />
                 <SettingsRow
-                  title={<label htmlFor="add-provider-instance-id">{t("providers.instanceId")}</label>}
+                  title={
+                    <label htmlFor="add-provider-instance-id">{t("providers.instanceId")}</label>
+                  }
                   description={
                     <span id="add-provider-instance-id-description">
                       Letters, digits, '-', or '_'.
@@ -707,9 +724,7 @@ export function AddProviderInstanceDialog({
                 </SettingsGroup>
               ) : !isAcpRegistry && wizardStep === 2 ? (
                 <div className="grid gap-2">
-                  <p className="text-sm text-muted-foreground">
-                    {t("providers.noConfig")}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{t("providers.noConfig")}</p>
                 </div>
               ) : null}
             </WizardPanel>

@@ -176,6 +176,7 @@ function configuredBinaryPath(config: unknown): string {
 
 // Subscribe only in the label because every status push restamps all providers' checkedAt.
 function ProviderLastChecked({ environmentId }: { environmentId: EnvironmentId }) {
+  const { t } = useI18n();
   const serverProviders =
     useAtomValue(serverEnvironment.providersValueAtom(environmentId)) ?? EMPTY_SERVER_PROVIDERS;
   const lastCheckedAt =
@@ -192,18 +193,22 @@ function ProviderLastChecked({ environmentId }: { environmentId: EnvironmentId }
   }
 
   if (lastCheckedRelative.status === "invalid") {
-    return <span>Checked unavailable</span>;
+    return <span>{t("diagnostics.checkedUnavailable")}</span>;
   }
 
   return (
     <span>
       {lastCheckedRelative.suffix ? (
         <>
-          Checked <span className="font-mono tabular-nums">{lastCheckedRelative.value}</span>{" "}
+          {t("providers.checked") + " "}
+          <span className="font-mono tabular-nums">{lastCheckedRelative.value}</span>{" "}
           {lastCheckedRelative.suffix}
         </>
       ) : (
-        <>Checked {lastCheckedRelative.value}</>
+        <>
+          {t("providers.checked") + " "}
+          {lastCheckedRelative.value}
+        </>
       )}
     </span>
   );
@@ -235,8 +240,9 @@ function ProviderSettingsPlaceholder({
   readonly description: string;
   readonly children?: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
-    <SettingsSection {...searchableSetting("providers")} variant="plain">
+    <SettingsSection {...searchableSetting("providers", t)} variant="plain">
       {deviceTabs ? (
         <div className="flex min-h-11 min-w-0 items-center px-3 sm:px-4">{deviceTabs}</div>
       ) : null}
@@ -381,7 +387,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
     !target.scoped && !onlyPrimaryDevice && options.length > 0 ? (
       <ScrollArea radius="none" hideScrollbars scrollFade className="h-11 min-w-0 flex-1">
         <ToggleGroup
-          aria-label="Devices"
+          aria-label={t("settings.nav.devices")}
           variant="segmented"
           className="my-2"
           value={effectiveEnvironmentId ? [effectiveEnvironmentId] : []}
@@ -601,8 +607,8 @@ export function EnvironmentProviderSettings({
         if (result._tag === "Success" && !result.value.accepted) {
           toastManager.add({
             type: "warning",
-            title: "Authentication request expired",
-            description: "Refresh the provider and start the authentication flow again.",
+            title: t("settings.details.providers.authenticationRequestExpired"),
+            description: t("settings.details.providers.refreshTheProviderAnd"),
           });
           return;
         }
@@ -610,9 +616,11 @@ export function EnvironmentProviderSettings({
           const error = squashAtomCommandFailure(result);
           toastManager.add({
             type: "error",
-            title: "Could not continue authentication",
+            title: t("settings.details.providers.couldNotContinueAuthentication"),
             description:
-              error instanceof Error ? error.message : "The authentication request expired.",
+              error instanceof Error
+                ? error.message
+                : t("settings.details.providers.theAuthenticationRequestExpired"),
           });
         }
       });
@@ -807,8 +815,11 @@ export function EnvironmentProviderSettings({
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Could not update provider instance",
-        description: error instanceof Error ? error.message : "The settings update failed.",
+        title: t("settings.details.providers.couldNotUpdateProvider"),
+        description:
+          error instanceof Error
+            ? error.message
+            : t("settings.details.providers.theSettingsUpdateFailed"),
       });
     }
   };
@@ -851,8 +862,11 @@ export function EnvironmentProviderSettings({
         const error = squashAtomCommandFailure(updateResult);
         toastManager.add({
           type: "error",
-          title: "Could not delete provider instance",
-          description: error instanceof Error ? error.message : "The settings update failed.",
+          title: t("settings.details.providers.couldNotDeleteProvider"),
+          description:
+            error instanceof Error
+              ? error.message
+              : t("settings.details.providers.theSettingsUpdateFailed"),
         });
         return;
       }
@@ -871,8 +885,11 @@ export function EnvironmentProviderSettings({
         const error = squashAtomCommandFailure(uninstallResult);
         toastManager.add({
           type: "warning",
-          title: "Provider deleted, but managed files remain",
-          description: error instanceof Error ? error.message : "Managed binary cleanup failed.",
+          title: t("settings.details.providers.providerDeletedButManaged"),
+          description:
+            error instanceof Error
+              ? error.message
+              : t("settings.details.providers.managedBinaryCleanupFailed"),
         });
       }
     },
@@ -894,8 +911,11 @@ export function EnvironmentProviderSettings({
       const error = squashAtomCommandFailure(result);
       toastManager.add({
         type: "error",
-        title: "Could not reset provider instance",
-        description: error instanceof Error ? error.message : "The settings update failed.",
+        title: t("settings.details.providers.couldNotResetProvider"),
+        description:
+          error instanceof Error
+            ? error.message
+            : t("settings.details.providers.theSettingsUpdateFailed"),
       });
     }
   });
@@ -977,7 +997,7 @@ export function EnvironmentProviderSettings({
   return (
     <>
       <SettingsSection
-        {...searchableSetting("providers")}
+        {...searchableSetting("providers", t)}
         variant="plain"
         titleAction={
           canAddProvider ? (
@@ -1105,20 +1125,18 @@ export function EnvironmentProviderSettings({
         />
       ) : null}
 
-      <SettingsSection title="Advanced">
+      <SettingsSection title={t("settings.advanced")}>
         <SettingsRow
           id={searchableSetting("provider-health-check-interval").id}
           title={
             <span className="inline-flex items-center gap-1.5">
-              {searchableSetting("provider-health-check-interval").title}
+              {searchableSetting("provider-health-check-interval", t).title}
               <PolicyTooltip>
-                This interval is configured here, then the shared Background activity policy decides
-                whether provider probes may run when the timer fires. Custom intervals appear as
-                Advanced in Maintenance settings.
+                {t("settings.details.providers.thisIntervalIsConfigured")}
               </PolicyTooltip>
             </span>
           }
-          description="Refresh provider status, versions, and models in the background. Set to 0 to disable."
+          description={t("settings.details.providers.refreshProviderStatusVersions")}
           resetAction={
             providerHealthRefreshIntervalSeconds !== defaultProviderHealthRefreshIntervalSeconds ? (
               <span
@@ -1150,7 +1168,7 @@ export function EnvironmentProviderSettings({
               )}
             >
               <IntervalSecondsField
-                label="provider health check interval"
+                label={t("providers.healthIntervalReset")}
                 value={providerHealthRefreshIntervalSeconds}
                 min={0}
                 step={PROVIDER_HEALTH_INTERVAL_STEP_SECONDS}
@@ -1263,6 +1281,7 @@ function ProviderInstanceRow({
   readonly favorites: UnifiedSettings["favorites"];
   readonly actions: ProviderInstanceRowActions;
 }) {
+  const { t } = useI18n();
   const allProjects = useProjects();
   const secretSources = useSecretSources(environmentId);
   const acpProjects =
@@ -1380,8 +1399,8 @@ function ProviderInstanceRow({
           driver === "cursor" &&
           liveProvider?.setup?.canAuthenticate === false ? (
           <SettingsRow
-            title="Cursor account"
-            description="Using CURSOR_API_KEY. Remove it from this provider's environment to use browser sign-in."
+            title={t("settings.details.providers.cursorAccount")}
+            description={t("settings.details.providers.usingCURSORAPIKEYRemoveIt")}
           />
         ) : null
       }

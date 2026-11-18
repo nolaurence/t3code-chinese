@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { SessionPermissions } from "./SessionPermissions";
 import {
   ChevronRightIcon,
@@ -130,7 +131,7 @@ export function SavedBackendListRow({
     onCopy: ({ traceId }) => {
       toastManager.add({
         type: "success",
-        title: "Trace ID copied",
+        title: translateCurrent("connections.trace.copied"),
         description: traceId,
       });
     },
@@ -138,7 +139,7 @@ export function SavedBackendListRow({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Could not copy trace ID",
+          title: translateCurrent("connections.trace.copyFailed"),
           description: error.message,
         }),
       );
@@ -152,7 +153,7 @@ export function SavedBackendListRow({
     onCopy: ({ url }) => {
       toastManager.add({
         type: "success",
-        title: "MCP URL copied",
+        title: translateCurrent("toast.feedback.mCPURLCopied"),
         description: `Add it to an agent, e.g. claude mcp add --transport http t3 ${url}`,
       });
     },
@@ -160,7 +161,7 @@ export function SavedBackendListRow({
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Could not copy MCP URL",
+          title: translateCurrent("toast.feedback.couldNotCopyMCPURL"),
           description: error.message,
         }),
       );
@@ -602,15 +603,15 @@ function ConfiguredCloudLinkRow({
       toastManager.add({
         type: "success",
         title: enabled
-          ? "T3 Connect linked"
+          ? translateCurrent("connections.cloud.linked")
           : publishAgentActivity
-            ? "T3 Connect tunnel disabled"
-            : "T3 Connect unlinked",
+            ? translateCurrent("connections.cloud.tunnelDisabled")
+            : translateCurrent("connections.cloud.unlinked"),
         description: enabled
-          ? "This environment is available through T3 Connect."
+          ? translateCurrent("connections.cloud.linkedDescription")
           : publishAgentActivity
-            ? "The managed tunnel was removed. Agent activity publishing stays on."
-            : "This environment is no longer available through T3 Connect.",
+            ? translateCurrent("connections.cloud.tunnelDisabledDescription")
+            : translateCurrent("connections.cloud.unlinkedDescription"),
       });
     }
     setIsUpdating(false);
@@ -623,10 +624,12 @@ function ConfiguredCloudLinkRow({
     if (ok) {
       toastManager.add({
         type: "success",
-        title: enabled ? "Agent activity enabled" : "Agent activity disabled",
+        title: enabled
+          ? translateCurrent("connections.cloud.activityEnabled")
+          : translateCurrent("connections.cloud.activityDisabled"),
         description: enabled
-          ? "This environment publishes agent activity to your mobile clients."
-          : "This environment will stop publishing agent activity.",
+          ? translateCurrent("cloud.onboarding.activityPublished")
+          : translateCurrent("connections.cloud.activityDisabledDescription"),
       });
     }
     setIsUpdatingPreference(false);
@@ -642,10 +645,12 @@ function ConfiguredCloudLinkRow({
     if (ok) {
       toastManager.add({
         type: "success",
-        title: enabled ? "Webhooks held while offline" : "Webhooks no longer held",
+        title: enabled
+          ? translateCurrent("toast.feedback.webhooksHeldWhileOffline")
+          : translateCurrent("toast.feedback.webhooksNoLongerHeld"),
         description: enabled
-          ? "T3 Connect keeps webhook requests for up to 24 hours while this environment is offline."
-          : "Requests to an offline environment now fail. Anything already held is still delivered.",
+          ? translateCurrent("toast.feedback.t3ConnectKeepsWebhookRequests")
+          : translateCurrent("toast.feedback.requestsToAnOfflineEnvironment"),
       });
     }
     setIsUpdatingPreference(false);

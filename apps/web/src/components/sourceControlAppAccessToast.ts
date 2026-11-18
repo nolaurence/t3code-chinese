@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { appSignInTargetForRemote } from "@t3tools/client-runtime/source-control-clients";
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
@@ -28,7 +29,7 @@ export async function suggestAppAccessForRemote(
     title: `Give ${target.appSignIn.appName} access to ${owner}`,
     description: `It isn't installed there, so GitHub requests for ${target.input.repository} use your own login and its lower rate limit.`,
     actionProps: {
-      children: "Install",
+      children: translateCurrent("settings.update.install"),
       onClick: () => {
         toastManager.close(id);
         window.open(target.appSignIn.installUrl, "_blank", "noopener,noreferrer");

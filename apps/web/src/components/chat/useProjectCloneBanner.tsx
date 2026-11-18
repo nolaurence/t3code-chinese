@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import {
   isAtomCommandInterrupted,
@@ -42,7 +43,8 @@ export function useProjectCloneBanner(activeProjectRef: ScopedProjectRef | null)
         stackedThreadToast({
           type: "error",
           title,
-          description: error instanceof Error ? error.message : "An error occurred.",
+          description:
+            error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
         }),
       );
     }

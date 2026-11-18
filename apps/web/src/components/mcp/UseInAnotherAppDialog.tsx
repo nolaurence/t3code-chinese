@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAuth } from "@clerk/react";
 import { useAtomValue } from "@effect/atom-react";
 import { offersLinkedEnvironments } from "@t3tools/client-runtime/link-request";
@@ -639,7 +640,7 @@ function openLink(url: string) {
     .catch((error: unknown) =>
       toastManager.add({
         type: "error",
-        title: "Could not open the link",
+        title: translateCurrent("pullRequest.openLinkFailed"),
         description: error instanceof Error ? error.message : url,
       }),
     );
@@ -678,8 +679,8 @@ function PrimaryAction({ app, mcpUrl }: { readonly app: McpApp; readonly mcpUrl:
       if (!copied) {
         toastManager.add({
           type: "error",
-          title: "Could not copy",
-          description: "Use Set up another way.",
+          title: translateCurrent("toast.feedback.couldNotCopy"),
+          description: translateCurrent("toast.feedback.useSetUpAnotherWay"),
         });
         return;
       }

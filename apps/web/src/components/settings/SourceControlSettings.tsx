@@ -46,7 +46,7 @@ import { searchableSetting, sourceControlHostSettingsSearchId } from "./settings
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { sourceControlIcon } from "~/sourceControlPresentation";
-import { useI18n, type Translate } from "~/i18n";
+import { translateCurrent, useI18n, type Translate } from "~/i18n";
 
 const EMPTY_DISCOVERY_RESULT: SourceControlDiscoveryResult = {
   versionControlSystems: [],
@@ -84,7 +84,10 @@ function authPresentation(
     return { label: t?.("providers.status.authenticated") ?? "Authenticated", badge: null };
   }
   if (auth.status === "unauthenticated") {
-    return { label: t?.("providers.status.unauthenticated") ?? "Not authenticated", badge: "secondary" };
+    return {
+      label: t?.("providers.status.unauthenticated") ?? "Not authenticated",
+      badge: "secondary",
+    };
   }
   return { label: t?.("sourceControl.statusUnknown") ?? "Status unknown", badge: null };
 }
@@ -161,7 +164,12 @@ function itemSummary({
   }
 
   if (item.status !== "available") {
-    return <span>Not available on this server: {item.installHint}</span>;
+    return (
+      <span>
+        {translateCurrent("settings.details.sourceControl.notAvailableOnThis") + " "}
+        {item.installHint}
+      </span>
+    );
   }
 
   if (auth) {
@@ -169,7 +177,7 @@ function itemSummary({
       const authDetail = optionLabel(auth.detail);
       return (
         <>
-          <span>Authenticated</span>
+          <span>{translateCurrent("providers.status.authenticated")}</span>
           {authAccount ? (
             <>
               <span aria-hidden>as</span>
@@ -182,7 +190,12 @@ function itemSummary({
     }
 
     if (!item.executable && auth.status === "unauthenticated") {
-      return <span>Available. {item.installHint}</span>;
+      return (
+        <span>
+          {translateCurrent("settings.details.sourceControl.available") + " "}
+          {item.installHint}
+        </span>
+      );
     }
 
     if (auth.status === "unauthenticated" && auth.accounts?.some((entry) => entry.authenticated)) {
@@ -201,7 +214,8 @@ function itemSummary({
     const authDetail = optionLabel(auth.detail);
     return (
       <span>
-        Could not verify {item.label}. {authDetail ?? item.installHint}
+        {translateCurrent("settings.details.sourceControl.couldNotVerify") + " "}
+        {item.label}. {authDetail ?? item.installHint}
       </span>
     );
   }
@@ -250,7 +264,7 @@ function DiscoveryItemRow({
               {version ? <code className="text-xs text-muted-foreground">{version}</code> : null}
               {isVcsNotReady(item) ? (
                 <Badge variant="warning" size="sm">
-                  Coming Soon
+                  {t("providers.comingSoon")}
                 </Badge>
               ) : null}
               {authStatus?.badge ? (
@@ -278,7 +292,11 @@ function DiscoveryItemRow({
               </Button>
             ) : null}
             {!isVcsNotReady(item) ? (
-              <Switch checked={enabled} disabled aria-label={t("sourceControl.availability", { provider: item.label })} />
+              <Switch
+                checked={enabled}
+                disabled
+                aria-label={t("sourceControl.availability", { provider: item.label })}
+              />
             ) : null}
           </div>
         </div>
@@ -346,7 +364,10 @@ function EmptySourceControlDiscovery({
   const hasError = error !== null;
 
   return (
-    <SettingsSection id={searchableSetting("source-control").id} title={t("sourceControl.serverEnvironment")}>
+    <SettingsSection
+      id={searchableSetting("source-control").id}
+      title={t("sourceControl.serverEnvironment")}
+    >
       <Empty>
         <EmptyMedia variant="icon">
           <PullRequestGlyph.pullRequest />
@@ -364,7 +385,7 @@ function EmptySourceControlDiscovery({
         <EmptyContent>
           <Button size="sm" variant="outline" onClick={onScan} disabled={isPending}>
             <RefreshIcon size="sm" refreshing={isPending} />
-            Scan
+            {t("sourceControl.scan")}
           </Button>
         </EmptyContent>
       </Empty>
@@ -416,7 +437,7 @@ export function SourceControlSettingsPanel() {
             {credentials.appSignIn && item.appSignIn === true ? (
               <div className="flex items-center gap-3 text-2xs text-muted-foreground">
                 <span aria-hidden className="h-px flex-1 bg-border" />
-                Or use your own credentials
+                {t("settings.details.sourceControl.orUseYourOwn")}
                 <span aria-hidden className="h-px flex-1 bg-border" />
               </div>
             ) : null}
@@ -475,7 +496,10 @@ export function SourceControlSettingsPanel() {
     <SettingsPageContainer>
       <ProjectDefaultsSettings category="source-control" />
       {environmentId === null ? (
-        <SettingsSection id={searchableSetting("source-control").id} title={t("sourceControl.serverEnvironment")}>
+        <SettingsSection
+          id={searchableSetting("source-control").id}
+          title={t("sourceControl.serverEnvironment")}
+        >
           <p className="px-4 py-3 text-sm text-muted-foreground">
             {t("sourceControl.connectToInspect")}
           </p>
@@ -486,7 +510,9 @@ export function SourceControlSettingsPanel() {
             title={`Version Control${environmentSuffix}`}
             headerAction={scanButton}
           />
-          <SourceControlSectionSkeleton title="Source control providers" />
+          <SourceControlSectionSkeleton
+            title={t("settings.details.sourceControl.sourceControlProviders")}
+          />
         </>
       ) : hasDiscoveryItems ? (
         <>

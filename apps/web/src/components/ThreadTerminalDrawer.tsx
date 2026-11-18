@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { workspaceAreaProps } from "../lib/workspaceFocus";
 import { useAtomMount, useAtomValue } from "@effect/atom-react";
 import {
@@ -1068,8 +1069,11 @@ function TerminalSessionViewport({
               toastManager.add(
                 stackedThreadToast({
                   type: "error",
-                  title: "Unable to open link",
-                  description: error instanceof Error ? error.message : "An error occurred.",
+                  title: translateCurrent("terminal.error.openLink"),
+                  description:
+                    error instanceof Error
+                      ? error.message
+                      : translateCurrent("common.errorGeneric"),
                 }),
               );
             },

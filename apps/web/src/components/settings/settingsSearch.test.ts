@@ -6,13 +6,16 @@ import {
 } from "@t3tools/contracts";
 import { UNKNOWN_SOURCE_CONTROL_CLIENT } from "@t3tools/client-runtime/source-control-clients";
 import * as Schema from "effect/Schema";
+import { createTranslator } from "../../i18n";
 
 import {
   filterAvailableSettingsSearchItems,
   getSettingsSearchTargetScope,
   getThreadAutoSettlementSearchAvailability,
   isSettingsSearchScopeAvailable,
+  localizeSettingsSearchItems,
   movedSettingsPath,
+  searchableSetting,
   searchSettings,
   SETTINGS_NAV_GROUPS,
   SETTINGS_SEARCH_ITEMS,
@@ -71,6 +74,12 @@ describe("searchSettings", () => {
         scope: "environment-defaults",
       });
     }
+    const t = createTranslator("zh-CN");
+    const localized = localizeSettingsSearchItems(t);
+    const fallback = searchableSetting("fallback-model", t);
+    expect(fallback.title).toBe("备用模型");
+    expect(searchSettings("备用模型", localized)[0]).toMatchObject(fallback);
+    expect(searchSettings("fallback model", localized)[0]).toMatchObject(fallback);
   });
 
   it("hides the Secrets page from nav and search while the secrets feature is disabled", () => {

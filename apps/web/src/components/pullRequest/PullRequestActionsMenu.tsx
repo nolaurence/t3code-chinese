@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { useAtomValue } from "@effect/atom-react";
 import {
   canEditPullRequestMaintainerEdits,
@@ -192,7 +193,7 @@ export function PullRequestActionsMenu({
       setMaintainerEditsChoice(previousChoice);
       toastManager.add({
         type: "error",
-        title: "Could not save maintainer access",
+        title: translateCurrent("toast.feedback.couldNotSaveMaintainerAccess"),
         description: readableFailure(squashAtomCommandFailure(result), "Try again."),
       });
       return;

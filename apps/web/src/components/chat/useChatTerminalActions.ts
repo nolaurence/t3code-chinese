@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import type {
   EnvironmentProject,
   EnvironmentThreadShell,
@@ -305,8 +306,9 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not open preview",
-            description: error instanceof Error ? error.message : "An unexpected error occurred.",
+            title: translateCurrent("toast.feedback.couldNotOpenPreview"),
+            description:
+              error instanceof Error ? error.message : translateCurrent("update.unexpectedError"),
           }),
         );
       }

@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   EDITORS,
   type ContextMenuItem,
@@ -128,9 +129,9 @@ export function useFileContextMenu(environmentId: EnvironmentId | null) {
       type: "error",
       title:
         action === "open"
-          ? "Could not open file"
+          ? translateCurrent("toast.feedback.couldNotOpenFile")
           : reveal
-            ? "Unable to reveal file"
+            ? translateCurrent("toast.feedback.unableToRevealFile")
             : `Could not open in ${EDITOR_LABEL_BY_ID.get(editor) ?? editor}`,
       description: absolutePath,
     });

@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import {
   createPreviewFramePainter,
   createPreviewStreamClient,
@@ -110,9 +111,9 @@ async function copyPageText(text: string) {
   } catch {
     const id = toastManager.add({
       type: "info",
-      title: "The page copied text",
+      title: translateCurrent("toast.feedback.thePageCopiedText"),
       actionProps: {
-        children: "Copy",
+        children: translateCurrent("terminal.copy"),
         onClick: () => {
           toastManager.close(id);
           void navigator.clipboard.writeText(text).catch(() => undefined);
@@ -127,7 +128,7 @@ function offerDownload(download: PreviewStreamDownload) {
     type: "info",
     title: `Downloaded ${download.fileName}`,
     actionProps: {
-      children: "Save",
+      children: translateCurrent("common.save"),
       onClick: () => {
         toastManager.close(id);
         const anchor = document.createElement("a");
@@ -189,7 +190,7 @@ export function ServerBrowserSurface(props: {
     void uploadPreviewStreamFiles(chooser, files).catch((cause: unknown) =>
       toastManager.add({
         type: "error",
-        title: "Could not send the files to the page",
+        title: translateCurrent("toast.feedback.couldNotSendTheFiles"),
         description: cause instanceof Error ? cause.message : undefined,
       }),
     );

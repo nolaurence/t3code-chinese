@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, PullRequestDetail, PullRequestRef } from "@t3tools/contracts";
 import { useState } from "react";
@@ -54,7 +55,7 @@ export function PullRequestTitleEditor({
     if (result._tag === "Failure") {
       toastManager.add({
         type: "error",
-        title: "The title could not be saved",
+        title: translateCurrent("pullRequest.titleSaveFailed"),
         description: readableFailure(
           squashAtomCommandFailure(result),
           "The host refused the new title.",

@@ -1,3 +1,4 @@
+import { translateCurrent } from "~/i18n/messages";
 import { writeTextToClipboard } from "../hooks/useCopyToClipboard";
 import { formatFilePathForClipboard } from "@t3tools/client-runtime/media-actions";
 import { readLocalApi } from "../localApi";
@@ -121,7 +122,7 @@ function showWorkspaceContextMenu(event: ReactMouseEvent, workspacePath: string)
           if (didCopy) {
             toastManager.add({
               type: "success",
-              title: "Path copied",
+              title: translateCurrent("panel.pathCopied"),
               description: clipboardPath,
             });
           }
@@ -130,8 +131,9 @@ function showWorkspaceContextMenu(event: ReactMouseEvent, workspacePath: string)
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Failed to copy path",
-              description: error instanceof Error ? error.message : "An error occurred.",
+              title: translateCurrent("panel.copyPathFailed"),
+              description:
+                error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
             }),
           );
         },

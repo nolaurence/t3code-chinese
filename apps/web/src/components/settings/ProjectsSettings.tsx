@@ -9,7 +9,6 @@ import { SettingsPageContainer } from "./settingsLayout";
 import { ALL_ENVIRONMENTS_VALUE, selectEnvironmentAxis } from "./settingsScopeAxis";
 import { useI18n } from "../../i18n";
 
-
 export function ProjectsSettings() {
   const { t } = useI18n();
   const { search: value, scope, selectScope } = useSettingsScope();
@@ -25,7 +24,7 @@ export function ProjectsSettings() {
               onClick={() => selectScope(selectEnvironmentAxis(value, ALL_ENVIRONMENTS_VALUE))}
             >
               <LayersIcon />
-              Show all environments
+              {t("settings.details.projects.showAllEnvironments")}
             </Button>
           ) : null}
         </div>
