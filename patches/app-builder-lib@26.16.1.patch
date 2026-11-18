@@ -16,8 +16,34 @@ index 8a3462b185b078a260483635e6d774e2ece6e269..105778c145ab63a26444179215c643a7
 diff --git a/templates/nsis/include/allowOnlyOneInstallerInstance.nsh b/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
 --- a/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
 +++ b/templates/nsis/include/allowOnlyOneInstallerInstance.nsh
-@@ -103,6 +103,9 @@
- !macroend
+@@ -64,6 +64,12 @@
+ !macro FIND_PROCESS _FILE _RETURN
+   ${if} $IsPowerShellAvailable == 0
+-    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -C "if ((Get-CimInstance -ClassName Win32_Process | ? {$$_.Path -and $$_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase')}).Count -gt 0) { exit 0 } else { exit 1 }"`
++    # T3 Code: only a channel application counts as running. The install
++    # directory also holds helper processes (resource monitor, conpty, ripgrep,
++    # cursor sandbox, elevation shims) under resources\ that can outlive the
++    # app; a path-prefix match reported those as a running app and blocked
++    # installation with "cannot be closed". Keep the channel list in sync with
++    # customAppRunningMessages in apps/desktop/resources/installer.nsh.
++    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -C "if ((Get-CimInstance -ClassName Win32_Process | ? {$$_.Path -and [IO.Path]::GetDirectoryName($$_.Path) -eq '$INSTDIR' -and [IO.Path]::GetFileName($$_.Path) -in 'T3 Code (Alpha).exe','T3 Code (Beta).exe','T3 Code (Nightly).exe'}).Count -gt 0) { exit 0 } else { exit 1 }"`
+     Pop ${_RETURN}
+   ${else}
+     !ifdef INSTALL_MODE_PER_ALL_USERS
+@@ -90,8 +96,10 @@
+     StrCpy $0 ""
+   ${endIf}
+
+   ${if} $IsPowerShellAvailable == 0
++    # Exclude this installer/uninstaller so a sweep cannot kill the process
++    # running it; the taskkill fallback below already filters on PID.
+-    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -C "Get-CimInstance -ClassName Win32_Process | ? {$$_.Path -and $$_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase')} | % { Stop-Process -Id $$_.ProcessId $0 }"`
++    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -C "Get-CimInstance -ClassName Win32_Process | ? {$$_.Path -and $$_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase') -and $$_.ProcessId -ne $pid} | % { Stop-Process -Id $$_.ProcessId $0 }"`
+   ${else}
+     !ifdef INSTALL_MODE_PER_ALL_USERS
+       nsExec::Exec `taskkill /IM "${_FILE}" /FI "PID ne $pid"`
+@@ -103,6 +111,9 @@
+ !macroend 
 
  !macro _CHECK_APP_RUNNING
 +  Var /GLOBAL appRunningMessage
@@ -26,7 +52,7 @@ diff --git a/templates/nsis/include/allowOnlyOneInstallerInstance.nsh b/template
    ${GetProcessInfo} 0 $pid $1 $2 $3 $4
    ${if} $3 != "${APP_EXECUTABLE_FILENAME}"
      ${if} ${isUpdated}
-@@ -112,17 +115,23 @@
+@@ -112,17 +123,23 @@
 
      !insertmacro FIND_PROCESS "${APP_EXECUTABLE_FILENAME}" $R0
      ${if} $R0 == 0
@@ -52,7 +78,7 @@ diff --git a/templates/nsis/include/allowOnlyOneInstallerInstance.nsh b/template
 
        !insertmacro KILL_PROCESS "${APP_EXECUTABLE_FILENAME}" 0
        # to ensure that files are not "in-use"
-@@ -153,7 +162,7 @@
+@@ -153,12 +170,15 @@
          # App likely running with elevated permissions.
          # Ask user to close it manually
          ${if} $R1 > 1
@@ -61,3 +87,11 @@ diff --git a/templates/nsis/include/allowOnlyOneInstallerInstance.nsh b/template
            Quit
          ${else}
            Goto loop
+         ${endIf}
+       not_running:
+     ${endIf}
++    # No channel application is running: clear leftover helper processes under
++    # the install directory so their images do not lock files during extraction.
++    !insertmacro KILL_PROCESS "${APP_EXECUTABLE_FILENAME}" 1
+   ${endIf}
+ !macroend
