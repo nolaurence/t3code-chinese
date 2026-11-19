@@ -8,7 +8,7 @@ import * as Shared from "./shared.ts";
 const decodeNestedNumberPayload = Schema.decodeUnknownEffect(
   Schema.Struct({ profile: Schema.Struct({ token: Schema.Number }) }),
 );
-const encodeUnknownJson = Schema.encodeSync(Schema.UnknownFromJsonString);
+const encodeUnknownJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
 
 it.effect("preserves schema decode diagnostics without deriving the message from the cause", () =>
   Effect.gen(function* () {
@@ -33,24 +33,6 @@ it.effect("preserves schema decode diagnostics without deriving the message from
     assert.notProperty(protocolError, "method");
     assert.notProperty(protocolError, "operation");
     assert.notProperty(protocolError, "cause");
-  }),
-);
-
-it.effect("preserves schema encode diagnostics", () =>
-  Effect.gen(function* () {
-    const error = yield* Shared.encodeOptionalPayload(
-      "thread/start",
-      Schema.Number,
-      "not-a-number" as never,
-    ).pipe(Effect.flip);
-
-    assert.equal(error.method, "thread/start");
-    assert.equal(error.operation, "encode-payload");
-    assert.equal(
-      error.message,
-      "Invalid payload for method 'thread/start' during 'encode-payload'",
-    );
-    assert.isTrue(Schema.isSchemaError(error.cause));
   }),
 );
 
@@ -119,33 +101,5 @@ it.effect("retains the request-handler error as the internal error cause", () =>
     assert.strictEqual(error.cause, source);
     assert.strictEqual(source.cause, rootCause);
     assert.notInclude(error.message, source.message);
-  }),
-);
-
-it.effect("passes request errors through without adding a wrapper", () =>
-  Effect.gen(function* () {
-    const source = CodexError.CodexAppServerRequestError.invalidParams("Invalid thread id");
-    const error = yield* Shared.runHandler(
-      (_payload: void) => Effect.fail(source),
-      undefined,
-      "thread/start",
-    ).pipe(Effect.flip);
-
-    assert.strictEqual(error, source);
-  }),
-);
-
-it.effect("retains the full notification payload decode cause chain", () =>
-  Effect.gen(function* () {
-    const error = yield* Shared.decodeNotificationPayload(
-      "item/agentMessage/delta",
-      Schema.String,
-      42,
-    ).pipe(Effect.flip);
-
-    assert.equal(error.method, "item/agentMessage/delta");
-    assert.equal(error.operation, "decode-notification-payload");
-    assert.instanceOf(error.cause, CodexError.CodexAppServerRequestError);
-    assert.isTrue(Schema.isSchemaError(error.cause.cause));
   }),
 );

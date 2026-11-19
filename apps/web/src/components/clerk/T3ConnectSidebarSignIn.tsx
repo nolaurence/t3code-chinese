@@ -1,11 +1,11 @@
 import { UserButton, useAuth } from "@clerk/react";
-import { LogInIcon, SmartphoneIcon } from "lucide-react";
+import { LogInIcon, RotateCwIcon } from "lucide-react";
 
 import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
-import { MobileClientsUserProfilePage } from "./MobileClientsUserProfilePage";
+import { retryClerkLoad, useClerkLoadFailed } from "./clerkLoadFailure";
+import { T3_CONNECT_ACCOUNT_PAGES } from "./T3ConnectAccountPages";
 import { useT3ConnectAuthPrompt } from "./useT3ConnectAuthPrompt";
-import { useI18n } from "../../i18n";
 
 export function T3ConnectSidebarSignIn() {
   if (!hasCloudPublicConfig()) return null;
@@ -20,7 +20,6 @@ export function T3ConnectSidebarAvatar() {
 }
 
 function ConfiguredT3ConnectSidebarAvatar() {
-  const { t } = useI18n();
   const { isLoaded, isSignedIn } = useAuth();
 
   if (!isLoaded || !isSignedIn) return null;
@@ -30,43 +29,52 @@ function ConfiguredT3ConnectSidebarAvatar() {
       appearance={{
         elements: {
           avatarBox: "size-7",
-          userButtonTrigger: "rounded-lg p-1 hover:bg-sidebar-accent",
+          // Clerk's unlayered trigger reset (padding, radius, background) beats layered utilities.
+          userButtonTrigger: "mb-1! rounded-lg! p-1! hover:bg-sidebar-row-hover!",
         },
       }}
     >
-      <UserButton.UserProfilePage
-        label={t("auth.mobileClients")}
-        labelIcon={<SmartphoneIcon className="size-4" />}
-        url="mobile-clients"
-      >
-        <MobileClientsUserProfilePage />
-      </UserButton.UserProfilePage>
+      {T3_CONNECT_ACCOUNT_PAGES.map((page) => (
+        <UserButton.UserProfilePage
+          key={page.url}
+          label={page.label}
+          labelIcon={page.icon}
+          url={page.url}
+        >
+          {page.content}
+        </UserButton.UserProfilePage>
+      ))}
     </UserButton>
   );
 }
 
 function ConfiguredT3ConnectSidebarSignIn() {
-  const { t } = useI18n();
   const { isLoaded, isSignedIn } = useAuth();
-  const { authPrompt, openAuthPrompt } = useT3ConnectAuthPrompt();
+  const loadFailed = useClerkLoadFailed();
+  const { openAuthPrompt } = useT3ConnectAuthPrompt();
 
-  if (!isLoaded || isSignedIn) return null;
-
-  return (
-    <>
+  if (loadFailed) {
+    return (
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton
-            size="sm"
-            className="gap-2 px-2 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            onClick={openAuthPrompt}
-          >
-            <LogInIcon className="size-4" />
-            <span>{t("auth.signInConnect")}</span>
+          <SidebarMenuButton onClick={retryClerkLoad}>
+            <RotateCwIcon />
+            <span>Retry T3 Connect</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
-      {authPrompt}
-    </>
+    );
+  }
+  if (!isLoaded || isSignedIn) return null;
+
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton onClick={openAuthPrompt}>
+          <LogInIcon />
+          <span>Sign in to T3 Connect</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }

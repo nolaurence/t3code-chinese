@@ -1,0 +1,461 @@
+import { useI18n } from "../../i18n";
+import {
+  snoozeDayLabel,
+  snoozeDurationUnits,
+  snoozePresentation,
+  snoozeUnitLabels,
+  splitSnoozeDuration,
+} from "../../i18n/snooze";
+import { useState } from "react";
+import {
+  DEFAULT_SNOOZE_PRESETS,
+  MAX_SNOOZE_PRESET_MINUTES,
+  MAX_SNOOZE_PRESETS,
+  SnoozePresetDay,
+  type SnoozePresetSetting,
+} from "@t3tools/contracts/settings";
+import {
+  resolveSnoozePreset,
+  resolveSnoozePresets,
+  snoozePresetId,
+} from "@t3tools/client-runtime/state/thread-settled";
+import * as Equal from "effect/Equal";
+import * as Schema from "effect/Schema";
+import { PlusIcon, XIcon } from "lucide-react";
+
+import { useNowMinute } from "../../hooks/useNowMinute";
+import { reconcileSnoozeDraft, sortSnoozeRows } from "./SnoozePresetsSettings.logic";
+import { formatShortTimestamp } from "../../timestampFormat";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import {
+  NumberField,
+  NumberFieldDecrement,
+  NumberFieldGroup,
+  NumberFieldIncrement,
+  NumberFieldInput,
+} from "../ui/number-field";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { SettingResetButton, SettingsRow } from "./settingsLayout";
+import { searchableSetting } from "./settingsSearch";
+import {
+  useScopedSettings,
+  useScopedSettingsMixed,
+  useUpdateScopedSettings,
+} from "./useScopedSettings";
+
+const WHEN_VALUES = ["after", ...SnoozePresetDay.literals] as const;
+
+// Offered in order when adding, skipping any already in the list.
+const ADD_CANDIDATES: ReadonlyArray<SnoozePresetSetting> = [
+  ...DEFAULT_SNOOZE_PRESETS,
+  { kind: "after", minutes: 30 },
+  { kind: "at", day: "saturday", time: "09:00" },
+  { kind: "after", minutes: 24 * 60 },
+];
+
+function nextCandidate(presets: ReadonlyArray<SnoozePresetSetting>): SnoozePresetSetting {
+  const used = new Set(presets.map(snoozePresetId));
+  return (
+    ADD_CANDIDATES.find((candidate) => !used.has(snoozePresetId(candidate))) ?? {
+      kind: "after",
+      minutes: 60,
+    }
+  );
+}
+
+// Row order is only display order, so it does not make a list differ from the defaults.
+function sameSnoozePresets(
+  left: ReadonlyArray<SnoozePresetSetting>,
+  right: ReadonlyArray<SnoozePresetSetting>,
+) {
+  const ids = (presets: ReadonlyArray<SnoozePresetSetting>) =>
+    presets.map(snoozePresetId).toSorted();
+  return Equal.equals(ids(left), ids(right));
+}
+
+const isSnoozePresetDay = Schema.is(SnoozePresetDay);
+
+interface KindMemory {
+  readonly minutes: number;
+  readonly time: string;
+}
+
+function withWhen(
+  preset: SnoozePresetSetting,
+  when: string,
+  memory: KindMemory,
+): SnoozePresetSetting | null {
+  if (when === "after") {
+    return preset.kind === "after" ? preset : { kind: "after", minutes: memory.minutes };
+  }
+  if (!isSnoozePresetDay(when)) return null;
+  return { kind: "at", day: when, time: preset.kind === "at" ? preset.time : memory.time };
+}
+
+/**
+ * Edits the snooze menu's options. Rows sort by wake time like the menu, but only when focus
+ * leaves the list, so a row never moves under the pointer mid-edit.
+ */
+export function SnoozePresetsRow() {
+  const { t } = useI18n();
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  const saved = settings.snoozePresets;
+  const nowMinute = useNowMinute();
+  const now = new Date(`${nowMinute}Z`);
+  // Edits build on a local draft, so a second edit before the first save echoes back
+  // does not restore what the first one changed. Echoes of our own writes keep the draft.
+  // Row keys survive removals and sorts, so a row's in-progress field state stays with it.
+  // One state, so a sort queued in the same event as an edit applies on top of it.
+  const [rows, setRows] = useState(() =>
+    sortSnoozeRows(
+      saved,
+      saved.map((_, index) => index),
+      now,
+    ),
+  );
+  const { presets, keys } = rows;
+  const [nextKey, setNextKey] = useState(saved.length);
+  // Null forces the next render to adopt the saved value, as after a failed write.
+  const [savedSource, setSavedSource] = useState<ReadonlyArray<SnoozePresetSetting> | null>(saved);
+  // Environments disagree, so equal-looking edits and Reset must still write to all of them.
+  const mixed = useScopedSettingsMixed(["snoozePresets"]);
+  const [written, setWritten] = useState<ReadonlyArray<ReadonlyArray<SnoozePresetSetting>>>([]);
+  const freshKeys = (count: number) => {
+    setNextKey(nextKey + count);
+    return Array.from({ length: count }, (_, index) => nextKey + index);
+  };
+  if (!Equal.equals(savedSource, saved)) {
+    setSavedSource(saved);
+    const reconciled = reconcileSnoozeDraft(written, saved);
+    if (reconciled.adopt) {
+      setWritten([]);
+      setRows(sortSnoozeRows(saved, freshKeys(saved.length), now));
+    } else {
+      setWritten(reconciled.pending);
+    }
+  }
+  const save = (
+    snoozePresets: ReadonlyArray<SnoozePresetSetting>,
+    nextKeys: ReadonlyArray<number> = keys,
+  ) => {
+    if (!mixed && Equal.equals(snoozePresets, presets)) return;
+    setRows({ presets: snoozePresets, keys: nextKeys });
+    setWritten((previous) => [...previous, snoozePresets]);
+    updateSettings(
+      { snoozePresets },
+      {
+        onFailed: () => {
+          setWritten([]);
+          setSavedSource(null);
+        },
+      },
+    );
+  };
+  const replaceAt = (index: number, next: SnoozePresetSetting) =>
+    save(presets.map((preset, candidate) => (candidate === index ? next : preset)));
+
+  return (
+    <SettingsRow
+      serverScoped
+      settingKeys={["snoozePresets"]}
+      {...searchableSetting("snooze-options", t)}
+      description={t("settings.snooze.description")}
+      resetAction={
+        !mixed && sameSnoozePresets(presets, DEFAULT_SNOOZE_PRESETS) ? null : (
+          <SettingResetButton
+            label={t("settings.search.snoozeOptions")}
+            onClick={() => {
+              const sorted = sortSnoozeRows(
+                DEFAULT_SNOOZE_PRESETS,
+                freshKeys(DEFAULT_SNOOZE_PRESETS.length),
+                now,
+              );
+              save(sorted.presets, sorted.keys);
+            }}
+          />
+        )
+      }
+    >
+      <SnoozePresetList
+        presets={presets}
+        keys={keys}
+        timestampFormat={settings.timestampFormat}
+        onChange={replaceAt}
+        onRemove={(index) =>
+          save(
+            presets.filter((_, candidate) => candidate !== index),
+            keys.filter((_, candidate) => candidate !== index),
+          )
+        }
+        onAdd={() => save([...presets, nextCandidate(presets)], [...keys, ...freshKeys(1)])}
+        onSettle={() => setRows((current) => sortSnoozeRows(current.presets, current.keys, now))}
+      />
+    </SettingsRow>
+  );
+}
+
+function SnoozePresetList(props: {
+  presets: ReadonlyArray<SnoozePresetSetting>;
+  keys: ReadonlyArray<number>;
+  timestampFormat: Parameters<typeof formatShortTimestamp>[1];
+  onChange: (index: number, preset: SnoozePresetSetting) => void;
+  onRemove: (index: number) => void;
+  onAdd: () => void;
+  onSettle: () => void;
+}) {
+  const { locale, t } = useI18n();
+  const nowMinute = useNowMinute();
+  const now = new Date(`${nowMinute}Z`);
+  const presentation = snoozePresentation(props.timestampFormat, locale, t);
+  const seenIds = new Set<string>();
+  const seenWakes = new Set<string>();
+  const previews = props.presets.map((preset) => {
+    const resolved = resolveSnoozePreset(preset, now, presentation.formatTime, presentation);
+    if (resolved === null) return { tone: "muted", text: t("settings.snooze.passed") } as const;
+    if (seenIds.has(resolved.id)) {
+      return { tone: "muted", text: t("settings.snooze.duplicate") } as const;
+    }
+    if (seenWakes.has(resolved.snoozedUntil)) {
+      return { tone: "muted", text: t("settings.snooze.sameTime") } as const;
+    }
+    seenIds.add(resolved.id);
+    seenWakes.add(resolved.snoozedUntil);
+    return { tone: "menu", label: resolved.label, when: resolved.whenLabel } as const;
+  });
+
+  const menuPresets = resolveSnoozePresets(now, { presets: props.presets, ...presentation });
+  const repeatedLabels = new Set(
+    menuPresets
+      .map((preset) => preset.label)
+      .filter((label, index, labels) => labels.indexOf(label) !== index),
+  );
+  const menuOrder = menuPresets.map((preset) =>
+    repeatedLabels.has(preset.label) ? `${preset.label} ${preset.whenLabel}` : preset.label,
+  );
+
+  return (
+    <div
+      className="flex flex-col gap-1.5 pt-3 pb-2"
+      onBlur={(event) => {
+        const list = event.currentTarget;
+        const next = event.relatedTarget;
+        if (list.contains(next)) return;
+        // Select popups portal out of the list, so focus moving into one is not leaving it.
+        if (next instanceof Element && next.closest('[data-slot="select-popup"]')) return;
+        // Waits for the amount field's blur commit, and skips its Enter blur-and-refocus.
+        queueMicrotask(() => {
+          if (!list.contains(document.activeElement)) props.onSettle();
+        });
+      }}
+    >
+      {props.presets.map((preset, index) => {
+        const preview = previews[index]!;
+        return (
+          <div
+            key={props.keys[index]}
+            role="group"
+            aria-label={t("settings.snooze.option", { index: index + 1 })}
+            className="flex flex-wrap items-center gap-2"
+          >
+            <SnoozePresetFields preset={preset} onChange={(next) => props.onChange(index, next)} />
+            <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              {preview.tone === "menu" ? (
+                <span className="truncate">
+                  <span className="text-foreground">{preview.label}</span>
+                  <span className="ps-2 tabular-nums">{preview.when}</span>
+                </span>
+              ) : (
+                <span className="truncate">{preview.text}</span>
+              )}
+              <Button
+                variant="ghost-muted"
+                size="icon-sm"
+                aria-label={t("settings.snooze.remove", { index: index + 1 })}
+                onClick={() => props.onRemove(index)}
+              >
+                <XIcon />
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+      <p className="text-xs text-muted-foreground">
+        {menuOrder.length === 0
+          ? t("settings.snooze.onlyCustom")
+          : t("settings.snooze.menuPreview", { options: menuOrder.join(" · ") })}
+      </p>
+      <div>
+        <Button
+          variant="ghost-muted"
+          size="compact"
+          disabled={props.presets.length >= MAX_SNOOZE_PRESETS}
+          onClick={props.onAdd}
+        >
+          <PlusIcon />
+          {t("settings.snooze.add")}
+        </Button>
+        {props.presets.length >= MAX_SNOOZE_PRESETS ? (
+          <span className="ps-2 text-xs text-muted-foreground">
+            {t("settings.snooze.max", { count: MAX_SNOOZE_PRESETS })}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SnoozePresetFields(props: {
+  preset: SnoozePresetSetting;
+  onChange: (preset: SnoozePresetSetting) => void;
+}) {
+  const { locale, t } = useI18n();
+  const { preset, onChange } = props;
+  const whenLabels = Object.fromEntries(
+    WHEN_VALUES.map((value) => [
+      value,
+      value === "after" ? t("sidebar.snooze.in") : snoozeDayLabel(value, locale, t),
+    ]),
+  );
+  const when = preset.kind === "after" ? "after" : preset.day;
+  // Switching between a duration and a set time keeps the other kind's last value, so a
+  // misclick on "When" can be undone without retyping it.
+  const [memory, setMemory] = useState<KindMemory>({ minutes: 60, time: "09:00" });
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <Select
+        value={when}
+        items={whenLabels}
+        onValueChange={(value) => {
+          const next = value === null ? null : withWhen(preset, value, memory);
+          if (!next) return;
+          if (next.kind !== preset.kind) {
+            setMemory(
+              preset.kind === "after"
+                ? { ...memory, minutes: preset.minutes }
+                : { ...memory, time: preset.time },
+            );
+          }
+          onChange(next);
+        }}
+      >
+        <SelectTrigger size="sm" className="w-32" aria-label={t("settings.snooze.when")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectPopup>
+          {WHEN_VALUES.map((value) => (
+            <SelectItem hideIndicator key={value} value={value}>
+              {whenLabels[value]}
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+      {preset.kind === "after" ? (
+        <DurationFields
+          minutes={preset.minutes}
+          onChange={(minutes) => onChange({ ...preset, minutes })}
+        />
+      ) : (
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">{t("sidebar.snooze.at")}</span>
+          <Input
+            nativeInput
+            size="sm"
+            type="time"
+            lang={locale}
+            className="w-32"
+            aria-label={t("settings.snooze.time")}
+            value={preset.time}
+            onChange={(event) => {
+              if (/^\d{2}:\d{2}$/.test(event.target.value)) {
+                onChange({ ...preset, time: event.target.value });
+              }
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DurationFields(props: { minutes: number; onChange: (minutes: number) => void }) {
+  // The chosen unit stays put while stepping, so 59 → 60 minutes does not jump to hours.
+  const { t } = useI18n();
+  const [chosenUnit, setChosenUnit] = useState(() => splitSnoozeDuration(props.minutes).unit);
+  const unit =
+    props.minutes % snoozeDurationUnits[chosenUnit] === 0
+      ? chosenUnit
+      : splitSnoozeDuration(props.minutes).unit;
+  const amount = props.minutes / snoozeDurationUnits[unit];
+  const unitLabels = snoozeUnitLabels(amount, t);
+  const maxAmount = Math.floor(MAX_SNOOZE_PRESET_MINUTES / snoozeDurationUnits[unit]);
+  // Typing stays local until the field commits (blur, Enter, or a step), so half-typed
+  // values never reach the server.
+  const [draft, setDraft] = useState<number | null>(amount);
+  const [draftSource, setDraftSource] = useState(`${props.minutes}:${unit}`);
+  if (draftSource !== `${props.minutes}:${unit}`) {
+    setDraftSource(`${props.minutes}:${unit}`);
+    setDraft(amount);
+  }
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <NumberField
+        size="sm"
+        className="w-32"
+        min={1}
+        max={maxAmount}
+        step={1}
+        value={draft}
+        onValueChange={setDraft}
+        onValueCommitted={(value) => {
+          if (value === null) {
+            setDraft(amount);
+            return;
+          }
+          const next = Math.min(maxAmount, Math.max(1, Math.round(value)));
+          setDraft(next);
+          if (next !== amount) props.onChange(next * snoozeDurationUnits[unit]);
+        }}
+      >
+        <NumberFieldGroup>
+          <NumberFieldDecrement aria-label={t("settings.snooze.decrease")} />
+          <NumberFieldInput
+            aria-label={t("settings.snooze.amount")}
+            // Base UI commits on blur but not on Enter; refocus so keyboard users stay put.
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              const input = event.currentTarget;
+              input.blur();
+              input.focus();
+            }}
+          />
+          <NumberFieldIncrement aria-label={t("settings.snooze.increase")} />
+        </NumberFieldGroup>
+      </NumberField>
+      <Select
+        value={unit}
+        items={unitLabels}
+        onValueChange={(value) => {
+          if (value === "minutes" || value === "hours" || value === "days") {
+            setChosenUnit(value);
+            props.onChange(
+              Math.min(amount * snoozeDurationUnits[value], MAX_SNOOZE_PRESET_MINUTES),
+            );
+          }
+        }}
+      >
+        <SelectTrigger size="sm" className="w-28" aria-label={t("settings.snooze.unit")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectPopup>
+          {(["minutes", "hours", "days"] as const).map((value) => (
+            <SelectItem hideIndicator key={value} value={value}>
+              {unitLabels[value]}
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+    </div>
+  );
+}

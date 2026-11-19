@@ -1,14 +1,44 @@
-import { EditorId, type EnvironmentId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
-import { memo, useCallback, useEffect, useMemo } from "react";
-import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../keybindings";
+import { ThreadDetailsControl } from "./ThreadDetailsControl";
+import {
+  AuthOrchestrationOperateScope,
+  buildRemoteOpenUrl,
+  EditorId,
+  type EnvironmentId,
+  type ResolvedKeybindingsConfig,
+} from "@t3tools/contracts";
+import { memo, use, useRef } from "react";
+import { BackgroundThreadContext } from "./backgroundThread";
+import { shortcutLabelForCommand } from "../../keybindings";
+import { OPEN_FAVORITE_EDITOR_ATTRIBUTE } from "./OpenInPickerShortcut";
 import { usePreferredEditor } from "../../editorPreferences";
-import { ChevronDownIcon, FolderClosedIcon } from "lucide-react";
-import { Button } from "../ui/button";
+import { editorLabelForPlatform } from "../../editorLabels";
+import {
+  openRemoteEditorUrl,
+  useRemoteCapableEditors,
+  useRemoteOpenHint,
+  useRemoteOpenState,
+} from "../../remoteOpen";
+import { useEnvironment } from "../../state/environments";
+import { ChevronDownIcon, FolderClosedIcon, SquareArrowOutUpRightIcon } from "lucide-react";
+
 import { Group, GroupSeparator } from "../ui/group";
-import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
+import {
+  Menu,
+  MenuItem,
+  MenuItemLabel,
+  MenuPopup,
+  MenuShortcut,
+  MenuSub,
+  MenuSubTrigger,
+  MenuSubPopup,
+  MenuTrigger,
+} from "../ui/menu";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   AntigravityIcon,
   CursorIcon,
+  FileExplorerIcon,
+  FinderIcon,
   Icon,
   KiroIcon,
   TraeIcon,
@@ -31,247 +61,417 @@ import {
   RustRoverIcon,
   WebStormIcon,
 } from "../JetBrainsIcons";
-import { isMacPlatform, isWindowsPlatform } from "~/lib/utils";
+import { announce } from "~/lib/announce";
+import { cn, isMacPlatform, isWindowsPlatform } from "~/lib/utils";
 import { shellEnvironment } from "~/state/shell";
 import { useAtomCommand } from "~/state/use-atom-command";
-import { useI18n } from "~/i18n";
+import {
+  THREAD_DETAILS_PANEL_CHEVRON_CLASS,
+  THREAD_DETAILS_PANEL_ICON_CLASS,
+  THREAD_DETAILS_PANEL_LABEL_CLASS,
+  THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS,
+  THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS,
+} from "./threadDetailsPanelStyles";
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
+import { useComposerMenuState } from "./useComposerMenuState";
 
-const resolveOptions = (platform: string, availableEditors: ReadonlyArray<EditorId>) => {
-  const baseOptions: ReadonlyArray<{ label: string; Icon: Icon; value: EditorId }> = [
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
+
+function t(key: MessageKey, values?: TranslateValues): string {
+  return createTranslator(readLocalePreference())(key, values);
+}
+
+type OpenInOption = {
+  label: string;
+  Icon: Icon;
+  value: EditorId;
+  kind: "brand" | "generic";
+};
+
+const resolveOpenInOptions = (platform: string, availableEditors: ReadonlyArray<EditorId>) => {
+  const baseOptions: ReadonlyArray<Omit<OpenInOption, "label">> = [
     {
-      label: "Cursor",
       Icon: CursorIcon,
       value: "cursor",
+      kind: "brand",
     },
     {
-      label: "Trae",
       Icon: TraeIcon,
       value: "trae",
+      kind: "brand",
     },
     {
-      label: "Kiro",
       Icon: KiroIcon,
       value: "kiro",
+      kind: "brand",
     },
     {
-      label: "VS Code",
       Icon: VisualStudioCode,
       value: "vscode",
+      kind: "brand",
     },
     {
-      label: "VS Code Insiders",
       Icon: VisualStudioCodeInsiders,
       value: "vscode-insiders",
+      kind: "brand",
     },
     {
-      label: "VSCodium",
       Icon: VSCodium,
       value: "vscodium",
+      kind: "brand",
     },
     {
-      label: "Zed",
       Icon: Zed,
       value: "zed",
+      kind: "brand",
     },
     {
-      label: "Antigravity",
       Icon: AntigravityIcon,
       value: "antigravity",
+      kind: "brand",
     },
     {
-      label: "IntelliJ IDEA",
       Icon: IntelliJIdeaIcon,
       value: "idea",
+      kind: "brand",
     },
     {
-      label: "Aqua",
       Icon: AquaIcon,
       value: "aqua",
+      kind: "brand",
     },
     {
-      label: "CLion",
       Icon: CLionIcon,
       value: "clion",
+      kind: "brand",
     },
     {
-      label: "DataGrip",
       Icon: DataGripIcon,
       value: "datagrip",
+      kind: "brand",
     },
     {
-      label: "DataSpell",
       Icon: DataSpellIcon,
       value: "dataspell",
+      kind: "brand",
     },
     {
-      label: "GoLand",
       Icon: GoLandIcon,
       value: "goland",
+      kind: "brand",
     },
     {
-      label: "PhpStorm",
       Icon: PhpStormIcon,
       value: "phpstorm",
+      kind: "brand",
     },
     {
-      label: "PyCharm",
       Icon: PyCharmIcon,
       value: "pycharm",
+      kind: "brand",
     },
     {
-      label: "Rider",
       Icon: RiderIcon,
       value: "rider",
+      kind: "brand",
     },
     {
-      label: "RubyMine",
       Icon: RubyMineIcon,
       value: "rubymine",
+      kind: "brand",
     },
     {
-      label: "RustRover",
       Icon: RustRoverIcon,
       value: "rustrover",
+      kind: "brand",
     },
     {
-      label: "WebStorm",
       Icon: WebStormIcon,
       value: "webstorm",
+      kind: "brand",
     },
     {
-      label: isMacPlatform(platform)
-        ? "Finder"
+      Icon: isMacPlatform(platform)
+        ? FinderIcon
         : isWindowsPlatform(platform)
-          ? "Explorer"
-          : "Files",
-      Icon: FolderClosedIcon,
+          ? FileExplorerIcon
+          : FolderClosedIcon,
       value: "file-manager",
+      kind: isMacPlatform(platform) || isWindowsPlatform(platform) ? "brand" : "generic",
     },
   ];
   const availableEditorSet = new Set(availableEditors);
-  return baseOptions.filter((option) => availableEditorSet.has(option.value));
+  return baseOptions
+    .filter((option) => availableEditorSet.has(option.value))
+    .map((option) => ({ ...option, label: editorLabelForPlatform(option.value, platform) }));
 };
+
+function getOpenInIconClass(kind: OpenInOption["kind"]) {
+  return cn(kind === "brand" ? "text-foreground opacity-100" : "text-muted-foreground");
+}
 
 export const OpenInPicker = memo(function OpenInPicker({
   environmentId,
   keybindings,
   availableEditors,
   openInCwd,
+  openInCwdIsFile = false,
+  presentation = "toolbar",
   compact = false,
   enableShortcut = true,
+  displayMode = "toolbar",
+  revealFileManager = false,
 }: {
   environmentId: EnvironmentId;
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   openInCwd: string | null;
+  openInCwdIsFile?: boolean;
+  presentation?: "toolbar" | "menu";
   compact?: boolean;
   enableShortcut?: boolean;
+  displayMode?: "toolbar" | "panel";
+  revealFileManager?: boolean;
 }) {
-  const { t } = useI18n();
+  useI18n();
+  const isPanel = displayMode === "panel";
+  const ActionGroup = isPanel ? "div" : Group;
+  const panelAnchorRef = useRef<HTMLDivElement | null>(null);
   const openInEditorMutation = useAtomCommand(shellEnvironment.openInEditor, "open in editor");
-  const [preferredEditor, setPreferredEditor] = usePreferredEditor(availableEditors);
-  const options = useMemo(
-    () => resolveOptions(navigator.platform, availableEditors),
-    [availableEditors],
-  );
-  const primaryOption = options.find(({ value }) => value === preferredEditor) ?? null;
+  const remote = useRemoteOpenState(environmentId);
+  const canOperateHost = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
+  const isHostEditorDenied = remote.mode === "local-exec" && !canOperateHost;
+  const canOpenEditor = remote.mode !== "remote-unavailable" && !isHostEditorDenied;
+  const [menuOpen, setMenuOpen] = useComposerMenuState(isHostEditorDenied);
+  const remoteCapableEditors = useRemoteCapableEditors();
+  const [remoteHintSeen, markRemoteHintSeen] = useRemoteOpenHint();
+  const environmentLabel = useEnvironment(environmentId)?.label ?? t("chat.remoteOpen.thisMachine");
+  // Remote editors run on the viewing machine; only desktop can probe that PATH.
+  const effectiveEditors = remote.mode === "local-exec" ? availableEditors : remoteCapableEditors;
+  const [preferredEditor, setPreferredEditor] = usePreferredEditor(effectiveEditors);
 
-  const openInEditor = useCallback(
-    (editorId: EditorId | null) => {
-      if (!openInCwd) return;
-      const editor = editorId ?? preferredEditor;
-      if (!editor) return;
-      const result = openInEditorMutation({
-        environmentId,
-        input: {
-          cwd: openInCwd,
-          editor,
-        },
+  const openInEditor = async (editorId: EditorId | null): Promise<boolean> => {
+    if (!openInCwd) return false;
+    const editor = editorId ?? preferredEditor;
+    if (!editor) return false;
+    if (remote.mode === "remote-unavailable") return false;
+    if (remote.mode === "remote-links") {
+      const url = buildRemoteOpenUrl({
+        editor,
+        ...remote.host,
+        absolutePath: openInCwd,
+        isFile: openInCwdIsFile,
       });
+      if (url === undefined) return false;
+      // Only record hint-seen/preferred when the shell actually accepted
+      // the URL (an older desktop build can refuse the editor scheme).
+      const opened = await openRemoteEditorUrl(url);
+      if (!opened) return false;
+      markRemoteHintSeen();
       setPreferredEditor(editor);
-      return result;
-    },
-    [environmentId, openInCwd, openInEditorMutation, preferredEditor, setPreferredEditor],
-  );
+      return true;
+    }
+    if (!readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) return false;
+    const result = openInEditorMutation({
+      environmentId,
+      input: {
+        cwd: openInCwd,
+        editor,
+        ...(revealFileManager && editor === "file-manager" ? { reveal: true } : {}),
+      },
+    });
+    setPreferredEditor(editor);
+    return (await result)._tag === "Success";
+  };
 
-  const openFavoriteEditorShortcutLabel = useMemo(
-    () => shortcutLabelForCommand(keybindings, "editor.openFavorite"),
-    [keybindings],
-  );
-
-  useEffect(() => {
-    if (!enableShortcut) return;
-    const handler = (e: globalThis.KeyboardEvent) => {
-      if (!isOpenFavoriteEditorShortcut(e, keybindings)) return;
-      if (!openInCwd) return;
-      if (!preferredEditor) return;
-
-      e.preventDefault();
-      void openInEditorMutation({
-        environmentId,
-        input: {
-          cwd: openInCwd,
-          editor: preferredEditor,
-        },
-      });
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [
-    enableShortcut,
-    environmentId,
+  const openFavoriteEditorShortcutLabel = shortcutLabelForCommand(
     keybindings,
-    openInCwd,
-    openInEditorMutation,
-    preferredEditor,
-  ]);
+    "editor.openFavorite",
+  );
 
-  return (
-    <Group aria-label={t("chat.openEditor")}>
-      <Button
-        aria-label={compact ? t("chat.openPreferredEditor") : undefined}
-        size="xs"
-        variant="outline"
-        disabled={!preferredEditor || !openInCwd}
-        onClick={() => openInEditor(preferredEditor)}
-      >
-        {primaryOption?.Icon && <primaryOption.Icon aria-hidden="true" className="size-3.5" />}
-        <span
-          className={
-            compact
-              ? "sr-only"
-              : "sr-only @3xl/header-actions:not-sr-only @3xl/header-actions:ml-0.5"
-          }
-        >
-          {t("chat.open")}
-        </span>
-      </Button>
-      <GroupSeparator {...(!compact ? { className: "hidden @3xl/header-actions:block" } : {})} />
-      <Menu>
-        <MenuTrigger
-          render={
-            <Button
-              aria-label={compact ? t("chat.chooseEditor") : t("common.options")}
-              size="icon-xs"
-              variant="outline"
-            />
-          }
-        >
-          <ChevronDownIcon aria-hidden="true" className="size-4" />
-        </MenuTrigger>
-        <MenuPopup align="end">
-          {options.length === 0 && <MenuItem disabled>{t("chat.noEditors")}</MenuItem>}
-          {options.map(({ label, Icon, value }) => (
-            <MenuItem key={value} onClick={() => openInEditor(value)}>
-              <Icon aria-hidden="true" className="text-muted-foreground" />
-              {label}
+  const backgroundThread = use(BackgroundThreadContext);
+  const options = resolveOpenInOptions(navigator.platform, effectiveEditors);
+  const primaryOption = options.find(({ value }) => value === preferredEditor) ?? null;
+  const primaryLabel = isPanel ? `Open in ${primaryOption?.label ?? "editor"}` : t("chat.open");
+
+  const unavailableReason =
+    remote.mode === "remote-unavailable"
+      ? `No SSH route to ${environmentLabel}`
+      : remote.mode === "remote-links" && options.length === 0
+        ? `Open from a computer to edit on ${environmentLabel}`
+        : null;
+
+  const editorItems = (
+    <>
+      {unavailableReason !== null ? (
+        <MenuItem density={presentation === "menu" ? "touch" : "default"} disabled>
+          {unavailableReason}
+        </MenuItem>
+      ) : (
+        <>
+          {options.length === 0 && (
+            <MenuItem density={presentation === "menu" ? "touch" : "default"} disabled>
+              No installed editors found
+            </MenuItem>
+          )}
+          {options.map(({ label, Icon, value, kind }) => (
+            <MenuItem
+              density={presentation === "menu" ? "touch" : "default"}
+              disabled={!openInCwd || !canOpenEditor}
+              key={value}
+              onClick={() => {
+                if (presentation === "menu") {
+                  void openInEditor(value);
+                } else {
+                  setPreferredEditor(value);
+                }
+              }}
+            >
+              <Icon aria-hidden="true" className={getOpenInIconClass(kind)} />
+              <MenuItemLabel>{label}</MenuItemLabel>
               {value === preferredEditor && openFavoriteEditorShortcutLabel && (
                 <MenuShortcut>{openFavoriteEditorShortcutLabel}</MenuShortcut>
               )}
             </MenuItem>
           ))}
+          {remote.mode === "remote-links" && !remoteHintSeen && (
+            <MenuItem density={presentation === "menu" ? "touch" : "default"} disabled>
+              Opens over SSH. Needs your key on {environmentLabel}
+            </MenuItem>
+          )}
+        </>
+      )}
+    </>
+  );
+  if (presentation === "menu") {
+    return (
+      <>
+        {primaryOption && (
+          <MenuItem
+            density={presentation === "menu" ? "touch" : "default"}
+
+            disabled={!openInCwd || !canOpenEditor}
+            onClick={() => openInEditor(preferredEditor)}
+          >
+            <primaryOption.Icon className={cn("size-4", getOpenInIconClass(primaryOption.kind))} />
+            <MenuItemLabel>Open in {primaryOption.label}</MenuItemLabel>
+            {openFavoriteEditorShortcutLabel && (
+              <MenuShortcut>{openFavoriteEditorShortcutLabel}</MenuShortcut>
+            )}
+          </MenuItem>
+        )}
+        <MenuSub>
+          <MenuSubTrigger density="touch" disabled={isHostEditorDenied}>
+            <SquareArrowOutUpRightIcon className="size-4" />
+            <MenuItemLabel>{t("chat.openInMenu")}</MenuItemLabel>
+          </MenuSubTrigger>
+          <MenuSubPopup>{editorItems}</MenuSubPopup>
+        </MenuSub>
+      </>
+    );
+  }
+
+  const primaryControlLabel = compact ? t("chat.openPreferredEditor") : primaryLabel;
+  const primaryControl = (
+    <ThreadDetailsControl
+      aria-label={primaryControlLabel}
+      // Tooltip replaces the button data-slot, so toolbar theming needs a separate hook.
+      data-toolbar-control=""
+      size={isPanel ? "sm" : "xs"}
+      variant={isPanel ? "ghost" : "outline"}
+      part="primary"
+      panel={isPanel}
+      disabled={!preferredEditor || !openInCwd || !canOpenEditor}
+      {...(enableShortcut && !backgroundThread ? { [OPEN_FAVORITE_EDITOR_ATTRIBUTE]: "" } : {})}
+      onClick={() => {
+        if (!preferredEditor) return;
+        const label = editorLabelForPlatform(preferredEditor, navigator.platform);
+        void openInEditor(preferredEditor).then((opened) => {
+          if (opened) announce(`Opened in ${label}`);
+        });
+      }}
+    >
+      {primaryOption?.Icon ? (
+        <primaryOption.Icon
+          aria-hidden="true"
+          className={cn(
+            isPanel ? THREAD_DETAILS_PANEL_ICON_CLASS : "size-3.5",
+            getOpenInIconClass(primaryOption.kind),
+          )}
+        />
+      ) : isPanel ? (
+        <SquareArrowOutUpRightIcon aria-hidden="true" className={THREAD_DETAILS_PANEL_ICON_CLASS} />
+      ) : null}
+      <span
+        className={cn(
+          compact
+            ? "sr-only"
+            : "sr-only @3xl/header-actions:not-sr-only @3xl/header-actions:ml-0.5",
+          isPanel && cn("not-sr-only ml-0 min-w-0 truncate", THREAD_DETAILS_PANEL_LABEL_CLASS),
+        )}
+      >
+        {primaryLabel}
+      </span>
+    </ThreadDetailsControl>
+  );
+
+  return (
+    <ActionGroup
+      aria-label={t("chat.openEditor")}
+      role="group"
+      {...(isPanel
+        ? { className: THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS, ref: panelAnchorRef }
+        : {})}
+    >
+      <Tooltip>
+        <TooltipTrigger render={primaryControl} />
+        <TooltipPopup side="top">{primaryControlLabel}</TooltipPopup>
+      </Tooltip>
+      {isPanel ? (
+        <span aria-hidden="true" className={THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS} />
+      ) : (
+        <GroupSeparator {...(!compact ? { className: "hidden @3xl/header-actions:block" } : {})} />
+      )}
+      <Menu open={menuOpen} onOpenChange={setMenuOpen}>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <MenuTrigger
+                disabled={isHostEditorDenied}
+                render={
+                  <ThreadDetailsControl
+                    aria-label={t("chat.chooseEditor")}
+                    data-toolbar-control=""
+                    size={isPanel ? "sm" : "icon-xs"}
+                    variant={isPanel ? "ghost" : "outline"}
+                    part="secondary"
+                    panel={isPanel}
+                  />
+                }
+              />
+            }
+          >
+            <ChevronDownIcon
+              aria-hidden="true"
+              className={isPanel ? THREAD_DETAILS_PANEL_CHEVRON_CLASS : "size-4"}
+            />
+          </TooltipTrigger>
+          <TooltipPopup side="top">{t("chat.chooseEditor")}</TooltipPopup>
+        </Tooltip>
+        <MenuPopup
+          align="end"
+          {...(isPanel ? { anchor: panelAnchorRef } : {})}
+          className={isPanel ? "w-(--anchor-width)" : undefined}
+        >
+          {editorItems}
         </MenuPopup>
       </Menu>
-    </Group>
+    </ActionGroup>
   );
 });

@@ -5,7 +5,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
 
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
-import { useClerkSettingsSheetDetent } from "../cloud/ClerkSettingsSheetDetent";
 import { useArchivedThreadListActions } from "../home/useThreadListActions";
 import {
   ArchivedThreadsScreen,
@@ -18,7 +17,6 @@ import {
 } from "./useArchivedThreadSnapshots";
 
 export function ArchivedThreadsRouteScreen() {
-  const { expand } = useClerkSettingsSheetDetent();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(null);
@@ -59,20 +57,16 @@ export function ArchivedThreadsRouteScreen() {
       }),
     [environmentLabels, searchQuery, selectedEnvironmentId, snapshots, sortOrder],
   );
-  const refreshChangedEnvironment = useCallback(
-    (thread: { readonly environmentId: EnvironmentId }) => {
-      refreshArchivedThreadsForEnvironment(thread.environmentId);
-    },
-    [],
-  );
+  const refreshChangedEnvironment = (thread: { readonly environmentId: EnvironmentId }) => {
+    refreshArchivedThreadsForEnvironment(thread.environmentId);
+  };
   const { unarchiveThread, confirmDeleteThread } =
     useArchivedThreadListActions(refreshChangedEnvironment);
 
   useFocusEffect(
     useCallback(() => {
-      expand();
       refresh();
-    }, [expand, refresh]),
+    }, [refresh]),
   );
 
   return (

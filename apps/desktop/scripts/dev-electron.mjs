@@ -23,11 +23,27 @@ if (!Number.isInteger(port) || port <= 0) {
 
 const requiredFiles = [
   "dist-electron/main.cjs",
+  "dist-electron/electron/WindowsForegroundFocusWorker.cjs",
   "dist-electron/preload.cjs",
+  "dist-electron/snapShot/GlobalShiftShortcutWorker.cjs",
+  "dist-electron/snapShot/RegionSnapShotWorker.cjs",
+  "dist-electron/snapShot/SnapShotAccessibilityWorker.cjs",
   "../server/dist/bin.mjs",
 ];
 const watchedDirectories = [
   { directory: "dist-electron", files: new Set(["main.cjs", "preload.cjs"]) },
+  {
+    directory: "dist-electron/electron",
+    files: new Set(["WindowsForegroundFocusWorker.cjs"]),
+  },
+  {
+    directory: "dist-electron/snapShot",
+    files: new Set([
+      "GlobalShiftShortcutWorker.cjs",
+      "RegionSnapShotWorker.cjs",
+      "SnapShotAccessibilityWorker.cjs",
+    ]),
+  },
   { directory: "../server/dist", files: new Set(["bin.mjs"]) },
 ];
 const forcedShutdownTimeoutMs = 1_500;
@@ -36,12 +52,22 @@ const childTreeGracePeriodMs = 1_200;
 const remoteDebuggingPort = process.env.T3CODE_DESKTOP_REMOTE_DEBUGGING_PORT?.trim();
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone dev script has no Effect runtime.
 const hostPlatform = NodeOS.platform();
+const parentPid = process.ppid;
+const parentWatchIntervalMs = 1_000;
+
+NodeChildProcess.execFileSync(
+  process.execPath,
+  [NodePath.join(desktopDir, "scripts/build-browser-secret.mjs")],
+  { stdio: "inherit" },
+);
 
 await waitForResources({
   baseDir: desktopDir,
   files: requiredFiles,
   tcpHost: devServer.hostname,
   tcpPort: port,
+  httpOrigin: devServer,
+  httpPaths: ["/", "/src/bootstrap.ts", "/src/main.tsx"],
 });
 
 const childEnv = { ...process.env };
@@ -72,9 +98,14 @@ function cleanupStaleDevApps() {
     return;
   }
 
-  NodeChildProcess.spawnSync("pkill", ["-f", "--", `--t3code-dev-root=${desktopDir}`], {
-    stdio: "ignore",
-  });
+  const escapedDesktopDir = desktopDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  NodeChildProcess.spawnSync(
+    "pkill",
+    ["-f", "--", `(^| )--t3code-dev-root=${escapedDesktopDir}( |$)`],
+    {
+      stdio: "ignore",
+    },
+  );
 }
 
 function startApp() {
@@ -203,7 +234,6 @@ function killChildTree(signal) {
     return;
   }
 
-  // Kill direct children as a final fallback in case normal shutdown leaves stragglers.
   NodeChildProcess.spawnSync("pkill", [`-${signal}`, "-P", String(process.pid)], {
     stdio: "ignore",
   });
@@ -245,3 +275,14 @@ process.once("SIGTERM", () => {
 process.once("SIGHUP", () => {
   void shutdown(129);
 });
+// A parent killed without forwarding a signal leaves us reparented (to a subreaper on Linux, not
+// necessarily PID 1), and nothing else would ever stop the restart loop. This only notices the
+// death of our direct parent, so vite.config.ts launches us without a shell in between. Windows
+// never reparents, and reading process.ppid there snapshots the process table.
+if (hostPlatform !== "win32") {
+  setInterval(() => {
+    if (process.ppid !== parentPid) {
+      void shutdown(129);
+    }
+  }, parentWatchIntervalMs).unref();
+}

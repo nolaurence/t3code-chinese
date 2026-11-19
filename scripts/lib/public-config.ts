@@ -19,9 +19,7 @@ export interface T3CodePublicConfig {
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-const REPO_ROOT = NodePath.dirname(
-  NodePath.dirname(NodePath.dirname(NodeURL.fileURLToPath(import.meta.url))),
-);
+const REPO_ROOT = NodePath.resolve(NodeURL.fileURLToPath(import.meta.url), "../../..");
 
 export function loadRepoEnv({
   baseEnv = process.env,
@@ -55,6 +53,7 @@ export function loadRepoEnv({
     ...(config.clerkCliOAuthClientId
       ? {
           T3CODE_CLERK_CLI_OAUTH_CLIENT_ID: config.clerkCliOAuthClientId,
+          VITE_CLERK_CLI_OAUTH_CLIENT_ID: config.clerkCliOAuthClientId,
         }
       : {}),
     ...(config.relayUrl
@@ -102,7 +101,7 @@ export function loadRepoEnv({
   };
 }
 
-export function resolvePublicConfig(...sources: readonly Environment[]): T3CodePublicConfig {
+function resolvePublicConfig(...sources: readonly Environment[]): T3CodePublicConfig {
   return {
     clerkPublishableKey: firstNonEmpty(
       sources,
@@ -116,7 +115,11 @@ export function resolvePublicConfig(...sources: readonly Environment[]): T3CodeP
       "VITE_CLERK_JWT_TEMPLATE",
       "EXPO_PUBLIC_CLERK_JWT_TEMPLATE",
     ),
-    clerkCliOAuthClientId: firstNonEmpty(sources, "T3CODE_CLERK_CLI_OAUTH_CLIENT_ID"),
+    clerkCliOAuthClientId: firstNonEmpty(
+      sources,
+      "T3CODE_CLERK_CLI_OAUTH_CLIENT_ID",
+      "VITE_CLERK_CLI_OAUTH_CLIENT_ID",
+    ),
     relayUrl: firstNonEmpty(sources, "T3CODE_RELAY_URL", "VITE_T3CODE_RELAY_URL"),
     mobileOtlpTracesUrl: firstNonEmpty(
       sources,

@@ -19,6 +19,8 @@ export function localizedConnectionStatusText(
         : t("connections.status.reconnecting");
     case "connected":
       return t("connections.status.connected");
+    case "unsupported":
+      return t("connections.status.unsupported");
     case "error":
       return connection.error
         ? t("connections.status.failedReason", { reason: connection.error })

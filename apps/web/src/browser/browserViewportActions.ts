@@ -1,25 +1,62 @@
-import type { PreviewViewportSetting } from "@t3tools/contracts";
+import { translateCurrent } from "~/i18n/messages";
+import { runAtomCommand, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import type { PreviewViewportSetting, ScopedThreadRef } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 
-type BrowserViewportHandler = (setting: PreviewViewportSetting) => Promise<void>;
+import { toastManager } from "~/components/ui/toast";
+import { updatePreviewServerSnapshot } from "~/previewStateStore";
+import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { previewEnvironment } from "~/state/preview";
 
-export const BROWSER_VIEWPORT_COMMIT_TIMEOUT_MS = 15_000;
+/** One browser tab as both the server (thread + tab id) and this window's runtime know it. */
+export interface BrowserViewportTarget {
+  readonly threadRef: ScopedThreadRef;
+  readonly tabId: string;
+  readonly runtimeTabId: string;
+}
 
-export class BrowserViewportCommitTimeoutError extends Error {
-  override readonly name = "BrowserViewportCommitTimeoutError";
+const BROWSER_VIEWPORT_COMMIT_TIMEOUT_MS = 15_000;
 
-  constructor(readonly tabId: string) {
-    super(`Timed out committing the browser viewport for tab ${tabId}`);
+class BrowserViewportCommitTimeoutError extends Schema.TaggedError<BrowserViewportCommitTimeoutError>()(
+  "BrowserViewportCommitTimeoutError",
+  { tabId: Schema.String },
+) {
+  override get message(): string {
+    return `Timed out committing the browser viewport for tab ${this.tabId}`;
   }
 }
 
-const handlers = new Map<string, BrowserViewportHandler>();
 const commitTails = new Map<string, Promise<void>>();
+
+/** Serializes UI and automation mutations per tab so rollback cannot overtake a newer resize. */
+const queueBrowserViewportMutation = <A>(
+  tabId: string,
+  start: () => Promise<A>,
+): {
+  readonly started: Promise<{ readonly operation: Promise<A> }>;
+  readonly execution: Promise<A>;
+} => {
+  const previous = commitTails.get(tabId) ?? Promise.resolve();
+  const started = previous
+    .catch(() => undefined)
+    .then(() => ({
+      operation: Promise.resolve().then(start),
+    }));
+  const execution = started.then(({ operation }) => operation);
+  const tail = execution.then(() => undefined);
+  commitTails.set(tabId, tail);
+  const clear = () => {
+    if (commitTails.get(tabId) === tail) commitTails.delete(tabId);
+  };
+  void tail.then(clear, clear);
+  return { started, execution };
+};
 
 const runHandlerWithTimeout = (tabId: string, operation: Promise<void>): Promise<void> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timeoutId = setTimeout(
-      () => reject(new BrowserViewportCommitTimeoutError(tabId)),
+      () => reject(new BrowserViewportCommitTimeoutError({ tabId })),
       BROWSER_VIEWPORT_COMMIT_TIMEOUT_MS,
     );
   });
@@ -28,39 +65,49 @@ const runHandlerWithTimeout = (tabId: string, operation: Promise<void>): Promise
   });
 };
 
-export function subscribeBrowserViewportChange(
-  tabId: string,
-  handler: BrowserViewportHandler,
-): () => void {
-  handlers.set(tabId, handler);
-  return () => {
-    if (handlers.get(tabId) === handler) handlers.delete(tabId);
-  };
+async function resizeBrowserViewport(
+  target: BrowserViewportTarget,
+  viewport: PreviewViewportSetting,
+): Promise<void> {
+  const result = await runAtomCommand(
+    appAtomRegistry,
+    previewEnvironment.resize,
+    {
+      environmentId: target.threadRef.environmentId,
+      input: { threadId: target.threadRef.threadId, tabId: target.tabId, viewport },
+    },
+    { label: "preview viewport resize" },
+  );
+  if (result._tag === "Failure") {
+    const error = squashAtomCommandFailure(result);
+    toastManager.add({
+      type: "error",
+      title: translateCurrent("preview.error.resize"),
+      description: error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
+    });
+    throw error;
+  }
+  updatePreviewServerSnapshot(target.threadRef, result.value);
+}
+
+/**
+ * Runs `operation` after every earlier commit for the runtime tab. The
+ * caller-facing timeout starts only once it reaches the front of the queue,
+ * while the queue itself waits for the real operation.
+ */
+export function queueBrowserViewportCommit(
+  runtimeTabId: string,
+  operation: () => Promise<void>,
+): Promise<void> {
+  const { started } = queueBrowserViewportMutation(runtimeTabId, operation);
+  return started.then(({ operation: running }) => runHandlerWithTimeout(runtimeTabId, running));
 }
 
 export function commitBrowserViewportChange(
-  tabId: string,
+  target: BrowserViewportTarget,
   setting: PreviewViewportSetting,
 ): Promise<void> {
-  const previous = commitTails.get(tabId) ?? Promise.resolve();
-  const started = previous
-    .catch(() => undefined)
-    .then(() => {
-      const handler = handlers.get(tabId);
-      const operation = handler
-        ? Promise.resolve().then(() => handler(setting))
-        : Promise.reject(new Error(`No visible browser viewport handler for tab ${tabId}`));
-      return { operation };
-    });
-  // The queue follows the real handler lifetime, not the caller-facing timeout.
-  // A slow commit therefore cannot time out, release the queue, and overwrite a
-  // newer viewport after that newer request has already completed.
-  const execution = started.then(({ operation }) => operation);
-  const result = started.then(({ operation }) => runHandlerWithTimeout(tabId, operation));
-  commitTails.set(tabId, execution);
-  const clear = () => {
-    if (commitTails.get(tabId) === execution) commitTails.delete(tabId);
-  };
-  void execution.then(clear, clear);
-  return result;
+  return queueBrowserViewportCommit(target.runtimeTabId, () =>
+    resizeBrowserViewport(target, setting),
+  );
 }

@@ -1,53 +1,117 @@
-import { NativeHeaderToolbar } from "../../native/StackHeader";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 import { useNavigation } from "@react-navigation/native";
-import { SymbolView } from "expo-symbols";
+import { useAtomValue } from "@effect/atom-react";
+import { managedRelaySessionAtom } from "@t3tools/client-runtime/relay";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { useCallback, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { useRef, useState } from "react";
+import { RefreshControl } from "../../components/ui/RefreshControl";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AppText as Text } from "../../components/AppText";
-import { hasCloudPublicConfig } from "../cloud/publicConfig";
+import { SettingsScreen } from "./components/SettingsScreen";
 import { CloudEnvironmentRows } from "../connection/CloudEnvironmentRows";
-import { ConnectionEnvironmentRow } from "../connection/ConnectionEnvironmentRow";
+import { LocalEnvironmentList } from "../connection/LocalEnvironmentList";
+import { PullRequestRoutingSettings } from "../connection/PullRequestRoutingSettings";
 import { splitEnvironmentSections } from "../connection/environmentSections";
-import { cn } from "../../lib/cn";
-import { useThemeColor } from "../../lib/useThemeColor";
+import { useUniwindTheme } from "../../lib/useUniwindTheme";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
+import { relayEnvironmentDiscovery } from "../../state/relay";
+import { useAtomCommand } from "../../state/use-atom-command";
+import {
+  applyShowcaseLocalEnvironmentDisplayUrls,
+  resolveShowcaseEnvironmentUpdateDisplayUrl,
+  SHOWCASE_AVAILABLE_CLOUD_ENVIRONMENTS,
+  SHOWCASE_CONNECTED_CLOUD_ENVIRONMENTS,
+} from "../showcase/showcaseEnvironmentRows";
+
+const SHOWCASE_ENABLED = process.env.EXPO_PUBLIC_SHOWCASE === "1";
 
 export function SettingsEnvironmentsRouteScreen() {
   const {
     connectedEnvironments,
     onReconnectEnvironment,
     onRemoveEnvironmentPress,
+    onSetEnvironmentEnabled,
     onUpdateEnvironment,
   } = useRemoteConnections();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { localEnvironments, connectedCloudEnvironments } = splitEnvironmentSections({
+  const environmentSections = splitEnvironmentSections({
     connectedEnvironments,
     cloudEnvironments: null,
   });
-  const hasLocalEnvironments = localEnvironments.length > 0;
-  const [expandedId, setExpandedId] = useState<EnvironmentId | null>(null);
-  const accentColor = useThemeColor("--color-icon-muted");
-  const headerIconColor = useThemeColor("--color-icon");
+  const localEnvironments = SHOWCASE_ENABLED
+    ? applyShowcaseLocalEnvironmentDisplayUrls(environmentSections.localEnvironments)
+    : environmentSections.localEnvironments;
+  const connectedCloudEnvironments = SHOWCASE_ENABLED
+    ? SHOWCASE_CONNECTED_CLOUD_ENVIRONMENTS
+    : environmentSections.connectedCloudEnvironments;
+  const headerIconColor = useUniwindTheme()["--color-icon"];
+  const relaySession = useAtomValue(managedRelaySessionAtom);
+  const refreshRelayEnvironments = useAtomCommand(
+    relayEnvironmentDiscovery.refresh,
+    "relay environment refresh",
+  );
+  const [isRefreshingCloud, setIsRefreshingCloud] = useState(false);
+  const cloudRefreshPendingRef = useRef(false);
+  async function refreshCloudEnvironments() {
+    if (!relaySession || cloudRefreshPendingRef.current) return;
+    cloudRefreshPendingRef.current = true;
+    setIsRefreshingCloud(true);
+    await refreshRelayEnvironments();
+    cloudRefreshPendingRef.current = false;
+    setIsRefreshingCloud(false);
+  }
 
-  const handleToggle = useCallback((environmentId: EnvironmentId) => {
-    setExpandedId((prev) => (prev === environmentId ? null : environmentId));
-  }, []);
+  const openEnvironment = (environmentId: EnvironmentId) => {
+    navigation.navigate("SettingsEnvironmentDetail", { environmentId });
+  };
+  const handleUpdateEnvironment = (
+    environmentId: EnvironmentId,
+    updates: { readonly label: string; readonly displayUrl: string },
+  ) => {
+    if (!SHOWCASE_ENABLED) return onUpdateEnvironment(environmentId, updates);
+    const actualEnvironment = environmentSections.localEnvironments.find(
+      (environment) => environment.environmentId === environmentId,
+    );
+    const presentedEnvironment = localEnvironments.find(
+      (environment) => environment.environmentId === environmentId,
+    );
+    return onUpdateEnvironment(environmentId, {
+      ...updates,
+      displayUrl:
+        actualEnvironment && presentedEnvironment
+          ? resolveShowcaseEnvironmentUpdateDisplayUrl({
+              actualDisplayUrl: actualEnvironment.displayUrl,
+              presentedDisplayUrl: presentedEnvironment.displayUrl,
+              submittedDisplayUrl: updates.displayUrl,
+            })
+          : updates.displayUrl,
+    });
+  };
 
   return (
-    <View collapsable={false} className="flex-1 bg-sheet">
-      <NativeHeaderToolbar placement="right">
-        <NativeHeaderToolbar.Button
-          icon="plus"
-          onPress={() => navigation.navigate("SettingsSheet", { screen: "SettingsEnvironmentNew" })}
-          separateBackground
-          tintColor={headerIconColor}
-        />
-      </NativeHeaderToolbar>
+    <SettingsScreen
+      title="Environments"
+      refresh={
+        relaySession
+          ? {
+              accessibilityLabel: "Refresh cloud environments",
+              disabled: isRefreshingCloud,
+              onPress: () => void refreshCloudEnvironments(),
+            }
+          : undefined
+      }
+      actions={[
+        {
+          accessibilityLabel: "Add environment",
+          icon: "plus",
+          tintColor: headerIconColor,
+          onPress: () => navigation.navigate("SettingsEnvironmentNew"),
+        },
+      ]}
+    >
       <ScrollView
+        alwaysBounceVertical
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
         className="flex-1"
@@ -55,50 +119,41 @@ export function SettingsEnvironmentsRouteScreen() {
         contentContainerStyle={{
           paddingBottom: Math.max(insets.bottom, 18) + 18,
         }}
+        refreshControl={
+          relaySession ? (
+            <RefreshControl
+              refreshing={isRefreshingCloud}
+              onRefresh={() => void refreshCloudEnvironments()}
+            />
+          ) : undefined
+        }
       >
-        {hasLocalEnvironments ? (
-          <View collapsable={false} className="overflow-hidden rounded-[24px] bg-card">
-            {localEnvironments.map((environment, index) => (
-              <View
-                key={environment.environmentId}
-                collapsable={false}
-                className={cn(index !== 0 && "border-t border-border")}
-              >
-                <ConnectionEnvironmentRow
-                  environment={environment}
-                  expanded={expandedId === environment.environmentId}
-                  onToggle={() => handleToggle(environment.environmentId)}
-                  onReconnect={onReconnectEnvironment}
-                  onRemove={onRemoveEnvironmentPress}
-                  onUpdate={onUpdateEnvironment}
-                />
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View collapsable={false} className="items-center gap-3 rounded-[24px] bg-card px-6 py-8">
-            <View className="h-12 w-12 items-center justify-center rounded-[16px] bg-subtle">
-              <SymbolView
-                name="point.3.connected.trianglepath.dotted"
-                size={20}
-                tintColor={accentColor}
-                type="monochrome"
-              />
-            </View>
-            <Text className="text-center text-sm leading-normal text-foreground-muted">
-              No environments connected yet.{"\n"}Tap{" "}
-              <Text className="font-t3-bold text-foreground">+</Text> to add one.
-            </Text>
-          </View>
-        )}
+        <LocalEnvironmentList
+          environments={localEnvironments}
+          expandedId={null}
+          onToggle={openEnvironment}
+          opensDetails
+          onReconnect={onReconnectEnvironment}
+          onRemove={onRemoveEnvironmentPress}
+          onSetEnabled={onSetEnvironmentEnabled}
+          onUpdate={handleUpdateEnvironment}
+        />
 
-        {hasCloudPublicConfig() ? (
-          <CloudEnvironmentRows
-            connectedCloudEnvironments={connectedCloudEnvironments}
-            onReconnectEnvironment={onReconnectEnvironment}
-          />
-        ) : null}
+        {/* Keep connected relays visible and removable without cloud config or sign-in; this component gates discovery. */}
+        <CloudEnvironmentRows
+          connectedCloudEnvironments={connectedCloudEnvironments}
+          onOpenEnvironment={openEnvironment}
+          onSetEnvironmentEnabled={onSetEnvironmentEnabled}
+          onRemoveEnvironment={onRemoveEnvironmentPress}
+          {...(SHOWCASE_ENABLED
+            ? {
+                showcaseAvailableEnvironments: SHOWCASE_AVAILABLE_CLOUD_ENVIRONMENTS,
+                showcaseSignedIn: true,
+              }
+            : {})}
+        />
+        <PullRequestRoutingSettings />
       </ScrollView>
-    </View>
+    </SettingsScreen>
   );
 }

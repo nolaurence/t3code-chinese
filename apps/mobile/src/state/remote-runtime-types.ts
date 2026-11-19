@@ -5,6 +5,8 @@ export interface EnvironmentRuntimeState {
   readonly connectionState: EnvironmentConnectionPhase;
   readonly connectionError: string | null;
   readonly connectionErrorTraceId: string | null;
+  /** Reconnecting only because the host has not approved this device yet. */
+  readonly connectionAwaitingApproval?: true;
   readonly serverConfig: ServerConfig | null;
 }
 
@@ -13,6 +15,7 @@ export interface ConnectedEnvironmentSummary {
   readonly environmentLabel: string;
   readonly displayUrl: string;
   readonly isRelayManaged: boolean;
+  readonly isEnabled: boolean;
   readonly connectionState: EnvironmentConnectionPhase;
   readonly connectionError: string | null;
   readonly connectionErrorTraceId: string | null;

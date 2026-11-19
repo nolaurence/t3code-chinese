@@ -13,7 +13,7 @@ Web 应用通过 WebSocket，使用简单的 JSON-RPC 风格协议与服务端�
 - `providers.respondToRequest`、`providers.stopSession`
 - `shell.openInEditor`、`server.getConfig`
 
-Codex 是唯一已经实现的供应商。`claudeCode` 在合约和界面中预留。
+当前已实现 Codex、Claude、Cursor、Grok 和 OpenCode。每个供应商通过同一套适配器与运行时事件合约接入。
 
 ## 客户端传输
 

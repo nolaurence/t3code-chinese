@@ -4,46 +4,29 @@ import type {
   PreviewUrlResolution,
 } from "@t3tools/contracts";
 import { isLoopbackHost, normalizePreviewUrl } from "@t3tools/shared/preview";
+import { isLocalLoopbackHost, isPrivateNetworkHost } from "@t3tools/shared/hostClassification";
 
+import type { ConnectionTarget } from "@t3tools/client-runtime/connection";
+
+import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
+import { isElectron } from "~/env";
 import { readPreparedConnection } from "~/state/session";
 
-const isPrivateNetworkHost = (host: string): boolean => {
-  const normalized = host.toLowerCase().replace(/^\[|\]$/g, "");
-  if (normalized === "localhost" || normalized === "::1" || normalized.endsWith(".local")) {
-    return true;
-  }
-  if (normalized.endsWith(".ts.net")) return true;
-  const parts = normalized.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return false;
-  return (
-    parts[0] === 10 ||
-    (parts[0] === 172 && parts[1]! >= 16 && parts[1]! <= 31) ||
-    (parts[0] === 192 && parts[1] === 168) ||
-    parts[0] === 127 ||
-    (parts[0] === 169 && parts[1] === 254)
-  );
-};
+export { normalizeHostname, isLocalLoopbackHost } from "@t3tools/shared/hostClassification";
 
-const isLocalLoopbackHost = (host: string): boolean => {
-  const normalized = host.toLowerCase().replace(/^\[|\]$/g, "");
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
-};
-
-export function resolveBrowserNavigationTarget(
-  environmentId: EnvironmentId,
-  target: BrowserNavigationTarget,
-): PreviewUrlResolution {
-  if (target.kind === "url") {
-    return {
-      requestedUrl: target.url,
-      resolvedUrl: target.url,
-      resolutionKind: "direct",
-      environmentId,
-    };
-  }
+const readEnvironmentUrl = (environmentId: EnvironmentId): URL => {
   const connection = readPreparedConnection(environmentId);
   if (!connection) throw new Error(`Environment ${environmentId} is not connected.`);
-  const environmentUrl = new URL(connection.httpBaseUrl);
+  return new URL(connection.httpBaseUrl);
+};
+
+const resolveEnvironmentPortTarget = (
+  environmentId: EnvironmentId,
+  target: Extract<BrowserNavigationTarget, { readonly kind: "environment-port" }>,
+  environmentUrl: URL,
+  requestedUrl?: string,
+  sourceUrl?: URL,
+): PreviewUrlResolution => {
   if (!isPrivateNetworkHost(environmentUrl.hostname)) {
     throw new Error(
       "This environment port needs the planned authenticated preview gateway; its server address is not directly private-network reachable.",
@@ -51,41 +34,54 @@ export function resolveBrowserNavigationTarget(
   }
   const protocol = target.protocol ?? "http";
   const path = target.path?.startsWith("/") ? target.path : `/${target.path ?? ""}`;
-  const requestedUrl = `${protocol}://localhost:${target.port}${path}`;
   const normalizedEnvironmentHost = environmentUrl.hostname.replace(/^\[|\]$/g, "");
-  const resolvedHost = normalizedEnvironmentHost.includes(":")
-    ? `[${normalizedEnvironmentHost}]`
-    : normalizedEnvironmentHost;
-  const resolved = new URL(path, `${protocol}://${resolvedHost}:${target.port}`);
+  // localhost lets Chromium reach loopback servers bound to either IPv4 or IPv6.
+  const resolvedHost = isLocalLoopbackHost(normalizedEnvironmentHost)
+    ? "localhost"
+    : normalizedEnvironmentHost.includes(":")
+      ? `[${normalizedEnvironmentHost}]`
+      : normalizedEnvironmentHost;
+  const resolved = sourceUrl
+    ? new URL(sourceUrl)
+    : new URL(path, `${protocol}://${resolvedHost}:${target.port}`);
+  if (sourceUrl) {
+    resolved.hostname = resolvedHost;
+    resolved.port = String(target.port);
+  }
   return {
-    requestedUrl,
+    requestedUrl: requestedUrl ?? `${protocol}://localhost:${target.port}${path}`,
     resolvedUrl: resolved.toString(),
-    resolutionKind:
-      normalizedEnvironmentHost === "localhost" || normalizedEnvironmentHost === "127.0.0.1"
-        ? "direct"
-        : "direct-private-network",
+    resolutionKind: isLocalLoopbackHost(normalizedEnvironmentHost)
+      ? "direct"
+      : "direct-private-network",
     environmentId,
   };
-}
+};
+
+// Desktop renders primary and WSL tabs locally; loopback servers require localhost even for LAN backends.
+const reachesEnvironmentLoopback = (target: ConnectionTarget): boolean =>
+  isElectron &&
+  (target._tag === "PrimaryConnectionTarget" || isDesktopLocalConnectionTarget(target));
 
 export function resolveDiscoveredServerUrl(environmentId: EnvironmentId, rawUrl: string): string {
   try {
     const normalizedUrl = normalizePreviewUrl(rawUrl);
     const parsed = new URL(normalizedUrl);
     if (!isLoopbackHost(parsed.hostname)) return normalizedUrl;
-    const connection = readPreparedConnection(environmentId);
-    if (!connection) throw new Error(`Environment ${environmentId} is not connected.`);
-    const environmentUrl = new URL(connection.httpBaseUrl);
-    if (parsed.hostname !== "0.0.0.0" && isLocalLoopbackHost(environmentUrl.hostname)) {
-      return normalizedUrl;
-    }
-    const port = Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80));
-    return resolveBrowserNavigationTarget(environmentId, {
-      kind: "environment-port",
-      port,
-      protocol: parsed.protocol === "https:" ? "https" : "http",
-      path: `${parsed.pathname}${parsed.search}${parsed.hash}`,
-    }).resolvedUrl;
+    const target = readPreparedConnection(environmentId)?.target;
+    if (target && reachesEnvironmentLoopback(target)) return normalizedUrl;
+    return resolveEnvironmentPortTarget(
+      environmentId,
+      {
+        kind: "environment-port",
+        port: Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80)),
+        protocol: parsed.protocol === "https:" ? "https" : "http",
+        path: `${parsed.pathname}${parsed.search}${parsed.hash}`,
+      },
+      readEnvironmentUrl(environmentId),
+      rawUrl,
+      parsed,
+    ).resolvedUrl;
   } catch {
     return rawUrl;
   }

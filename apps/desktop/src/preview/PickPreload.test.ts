@@ -1,86 +1,107 @@
-import { describe, expect, it } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
 
-import { computeLabelPosition } from "./PickLabelPosition.ts";
+import { START_PICK_CHANNEL } from "./GuestProtocol.ts";
+import "./PickPreload.ts";
 
-const VIEWPORT = { viewportWidth: 1280, viewportHeight: 800 };
+const ipcListeners = vi.hoisted(() => new Map<string, Array<(...args: unknown[]) => void>>());
 
-describe("computeLabelPosition", () => {
-  it("anchors to the element's top-left when there's room above and to the right", () => {
-    const { x, y } = computeLabelPosition({
-      ...VIEWPORT,
-      targetLeft: 200,
-      targetTop: 200,
-      targetBottom: 240,
-      labelWidth: 120,
-      labelHeight: 18,
-    });
-    expect(x).toBe(200);
-    // 200 (top) - 18 (height) - 4 (gap)
-    expect(y).toBe(200 - 18 - 4);
+vi.mock("electron", () => ({
+  ipcRenderer: {
+    on: (channel: string, listener: (...args: unknown[]) => void) => {
+      ipcListeners.set(channel, [...(ipcListeners.get(channel) ?? []), listener]);
+    },
+    off: () => {},
+    send: () => {},
+    invoke: async () => undefined,
+  },
+}));
+
+vi.mock("react-grab/primitives", () => ({ getElementContext: async () => null }));
+
+const startAnnotation = (): ShadowRoot => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  using attachShadow = vi.spyOn(Element.prototype, "attachShadow");
+  for (const listener of ipcListeners.get(START_PICK_CHANNEL) ?? []) listener({}, undefined, false);
+  const shadowRoot = attachShadow.mock.results[0]?.value;
+  if (!(shadowRoot instanceof ShadowRoot)) throw new Error("annotation overlay did not start");
+  return shadowRoot;
+};
+
+it("switches tools from the keyboard after a toolbar button is clicked", () => {
+  const shadowRoot = startAnnotation();
+  const region = Array.from(shadowRoot.querySelectorAll("button")).find(
+    (button) => button.textContent === "Region",
+  );
+  if (!region) throw new Error("Region toolbar button not found");
+
+  region.focus();
+  region.click();
+  expect(document.documentElement.getAttribute("data-t3code-annotation-tool")).toBe("marquee");
+
+  region.dispatchEvent(new KeyboardEvent("keydown", { key: "v", bubbles: true, composed: true }));
+
+  expect(
+    document.documentElement.getAttribute("data-t3code-annotation-tool"),
+    "V should switch to Select while focus is on a toolbar button",
+  ).toBe("select");
+});
+
+it("keeps the tool while typing a tool key in the comment", () => {
+  const shadowRoot = startAnnotation();
+  const comment = shadowRoot.querySelector("textarea");
+  if (!comment) throw new Error("comment textarea not found");
+
+  comment.focus();
+  comment.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true, composed: true }));
+
+  expect(document.documentElement.getAttribute("data-t3code-annotation-tool")).toBe("select");
+});
+
+it("keeps comment keystrokes away from the page's capture-phase shortcuts", () => {
+  const pageShortcut = vi.fn((event: KeyboardEvent) => event.preventDefault());
+  window.addEventListener("keydown", pageShortcut, { capture: true });
+  const shadowRoot = startAnnotation();
+  const comment = shadowRoot.querySelector("textarea");
+  if (!comment) throw new Error("comment textarea not found");
+
+  comment.focus();
+  const space = new KeyboardEvent("keydown", {
+    key: " ",
+    code: "Space",
+    bubbles: true,
+    cancelable: true,
+    composed: true,
   });
+  comment.dispatchEvent(space);
+  window.removeEventListener("keydown", pageShortcut, { capture: true });
 
-  it("clamps left edge so the label stays inside the viewport", () => {
-    const { x } = computeLabelPosition({
-      ...VIEWPORT,
-      targetLeft: -50,
-      targetTop: 200,
-      targetBottom: 240,
-      labelWidth: 120,
-      labelHeight: 18,
-    });
-    expect(x).toBe(4);
-  });
+  expect(pageShortcut).not.toHaveBeenCalled();
+  expect(space.defaultPrevented).toBe(false);
+});
 
-  it("clamps right edge when the label would overflow the viewport (the bug we shipped)", () => {
-    const { x } = computeLabelPosition({
-      ...VIEWPORT,
-      targetLeft: 1240,
-      targetTop: 200,
-      targetBottom: 240,
-      labelWidth: 200,
-      labelHeight: 18,
-    });
-    // viewportWidth (1280) - labelWidth (200) - margin (4) = 1076
-    expect(x).toBe(1076);
-  });
+it("keeps the annotation when Escape dismisses an IME candidate in the comment", () => {
+  const shadowRoot = startAnnotation();
+  const comment = shadowRoot.querySelector("textarea");
+  if (!comment) throw new Error("comment textarea not found");
 
-  it("flips the label below the element when there's no room above", () => {
-    const { y } = computeLabelPosition({
-      ...VIEWPORT,
-      targetLeft: 200,
-      targetTop: 4,
-      targetBottom: 44,
-      labelWidth: 120,
-      labelHeight: 18,
-    });
-    // labelY = 4 - 18 - 4 = -18 → flip → 44 + 4 = 48
-    expect(y).toBe(48);
-  });
+  comment.value = "draft";
+  comment.focus();
+  comment.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "Escape",
+      isComposing: true,
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    }),
+  );
 
-  it("pins to the bottom margin when the element fills the viewport (no room above OR below)", () => {
-    const { y } = computeLabelPosition({
-      ...VIEWPORT,
-      targetLeft: 200,
-      targetTop: 0,
-      targetBottom: 800,
-      labelWidth: 120,
-      labelHeight: 18,
-    });
-    // Above overflows top → flip below = 800 + 4 = 804 → also overflows
-    // bottom → pin to viewportHeight - labelHeight - margin = 778.
-    expect(y).toBe(800 - 18 - 4);
-  });
-
-  it("never returns a negative coordinate", () => {
-    const { x, y } = computeLabelPosition({
-      ...VIEWPORT,
-      targetLeft: -1000,
-      targetTop: -1000,
-      targetBottom: -900,
-      labelWidth: 5000,
-      labelHeight: 5000,
-    });
-    expect(x).toBeGreaterThanOrEqual(0);
-    expect(y).toBeGreaterThanOrEqual(0);
-  });
+  expect(shadowRoot.host.isConnected).toBe(true);
+  expect(comment.value).toBe("draft");
 });

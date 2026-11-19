@@ -1,40 +1,116 @@
-import { Maximize2Icon, Minimize2Icon, PanelBottomIcon, PanelRightIcon } from "lucide-react";
-import { memo } from "react";
+import {
+  ArrowLeftRightIcon,
+  PanelLeftIcon,
+  PanelBottomIcon,
+  PanelRightIcon,
+  SquareMenuIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+} from "lucide-react";
+import { memo, type ReactNode, useLayoutEffect, useRef } from "react";
 
+import { cn } from "~/lib/utils";
+
+import type { ThreadPanelPresentation } from "../../rightPanelLayout";
+import { PopoverCreateHandle, PopoverTrigger } from "../ui/popover";
+import { useMobileSidebarSheetMounted } from "../ui/sidebar";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { useI18n } from "../../i18n";
+import { useI18n } from "~/i18n";
+import type { RightPanelSide } from "../preview/rightPanelSide";
 
-interface PanelLayoutControlsProps {
+/** Matches the right inset of `ThreadPanelHeaderControl`. */
+const THREAD_PANEL_HEADER_INSET_PX = 12;
+
+export interface PanelLayoutControlsProps {
+  showThreadPanelControl?: boolean;
+  showTerminalControl?: boolean;
+  showRightPanelControl?: boolean;
   terminalAvailable: boolean;
   terminalOpen: boolean;
   terminalShortcutLabel: string | null;
+  threadPanelOpen: boolean;
+  threadPanelPresentation: ThreadPanelPresentation;
+  threadPanelPopoverHandle?: ReturnType<typeof PopoverCreateHandle>;
+  threadPanelShortcutLabel: string | null;
   rightPanelAvailable: boolean;
   rightPanelOpen: boolean;
   rightPanelShortcutLabel: string | null;
+  rightPanelUnavailableLabel?: string;
+  /** Which side the panel docks to; flips the toggle icon. */
+  rightPanelSide?: RightPanelSide;
+  /** Swap-button visibility; the sheet layout overlays the panel, so it has no side. */
+  showPanelSideSwap?: boolean;
   onToggleTerminal: () => void;
+  onToggleThreadPanel: () => void;
   onToggleRightPanel: () => void;
+  onToggleRightPanelSide?: () => void;
 }
 
 export const PanelLayoutControls = memo(function PanelLayoutControls({
+  showThreadPanelControl = true,
+  showTerminalControl = true,
+  showRightPanelControl = true,
   terminalAvailable,
   terminalOpen,
   terminalShortcutLabel,
+  threadPanelOpen,
+  threadPanelPresentation,
+  threadPanelPopoverHandle,
+  threadPanelShortcutLabel,
   rightPanelAvailable,
   rightPanelOpen,
   rightPanelShortcutLabel,
+  rightPanelUnavailableLabel,
+  rightPanelSide = "right",
+  showPanelSideSwap = false,
   onToggleTerminal,
+  onToggleThreadPanel,
   onToggleRightPanel,
+  onToggleRightPanelSide,
 }: PanelLayoutControlsProps) {
   const { t } = useI18n();
+  const resolvedRightPanelUnavailableLabel =
+    rightPanelUnavailableLabel ?? t("chat.panel.rightUnavailable");
+  const sideSwapLabel =
+    rightPanelSide === "right" ? t("chat.panel.moveToLeft") : t("chat.panel.moveToRight");
+  const threadPanelToggle = (
+    <Toggle
+      className="relative shrink-0 [-webkit-app-region:no-drag]"
+      pressed={threadPanelOpen}
+      onPressedChange={threadPanelPresentation === "popover" ? undefined : onToggleThreadPanel}
+      aria-label="Toggle thread details panel"
+      variant="ghost"
+      size="sm"
+    >
+      <SquareMenuIcon className="size-4" />
+    </Toggle>
+  );
+  const threadPanelControl = (
+    <Tooltip>
+      <TooltipTrigger render={<span className="flex shrink-0" data-thread-panel-toggle />}>
+        {threadPanelPresentation === "popover" ? (
+          <PopoverTrigger handle={threadPanelPopoverHandle} render={threadPanelToggle} />
+        ) : (
+          threadPanelToggle
+        )}
+      </TooltipTrigger>
+      <TooltipPopup side="bottom">
+        Toggle thread details
+        {threadPanelShortcutLabel ? ` (${threadPanelShortcutLabel})` : ""}
+      </TooltipPopup>
+    </Tooltip>
+  );
+
   return (
     <div
       className="flex h-full shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
       data-panel-layout-controls
     >
-      <Tooltip>
-        <TooltipTrigger
-          render={
+      {showThreadPanelControl ? threadPanelControl : null}
+      {showTerminalControl ? (
+        <Tooltip>
+          <TooltipTrigger render={<span className="flex shrink-0" />}>
             <Toggle
               className="shrink-0 [-webkit-app-region:no-drag]"
               pressed={terminalOpen}
@@ -44,38 +120,59 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
               size="sm"
               disabled={!terminalAvailable}
             >
-              <PanelBottomIcon className="size-3.5" />
+              <PanelBottomIcon className="size-4" />
             </Toggle>
-          }
-        />
-        <TooltipPopup side="bottom">
-          {terminalAvailable
-            ? `${t("chat.panel.toggleTerminal")}${terminalShortcutLabel ? ` (${terminalShortcutLabel})` : ""}`
-            : t("chat.panel.terminalUnavailable")}
-        </TooltipPopup>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger
-          render={
+          </TooltipTrigger>
+          <TooltipPopup side="bottom">
+            {terminalAvailable
+              ? `${t("chat.panel.toggleTerminal")}${terminalShortcutLabel ? ` (${terminalShortcutLabel})` : ""}`
+              : t("chat.panel.terminalUnavailable")}
+          </TooltipPopup>
+        </Tooltip>
+      ) : null}
+      {showRightPanelControl ? (
+        <Tooltip>
+          <TooltipTrigger render={<span className="flex shrink-0" />}>
             <Toggle
               className="shrink-0 [-webkit-app-region:no-drag]"
               pressed={rightPanelOpen}
               onPressedChange={onToggleRightPanel}
               aria-label={t("chat.panel.toggleRight")}
+              data-right-panel-toggle
               variant="ghost"
               size="sm"
               disabled={!rightPanelAvailable}
             >
-              <PanelRightIcon className="size-3.5" />
+              {rightPanelSide === "left" ? (
+                <PanelLeftIcon className="size-4" />
+              ) : (
+                <PanelRightIcon className="size-4" />
+              )}
             </Toggle>
-          }
-        />
-        <TooltipPopup side="bottom">
-          {rightPanelAvailable
-            ? `${t("chat.panel.toggleRight")}${rightPanelShortcutLabel ? ` (${rightPanelShortcutLabel})` : ""}`
-            : t("chat.panel.rightUnavailable")}
-        </TooltipPopup>
-      </Tooltip>
+          </TooltipTrigger>
+          <TooltipPopup side="bottom">
+            {rightPanelAvailable
+              ? `${t("chat.panel.toggleRight")}${rightPanelShortcutLabel ? ` (${rightPanelShortcutLabel})` : ""}`
+              : resolvedRightPanelUnavailableLabel}
+          </TooltipPopup>
+        </Tooltip>
+      ) : null}
+      {showPanelSideSwap && onToggleRightPanelSide ? (
+        <Tooltip>
+          <TooltipTrigger render={<span className="flex shrink-0" />}>
+            <Toggle
+              className="shrink-0 [-webkit-app-region:no-drag]"
+              aria-label={sideSwapLabel}
+              variant="ghost"
+              size="sm"
+              onPressedChange={onToggleRightPanelSide}
+            >
+              <ArrowLeftRightIcon className="size-4" />
+            </Toggle>
+          </TooltipTrigger>
+          <TooltipPopup side="bottom">{sideSwapLabel}</TooltipPopup>
+        </Tooltip>
+      ) : null}
     </div>
   );
 });
@@ -102,9 +199,9 @@ export const RightPanelMaximizeControl = memo(function RightPanelMaximizeControl
             size="sm"
           >
             {maximized ? (
-              <Minimize2Icon className="size-3.5" />
+              <Minimize2Icon className="size-4" />
             ) : (
-              <Maximize2Icon className="size-3.5" />
+              <Maximize2Icon className="size-4" />
             )}
           </Toggle>
         }
@@ -113,3 +210,86 @@ export const RightPanelMaximizeControl = memo(function RightPanelMaximizeControl
     </Tooltip>
   );
 });
+
+/** The thread panel toggle on a header whose right side the inline right panel covers. */
+export function ThreadPanelHeaderControl(props: PanelLayoutControlsProps) {
+  const mobileSidebarSheetMounted = useMobileSidebarSheetMounted();
+  return (
+    <div
+      className={cn(
+        "absolute top-[var(--workspace-controls-top)] right-[calc(env(safe-area-inset-right)+0.75rem)] z-50 flex h-[var(--workspace-topbar-height)] items-center [-webkit-app-region:no-drag]",
+        mobileSidebarSheetMounted && "hidden",
+      )}
+      data-workspace-titlebar-controls
+    >
+      <PanelLayoutControls {...props} showTerminalControl={false} showRightPanelControl={false} />
+    </div>
+  );
+}
+
+/** The window's top-right panel controls, with the maximize toggle while the panel is open. */
+export function WorkspaceTitlebarControls(props: {
+  readonly showMaximizeControl: boolean;
+  readonly rightPanelOpen: boolean;
+  readonly animationsActive: boolean;
+  readonly maximized: boolean;
+  readonly onToggleMaximized: () => void;
+  readonly children: ReactNode;
+}) {
+  const { rightPanelOpen, maximized } = props;
+  const controlsRef = useRef<HTMLDivElement | null>(null);
+  const previous = useRef({ rightPanelOpen, maximized });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- starts the toggle's slide before the commit that swapped it in paints; the animation is cancelled on change or unmount.
+  useLayoutEffect(() => {
+    const { rightPanelOpen: wasOpen, maximized: wasMaximized } = previous.current;
+    previous.current = { rightPanelOpen, maximized };
+    if (!wasOpen || rightPanelOpen || wasMaximized) return;
+    const toggle = controlsRef.current?.querySelector("[data-thread-panel-toggle]");
+    const panel = toggle?.ownerDocument.querySelector("[data-preview-panel-mode='inline']");
+    const timing = panel?.getAnimations()[0]?.effect?.getTiming();
+    if (!toggle || !panel || !timing) return;
+    // The header's toggle was just removed, so slide this one in from where it sat.
+    const headerRight = panel.getBoundingClientRect().left - THREAD_PANEL_HEADER_INSET_PX;
+    const offset = headerRight - toggle.getBoundingClientRect().right;
+    const animation = toggle.animate(
+      [{ transform: `translateX(${offset}px)` }, { transform: "none" }],
+      { ...timing, easing: getComputedStyle(panel).transitionTimingFunction },
+    );
+    return () => animation.cancel();
+  }, [rightPanelOpen, maximized]);
+
+  const mobileSidebarSheetMounted = useMobileSidebarSheetMounted();
+  return (
+    <div
+      ref={controlsRef}
+      className={cn(
+        "pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] z-50 mr-px flex h-[var(--workspace-topbar-height)] items-center gap-1 [-webkit-app-region:no-drag]",
+        mobileSidebarSheetMounted && "hidden",
+      )}
+      data-workspace-titlebar-controls
+    >
+      {props.showMaximizeControl ? (
+        <span
+          aria-hidden={!props.rightPanelOpen}
+          // Fading out on close would show it beside the thread details toggle that replaces it.
+          className={cn(
+            "flex shrink-0",
+            props.rightPanelOpen &&
+              props.animationsActive &&
+              "motion-safe:transition-opacity motion-safe:duration-(--panel-animation-duration) motion-safe:ease-out",
+            props.rightPanelOpen
+              ? "pointer-events-auto opacity-100"
+              : "pointer-events-none absolute right-full mr-1 opacity-0",
+          )}
+          inert={!props.rightPanelOpen}
+        >
+          <RightPanelMaximizeControl
+            maximized={props.maximized}
+            onToggle={props.onToggleMaximized}
+          />
+        </span>
+      ) : null}
+      <div className="pointer-events-auto flex h-full items-center">{props.children}</div>
+    </div>
+  );
+}

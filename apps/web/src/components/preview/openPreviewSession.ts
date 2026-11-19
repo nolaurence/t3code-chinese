@@ -1,11 +1,20 @@
 import type {
   EnvironmentId,
+  PreviewAppearancePreference,
   PreviewOpenInput,
+  PreviewRuntime,
   PreviewSessionSnapshot,
+  PreviewViewportSetting,
+  PreviewZoomFactor,
   ScopedThreadRef,
 } from "@t3tools/contracts";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
+import * as Cause from "effect/Cause";
+import { AsyncResult } from "effect/reactivity";
 
+import { resolveBrowserDefaults } from "~/browser/browserDefaults";
+import { BrowserSettingsReadError, isBrowserSettingsReadError } from "~/browser/openFileInPreview";
+import { previewRuntimeFor } from "~/browser/previewRuntime";
 import { applyPreviewServerSnapshot, rememberPreviewUrl } from "~/previewStateStore";
 
 interface OpenPreviewSessionInput<E> {
@@ -15,16 +24,38 @@ interface OpenPreviewSessionInput<E> {
   }) => Promise<AtomCommandResult<PreviewSessionSnapshot, E>>;
   threadRef: ScopedThreadRef;
   url?: string;
+  viewport?: PreviewViewportSetting;
+  profileId?: string;
+  zoomFactor?: PreviewZoomFactor;
+  colorScheme?: PreviewAppearancePreference;
+  runtime?: PreviewRuntime;
 }
 
 export async function openPreviewSession<E>(
   input: OpenPreviewSessionInput<E>,
-): Promise<AtomCommandResult<PreviewSessionSnapshot, E>> {
+): Promise<AtomCommandResult<PreviewSessionSnapshot, E | BrowserSettingsReadError>> {
+  // Wait for settings hydration so new tabs cannot retain uncorrected schema defaults.
+  const defaults = await resolveBrowserDefaults().catch(
+    (cause: unknown) => new BrowserSettingsReadError({ cause }),
+  );
+  if (isBrowserSettingsReadError(defaults)) {
+    return AsyncResult.failure(Cause.fail(defaults));
+  }
+  const runtime = input.runtime ?? previewRuntimeFor(input.threadRef.environmentId);
   const result = await input.openPreview({
     environmentId: input.threadRef.environmentId,
     input: {
       threadId: input.threadRef.threadId,
       ...(input.url === undefined ? {} : { url: input.url }),
+      viewport: input.viewport ?? defaults.viewport,
+      profileId: input.profileId ?? defaults.profileId,
+      ...(runtime === undefined || runtime === "desktop"
+        ? {}
+        : {
+            runtime,
+            zoomFactor: input.zoomFactor ?? defaults.zoomFactor,
+            colorScheme: input.colorScheme ?? defaults.appearance,
+          }),
     },
   });
   if (result._tag === "Failure") {

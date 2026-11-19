@@ -12,8 +12,15 @@ interface ComposerEditorSelection {
 export function acknowledgeComposerNativeEvent(
   mostRecentEventCount: number,
   incomingEventCount: number,
+  resetGeneration = 0,
+  incomingResetGeneration = 0,
 ): number | null {
-  if (!Number.isSafeInteger(incomingEventCount) || incomingEventCount < mostRecentEventCount) {
+  if (
+    !Number.isSafeInteger(incomingEventCount) ||
+    incomingEventCount <= mostRecentEventCount ||
+    // Events from before the editor applied a parent reset describe text the parent replaced.
+    incomingResetGeneration < resetGeneration
+  ) {
     return null;
   }
   return incomingEventCount;
@@ -31,22 +38,26 @@ export function resolveComposerControlledEventCount(
     if (snapshot?.value !== value) continue;
 
     newestValueEventCount ??= snapshot.eventCount;
-    if (
-      selection === null ||
-      (snapshot.selection?.start === selection.start && snapshot.selection.end === selection.end)
-    ) {
+    if (selection === null || snapshotSelectionMatches(snapshot, selection)) {
       return snapshot.eventCount;
     }
   }
 
-  // A value emitted by native paired with a different selection is an
-  // intermediate React render. Keep it behind the native revision so it
-  // cannot move the caret while newer keystrokes are being processed.
+  // Mismatched native text/selection pairs are intermediate renders; keep their revision behind to avoid moving the caret.
   if (newestValueEventCount !== null && mostRecentEventCount > 0) {
     return Math.min(newestValueEventCount, mostRecentEventCount - 1);
   }
 
   return mostRecentEventCount;
+}
+
+// Null-selection snapshots allow assumed bounded carets; echoes must not use that wildcard or drop caret moves.
+function snapshotSelectionMatches(
+  snapshot: ComposerNativeEventSnapshot,
+  selection: ComposerEditorSelection,
+): boolean {
+  if (snapshot.selection === null) return true;
+  return snapshot.selection.start === selection.start && snapshot.selection.end === selection.end;
 }
 
 export function isComposerNativeEcho(
@@ -62,7 +73,9 @@ export function isComposerNativeEcho(
       snapshot.eventCount === eventCount &&
       snapshot.value === value &&
       (selection === null ||
-        (snapshot.selection?.start === selection.start && snapshot.selection.end === selection.end))
+        (snapshot.selection !== null &&
+          snapshot.selection.start === selection.start &&
+          snapshot.selection.end === selection.end))
     ) {
       return true;
     }
@@ -70,9 +83,33 @@ export function isComposerNativeEcho(
   return false;
 }
 
+/** Replace history with assumed controlled state so returning to old native values counts as fresh parent edits. */
+export function assumeComposerControlledState(
+  snapshots: ReadonlyArray<ComposerNativeEventSnapshot>,
+  eventCount: number,
+  value: string,
+): ComposerNativeEventSnapshot[] {
+  return [
+    { eventCount, value, selection: null },
+    ...snapshots.filter((snapshot) => snapshot.eventCount > eventCount),
+  ];
+}
+
 export function pruneAcknowledgedComposerNativeEvents(
   snapshots: ReadonlyArray<ComposerNativeEventSnapshot>,
   acknowledgedEventCount: number,
 ): ComposerNativeEventSnapshot[] {
-  return snapshots.filter((snapshot) => snapshot.eventCount > acknowledgedEventCount);
+  // Retain the latest acknowledgement so unrelated renders stay echoes and do not reset caret or iOS autocorrect.
+  let latestAcknowledgedIndex = -1;
+  for (let index = snapshots.length - 1; index >= 0; index -= 1) {
+    const snapshot = snapshots[index];
+    if (snapshot !== undefined && snapshot.eventCount <= acknowledgedEventCount) {
+      latestAcknowledgedIndex = index;
+      break;
+    }
+  }
+  return snapshots.filter(
+    (snapshot, index) =>
+      index === latestAcknowledgedIndex || snapshot.eventCount > acknowledgedEventCount,
+  );
 }

@@ -1,14 +1,18 @@
 import * as Schema from "effect/Schema";
 
+import { parseUrl } from "./url.ts";
+
 const PAIRING_TOKEN_PARAM = "token";
 const HOSTED_PAIRING_HOST_PARAM = "host";
 const HOSTED_PAIRING_LABEL_PARAM = "label";
+const PAIRING_APP_LINK_PARAM = "pairingUrl";
+const APP_LINK_PROTOCOL = /^t3code(?:-[a-z]+)?:$/;
 const SUPPORTED_REMOTE_BACKEND_PROTOCOLS = new Set(["http:", "https:", "ws:", "wss:"]);
 
-const readHashParams = (url: URL): URLSearchParams =>
+export const readHashParams = (url: URL): URLSearchParams =>
   new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
 
-export class RemoteBackendUrlMissingError extends Schema.TaggedErrorClass<RemoteBackendUrlMissingError>()(
+export class RemoteBackendUrlMissingError extends Schema.TaggedError<RemoteBackendUrlMissingError>()(
   "RemoteBackendUrlMissingError",
   {},
 ) {
@@ -17,7 +21,7 @@ export class RemoteBackendUrlMissingError extends Schema.TaggedErrorClass<Remote
   }
 }
 
-export class RemotePairingUrlInvalidError extends Schema.TaggedErrorClass<RemotePairingUrlInvalidError>()(
+export class RemotePairingUrlInvalidError extends Schema.TaggedError<RemotePairingUrlInvalidError>()(
   "RemotePairingUrlInvalidError",
   {
     cause: Schema.optional(Schema.Defect()),
@@ -29,7 +33,7 @@ export class RemotePairingUrlInvalidError extends Schema.TaggedErrorClass<Remote
   }
 }
 
-export class RemoteBackendUrlInvalidError extends Schema.TaggedErrorClass<RemoteBackendUrlInvalidError>()(
+export class RemoteBackendUrlInvalidError extends Schema.TaggedError<RemoteBackendUrlInvalidError>()(
   "RemoteBackendUrlInvalidError",
   {
     source: Schema.Literals(["direct-host", "hosted-pairing-host"]),
@@ -42,7 +46,7 @@ export class RemoteBackendUrlInvalidError extends Schema.TaggedErrorClass<Remote
   }
 }
 
-export class RemotePairingTokenMissingError extends Schema.TaggedErrorClass<RemotePairingTokenMissingError>()(
+export class RemotePairingTokenMissingError extends Schema.TaggedError<RemotePairingTokenMissingError>()(
   "RemotePairingTokenMissingError",
   { host: Schema.String },
 ) {
@@ -51,7 +55,7 @@ export class RemotePairingTokenMissingError extends Schema.TaggedErrorClass<Remo
   }
 }
 
-export class RemotePairingCodeMissingError extends Schema.TaggedErrorClass<RemotePairingCodeMissingError>()(
+export class RemotePairingCodeMissingError extends Schema.TaggedError<RemotePairingCodeMissingError>()(
   "RemotePairingCodeMissingError",
   { host: Schema.String },
 ) {
@@ -81,10 +85,10 @@ const normalizeRemoteBaseUrl = (
     throw new RemoteBackendUrlMissingError();
   }
 
-  const normalizedInput =
-    /^[a-zA-Z][a-zA-Z\d+-]*:\/\//.test(trimmed) || trimmed.startsWith("//")
-      ? trimmed
-      : `https://${trimmed}`;
+  const withoutLeadingSlashes = trimmed.replace(/^\/+/, "");
+  const normalizedInput = /^[a-zA-Z][a-zA-Z\d+-]*:\/\//.test(withoutLeadingSlashes)
+    ? withoutLeadingSlashes
+    : `https://${withoutLeadingSlashes}`;
   let url: URL;
   try {
     url = new URL(normalizedInput);
@@ -183,6 +187,19 @@ export const readHostedPairingRequest = (url: URL): HostedPairingRequest | null 
     token,
     label,
   };
+};
+
+/** Wraps a pairing URL in the `t3code://pair` link that desktop opens and mobile scans. */
+export const buildPairingAppLink = (pairingUrl: string): string =>
+  `t3code://pair?${new URLSearchParams([[PAIRING_APP_LINK_PARAM, pairingUrl]])}`;
+
+/** Reads the pairing URL from a `t3code://pair` link on any app channel scheme. */
+export const readPairingAppLink = (value: string): string | null => {
+  const url = parseUrl(value);
+  if (!url) return null;
+  if (!APP_LINK_PROTOCOL.test(url.protocol) || url.host !== "pair") return null;
+  if (url.pathname !== "" && url.pathname !== "/") return null;
+  return url.searchParams.get(PAIRING_APP_LINK_PARAM)?.trim() || null;
 };
 
 export const resolveRemotePairingTarget = (input: {

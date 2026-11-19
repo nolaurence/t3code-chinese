@@ -1,33 +1,43 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as NodeModule from "node:module";
 
-class OxlintFixtureFailure extends Data.TaggedError("OxlintFixtureFailure")<{
-  readonly exitCode: number;
-  readonly stdout: string;
-  readonly stderr: string;
-}> {
-  static readonly is = (u: unknown): u is OxlintFixtureFailure =>
-    Predicate.isTagged(u, "OxlintFixtureFailure");
-}
+// oxlint is only a transitive dependency (via vite-plus), so its bin placement
+// varies by package manager: pnpm hoists it into the virtual store, while
+// other layouts expose vite-plus's LSP-only wrapper instead. Resolve the real
+// package through vite-plus rather than hardcoding either layout, and do it at
+const oxlintPackageJsonPath = NodeModule.createRequire(
+  NodeModule.createRequire(import.meta.url).resolve("vite-plus/package.json"),
+).resolve("oxlint/package.json");
 
-class OxlintFixtureExpectedFailure extends Data.TaggedError("OxlintFixtureExpectedFailure")<{
-  readonly ruleName: string;
-}> {
+class OxlintFixtureFailure extends Schema.TaggedError<OxlintFixtureFailure>()(
+  "OxlintFixtureFailure",
+  {
+    exitCode: Schema.Number,
+    stdout: Schema.String,
+    stderr: Schema.String,
+  },
+) {}
+
+const isOxlintFixtureFailure = Schema.is(OxlintFixtureFailure);
+
+class OxlintFixtureExpectedFailure extends Schema.TaggedError<OxlintFixtureExpectedFailure>()(
+  "OxlintFixtureExpectedFailure",
+  { ruleName: Schema.String },
+) {
   override get message() {
     return `Expected oxlint to report a failure for rule ${this.ruleName}, but it passed.`;
   }
 }
 
-const encodeOxlintConfig = Schema.encodeEffect(Schema.UnknownFromJsonString);
+const encodeOxlintConfig = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 
 interface RuleHarness {
   readonly run: (
@@ -50,6 +60,7 @@ interface RuleHarness {
 
 interface RuleHarnessOptions {
   readonly filename?: string;
+  readonly ruleOptions?: ReadonlyArray<unknown>;
 }
 
 const collectStreamAsString = <E>(stream: Stream.Stream<Uint8Array, E>): Effect.Effect<string, E> =>
@@ -93,27 +104,26 @@ export const createOxlintRuleHarness = (
     const configPath = path.join(fixtureDir, ".oxlintrc.json");
     const sourcePath = path.join(fixtureDir, options.filename ?? "fixture.ts");
     const repoRoot = path.join(import.meta.dirname, "..", "..");
-    const oxlintBin = path.join(
-      repoRoot,
-      "node_modules",
-      ".pnpm",
-      "node_modules",
-      ".bin",
-      "oxlint",
-    );
+    const oxlintBin = path.join(path.dirname(oxlintPackageJsonPath), "bin", "oxlint");
     const pluginPath = path.join(repoRoot, "oxlint-plugin-t3code", "index.ts");
 
     yield* fs.writeFileString(
       configPath,
       yield* encodeOxlintConfig({
         jsPlugins: [{ name: "t3code", specifier: pluginPath }],
-        rules: { [ruleName]: "error" },
+        rules: { [ruleName]: ["error", ...(options.ruleOptions ?? [])] },
       }),
     );
+    yield* fs.makeDirectory(path.dirname(sourcePath), { recursive: true });
     yield* fs.writeFileString(sourcePath, source);
 
+    // Run through the current Node binary: oxlint's bin is an extensionless
+    // shebang script, which Windows cannot spawn directly and which would
+    // otherwise pick up whatever node is first on PATH.
     const output = yield* spawnAndCollectOutput(
-      ChildProcess.make(oxlintBin, ["--config", configPath, sourcePath], { cwd: repoRoot }),
+      ChildProcess.make(process.execPath, [oxlintBin, "--config", configPath, sourcePath], {
+        cwd: repoRoot,
+      }),
     );
 
     if (output.exitCode !== 0) {
@@ -131,7 +141,7 @@ export const createOxlintRuleHarness = (
     run(source).pipe(
       Effect.matchEffect({
         onFailure: (error) =>
-          OxlintFixtureFailure.is(error)
+          isOxlintFixtureFailure(error)
             ? Effect.succeed(
                 `oxlint fixture failed with exit code ${error.exitCode}\n${error.stdout}\n${error.stderr}`,
               )

@@ -1,5 +1,5 @@
-import type { ContextMenuItem } from "@t3tools/contracts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import type { ContextMenuItem, ContextMenuSource } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -17,11 +17,13 @@ export interface ElectronMenuContextInput {
   readonly window: Electron.BrowserWindow;
   readonly items: readonly ContextMenuItem[];
   readonly position: Option.Option<ElectronMenuPosition>;
+  readonly source: Option.Option<ContextMenuSource>;
 }
 
 export interface ElectronMenuTemplateInput {
   readonly window: Electron.BrowserWindow;
   readonly template: readonly Electron.MenuItemConstructorOptions[];
+  readonly frame?: Electron.WebFrameMain;
 }
 
 const ElectronMenuOperation = Schema.Literals([
@@ -30,7 +32,7 @@ const ElectronMenuOperation = Schema.Literals([
   "show-context-menu",
 ]);
 
-export class ElectronMenuOperationError extends Schema.TaggedErrorClass<ElectronMenuOperationError>()(
+export class ElectronMenuOperationError extends Schema.TaggedError<ElectronMenuOperationError>()(
   "ElectronMenuOperationError",
   {
     operation: ElectronMenuOperation,
@@ -67,17 +69,21 @@ function normalizeContextMenuItems(source: readonly ContextMenuItem[]): ContextM
       continue;
     }
 
-    // Header items are decorative section labels for the web fallback only —
-    // Electron's native menu has no equivalent affordance, so we skip them.
+    // Native menus cannot display the web fallback's decorative headers.
     if (sourceItem.header === true) {
       continue;
     }
 
     const normalizedItem: ContextMenuItem = {
       id: sourceItem.id,
-      label: sourceItem.label,
+      label:
+        typeof sourceItem.detail === "string" && sourceItem.detail.length > 0
+          ? `${sourceItem.label} (${sourceItem.detail})`
+          : sourceItem.label,
       destructive: sourceItem.destructive === true,
       disabled: sourceItem.disabled === true,
+      ...(sourceItem.separatorBefore === true ? { separatorBefore: true } : {}),
+      ...(typeof sourceItem.checked === "boolean" ? { checked: sourceItem.checked } : {}),
     };
 
     if (sourceItem.children) {
@@ -94,16 +100,22 @@ function normalizeContextMenuItems(source: readonly ContextMenuItem[]): ContextM
   return normalizedItems;
 }
 
+// popup() takes window points; renderer CSS coordinates must account for page zoom.
 const normalizePosition = (
   position: Option.Option<ElectronMenuPosition>,
+  zoomFactor: number,
 ): Option.Option<ElectronMenuPosition> =>
   Option.filter(
     position,
-    ({ x, y }) => Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0,
-  ).pipe(Option.map(({ x, y }) => ({ x: Math.floor(x), y: Math.floor(y) })));
+    ({ x, y }) =>
+      Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0 && Number.isFinite(zoomFactor),
+  ).pipe(
+    Option.map(({ x, y }) => ({ x: Math.floor(x * zoomFactor), y: Math.floor(y * zoomFactor) })),
+  );
 
+/** @public */
 export const make = Effect.gen(function* () {
-  const platform = yield* HostProcessPlatform;
+  const platform = yield* HostProcess.Platform;
   let destructiveMenuIconCache: Option.Option<Electron.NativeImage> | undefined;
 
   const getDestructiveMenuIcon = (): Option.Option<Electron.NativeImage> => {
@@ -134,16 +146,31 @@ export const make = Effect.gen(function* () {
   ): Electron.MenuItemConstructorOptions[] => {
     const template: Electron.MenuItemConstructorOptions[] = [];
     let hasInsertedDestructiveSeparator = false;
+    let sectionStartedByExplicitSeparator = false;
+    const appendSeparator = () => {
+      if (template.length === 0 || template.at(-1)?.type === "separator") return;
+      template.push({ type: "separator" });
+    };
 
     for (const item of entries) {
-      if (item.destructive && !hasInsertedDestructiveSeparator && template.length > 0) {
-        template.push({ type: "separator" });
+      if (item.separatorBefore) {
+        appendSeparator();
+        sectionStartedByExplicitSeparator = true;
+      }
+      if (
+        item.destructive &&
+        !hasInsertedDestructiveSeparator &&
+        !sectionStartedByExplicitSeparator &&
+        template.length > 0
+      ) {
+        appendSeparator();
         hasInsertedDestructiveSeparator = true;
       }
 
       const itemOption: Electron.MenuItemConstructorOptions = {
         label: item.label,
         enabled: !item.disabled,
+        ...(typeof item.checked === "boolean" ? { type: "checkbox", checked: item.checked } : {}),
       };
       if (item.children && item.children.length > 0) {
         itemOption.submenu = buildTemplate(item.children, complete);
@@ -164,8 +191,8 @@ export const make = Effect.gen(function* () {
   };
 
   return ElectronMenu.of({
-    setApplicationMenu: (template) =>
-      Effect.try({
+    setApplicationMenu: Effect.fn("ElectronMenu.setApplicationMenu")(function (template) {
+      return Effect.try({
         try: () => {
           Electron.Menu.setApplicationMenu(Electron.Menu.buildFromTemplate([...template]));
         },
@@ -177,14 +204,16 @@ export const make = Effect.gen(function* () {
             itemCount: template.length,
             cause,
           }),
-      }).pipe(Effect.orDie),
-    popupTemplate: (input) =>
-      input.template.length === 0
+      }).pipe(Effect.orDie);
+    }),
+    popupTemplate: Effect.fn("ElectronMenu.popupTemplate")(function (input) {
+      return input.template.length === 0
         ? Effect.void
         : Effect.try({
             try: () =>
               Electron.Menu.buildFromTemplate([...input.template]).popup({
                 window: input.window,
+                ...(input.frame ? { frame: input.frame } : {}),
               }),
             catch: (cause) =>
               new ElectronMenuOperationError({
@@ -194,12 +223,13 @@ export const make = Effect.gen(function* () {
                 itemCount: input.template.length,
                 cause,
               }),
-          }).pipe(Effect.orDie),
-    showContextMenu: (input) =>
-      Effect.callback<Option.Option<string>>((resume) => {
+          }).pipe(Effect.orDie);
+    }),
+    showContextMenu: Effect.fn("ElectronMenu.showContextMenu")(function (input) {
+      return Effect.callback<Option.Option<string>>((resume) => {
         const normalizedItems = normalizeContextMenuItems(input.items);
         if (normalizedItems.length === 0) {
-          resume(Effect.succeed(Option.none()));
+          resume(Effect.succeedNone);
           return;
         }
 
@@ -214,7 +244,10 @@ export const make = Effect.gen(function* () {
 
         try {
           const menu = Electron.Menu.buildFromTemplate(buildTemplate(normalizedItems, complete));
-          const popupPosition = normalizePosition(input.position);
+          const popupPosition = normalizePosition(
+            input.position,
+            input.window.webContents.getZoomFactor(),
+          );
           const popupOptions = Option.match(popupPosition, {
             onNone: (): Electron.PopupOptions => ({
               window: input.window,
@@ -227,7 +260,11 @@ export const make = Effect.gen(function* () {
               callback: () => complete(Option.none()),
             }),
           });
-          menu.popup(popupOptions);
+          menu.popup(
+            Option.isSome(input.source)
+              ? { ...popupOptions, sourceType: input.source.value }
+              : popupOptions,
+          );
         } catch (cause) {
           if (completed) {
             return;
@@ -245,7 +282,8 @@ export const make = Effect.gen(function* () {
             ),
           );
         }
-      }),
+      });
+    }),
   });
 });
 

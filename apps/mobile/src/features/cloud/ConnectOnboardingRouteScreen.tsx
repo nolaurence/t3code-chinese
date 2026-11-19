@@ -1,12 +1,16 @@
-import { NativeHeaderToolbar } from "../../native/StackHeader";
+import { AppBar } from "../../components/ui/AppBar";
+import { Button } from "../../components/ui/Button";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+
 import { useAuth } from "@clerk/expo";
-import { StackActions, useNavigation } from "@react-navigation/native";
-import { useCallback, useEffect, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { useState } from "react";
+import { View } from "react-native";
+import { RefreshControl } from "../../components/ui/RefreshControl";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { reportAtomCommandResult, settlePromise } from "@t3tools/client-runtime/state/runtime";
-import { AppText as Text } from "../../components/AppText";
+import { AppText as Text } from "../../components/ui/AppText";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
 import { CloudEnvironmentRows } from "../connection/CloudEnvironmentRows";
 import { splitEnvironmentSections } from "../connection/environmentSections";
@@ -14,29 +18,9 @@ import { useConnectionController } from "../connection/useConnectionController";
 import { optOutOfConnectOnboarding } from "./connectOnboardingOptOut";
 import { hasCloudPublicConfig } from "./publicConfig";
 
-/**
- * Post-sign-in onboarding sheet for T3 Connect. Mobile never publishes
- * environments itself — it consumes ones published elsewhere — so this simply
- * surfaces the account's T3 Connect environments right after sign-in so every
- * device can be connected in one go. It shows on every sign-in: sign-out
- * clears the connected environments, so each new session starts from zero.
- */
+// Only reachable with cloud config: onboarding is requested after a T3 Connect
+// sign-in, and appLinking drops the deep link otherwise.
 export function ConnectOnboardingRouteScreen() {
-  const navigation = useNavigation();
-
-  // The route is deep-linkable; without cloud config the sheet would present
-  // empty with no chrome to dismiss it, so bail back out instead.
-  useEffect(() => {
-    if (hasCloudPublicConfig()) {
-      return;
-    }
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.dispatch(StackActions.replace("Home"));
-    }
-  }, [navigation]);
-
   return hasCloudPublicConfig() ? <ConfiguredConnectOnboardingRouteScreen /> : null;
 }
 
@@ -44,32 +28,26 @@ function ConfiguredConnectOnboardingRouteScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { isSignedIn, userId } = useAuth({ treatPendingAsSignedOut: false });
-  const { connectedEnvironments, onReconnectEnvironment } = useRemoteConnections();
+  const { connectedEnvironments, onSetEnvironmentEnabled, onRemoveEnvironmentPress } =
+    useRemoteConnections();
   const { refreshRelayEnvironments } = useConnectionController();
   const { connectedCloudEnvironments } = splitEnvironmentSections({
     connectedEnvironments,
     cloudEnvironments: null,
   });
 
-  // Pull-to-refresh tracks its own spinner instead of discovery's refreshing
-  // flag, so background refreshes (e.g. the sign-in one) don't yank the
-  // content down.
-  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
-  const handlePullRefresh = useCallback(() => {
-    void (async () => {
-      setIsPullRefreshing(true);
-      await refreshRelayEnvironments();
-      setIsPullRefreshing(false);
-    })();
-  }, [refreshRelayEnvironments]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    void refreshRelayEnvironments().finally(() => setIsRefreshing(false));
+  };
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     navigation.goBack();
-  }, [navigation]);
+  };
 
-  // Persist before dismissing so a quick sign-out/sign-in cannot race ahead
-  // of the preference write; the write is a local secure-store update.
-  const handleDontShowAgain = useCallback(() => {
+  // Persist before dismissing so quick sign-out/sign-in cannot outrun the write.
+  const handleDontShowAgain = () => {
     void (async () => {
       if (userId) {
         const result = await settlePromise(() => optOutOfConnectOnboarding(userId));
@@ -77,14 +55,21 @@ function ConfiguredConnectOnboardingRouteScreen() {
       }
       navigation.goBack();
     })();
-  }, [navigation, userId]);
+  };
 
   return (
     <View collapsable={false} className="flex-1 bg-sheet">
-      <NativeHeaderToolbar placement="right">
-        <NativeHeaderToolbar.Button icon="xmark" onPress={handleClose} separateBackground />
-      </NativeHeaderToolbar>
+      <AppBar
+        title="Set up T3 Connect"
+        onClose={handleClose}
+        refresh={{
+          accessibilityLabel: "Refresh environments",
+          disabled: isRefreshing,
+          onPress: handleRefresh,
+        }}
+      />
       <ScrollView
+        nestedScrollEnabled
         alwaysBounceVertical
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
@@ -95,18 +80,17 @@ function ConfiguredConnectOnboardingRouteScreen() {
           paddingHorizontal: 20,
           paddingTop: 16,
         }}
-        refreshControl={
-          <RefreshControl refreshing={isPullRefreshing} onRefresh={handlePullRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
       >
         {isSignedIn ? (
           <CloudEnvironmentRows
             connectedCloudEnvironments={connectedCloudEnvironments}
-            onReconnectEnvironment={onReconnectEnvironment}
+            onSetEnvironmentEnabled={onSetEnvironmentEnabled}
+            onRemoveEnvironment={onRemoveEnvironmentPress}
             showHeader={false}
           />
         ) : (
-          <View collapsable={false} className="rounded-[24px] bg-card p-5">
+          <View collapsable={false} className="rounded-[24px] bg-grouped-card p-5">
             <Text className="text-sm leading-normal text-foreground-muted">
               Sign in to your T3 account to set up T3 Connect.
             </Text>
@@ -114,14 +98,7 @@ function ConfiguredConnectOnboardingRouteScreen() {
         )}
 
         {userId ? (
-          <Pressable
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={handleDontShowAgain}
-            className="items-center py-1 active:opacity-70"
-          >
-            <Text className="text-xs text-foreground-muted">{"Don't show this again"}</Text>
-          </Pressable>
+          <Button label={"Don't show this again"} tone="text" onPress={handleDontShowAgain} />
         ) : null}
       </ScrollView>
     </View>

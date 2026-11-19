@@ -1,18 +1,27 @@
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
+import {
+  AuthOrchestrationOperateScope,
+  type EnvironmentId,
+  type ThreadId,
+} from "@t3tools/contracts";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import { useDebouncedValue } from "@tanstack/react-pacer";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   readCachedPullRequestResolution,
   usePreparePullRequestThreadAction,
-  usePullRequestResolution,
-} from "~/lib/sourceControlActions";
+  usePullRequestResolutionState,
+} from "~/state/sourceControlActions";
 import { cn } from "~/lib/utils";
-import { parsePullRequestReference } from "~/pullRequestReference";
+import { parsePullRequestReference } from "@t3tools/client-runtime/pull-request-link-input";
 import { getSourceControlPresentation } from "~/sourceControlPresentation";
 import { useEnvironmentQuery } from "~/state/query";
+import { readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { vcsEnvironment } from "~/state/vcs";
+import { offHeadPullRequestCheckoutToast } from "./pullRequest/pullRequestCheckoutToast";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -25,7 +34,7 @@ import {
 } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Spinner } from "./ui/spinner";
-import { useI18n } from "~/i18n";
+import { toastManager } from "./ui/toast";
 
 interface PullRequestThreadDialogProps {
   open: boolean;
@@ -34,7 +43,24 @@ interface PullRequestThreadDialogProps {
   cwd: string | null;
   initialReference: string | null;
   onOpenChange: (open: boolean) => void;
-  onPrepared: (input: { branch: string; worktreePath: string | null }) => Promise<void> | void;
+  onPrepared: (input: {
+    branch: string;
+    worktreePath: string | null;
+    pullRequestUrl: string;
+  }) => Promise<void> | void;
+}
+
+function pullRequestStatusTone(state: string | undefined): string {
+  switch (state) {
+    case "merged":
+      return "text-violet-600 dark:text-violet-300/90";
+    case "closed":
+      return "text-zinc-500 dark:text-zinc-400/80";
+    case "open":
+      return "text-emerald-600 dark:text-emerald-300/90";
+    default:
+      return "text-muted-foreground";
+  }
 }
 
 export function PullRequestThreadDialog({
@@ -46,11 +72,11 @@ export function PullRequestThreadDialog({
   onOpenChange,
   onPrepared,
 }: PullRequestThreadDialogProps) {
-  const { t } = useI18n();
   const referenceInputRef = useRef<HTMLInputElement>(null);
   const [reference, setReference] = useState(initialReference ?? "");
   const [referenceDirty, setReferenceDirty] = useState(false);
   const [preparingMode, setPreparingMode] = useState<"local" | "worktree" | null>(null);
+  const [prepareErrorMessage, setPrepareErrorMessage] = useState<string | null>(null);
   const [debouncedReference, referenceDebouncer] = useDebouncedValue(
     reference,
     { wait: 450 },
@@ -64,46 +90,25 @@ export function PullRequestThreadDialog({
           input: { cwd },
         }),
   );
-  const sourceControlPresentation = useMemo(
-    () => getSourceControlPresentation(gitStatus?.sourceControlProvider),
-    [gitStatus?.sourceControlProvider],
-  );
+  const sourceControlPresentation = getSourceControlPresentation(gitStatus?.sourceControlProvider);
   const terminology = sourceControlPresentation.terminology;
   const SourceControlIcon = sourceControlPresentation.Icon;
 
-  useEffect(() => {
-    if (!open) return;
-    const frame = window.requestAnimationFrame(() => {
-      referenceInputRef.current?.focus();
-      referenceInputRef.current?.select();
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
-  }, [open]);
-
   const parsedReference = parsePullRequestReference(reference);
   const parsedDebouncedReference = parsePullRequestReference(debouncedReference);
-  const sourceControlScope = useMemo(
-    () => ({
-      environmentId,
-      cwd,
-    }),
-    [cwd, environmentId],
-  );
-  const pullRequestResolution = usePullRequestResolution({
-    ...sourceControlScope,
+  const pullRequestResolution = usePullRequestResolutionState({
+    environmentId,
+    cwd,
     reference: open ? parsedDebouncedReference : null,
   });
-  const cachedPullRequest = useMemo(() => {
-    return (
-      readCachedPullRequestResolution({
-        ...sourceControlScope,
-        reference: parsedReference,
-      })?.pullRequest ?? null
-    );
-  }, [parsedReference, sourceControlScope]);
-  const preparePullRequestThreadAction = usePreparePullRequestThreadAction(sourceControlScope);
+  const cachedPullRequest =
+    readCachedPullRequestResolution({
+      environmentId,
+      cwd,
+      reference: parsedReference,
+    })?.pullRequest ?? null;
+  const preparePullRequestThreadAction = usePreparePullRequestThreadAction({ environmentId, cwd });
+  const canOperateThread = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
 
   const liveResolvedPullRequest =
     parsedReference !== null && parsedReference === parsedDebouncedReference
@@ -118,73 +123,71 @@ export function PullRequestThreadDialog({
       parsedReference !== parsedDebouncedReference ||
       pullRequestResolution.isPending ||
       pullRequestResolution.isFetching);
-  const statusTone = useMemo(() => {
-    switch (resolvedPullRequest?.state) {
-      case "merged":
-        return "text-violet-600 dark:text-violet-300/90";
-      case "closed":
-        return "text-zinc-500 dark:text-zinc-400/80";
-      case "open":
-        return "text-emerald-600 dark:text-emerald-300/90";
-      default:
-        return "text-muted-foreground";
-    }
-  }, [resolvedPullRequest?.state]);
+  const statusTone = pullRequestStatusTone(resolvedPullRequest?.state);
 
-  const handleConfirm = useCallback(
-    async (mode: "local" | "worktree") => {
-      if (!parsedReference) {
-        setReferenceDirty(true);
-        return;
+  const handleConfirm = async (mode: "local" | "worktree") => {
+    if (!preparePullRequestThreadAction.isAllowed) return;
+    if (
+      mode === "worktree" &&
+      !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)
+    ) {
+      return;
+    }
+    if (!parsedReference) {
+      setReferenceDirty(true);
+      return;
+    }
+    if (!parsedReference || !resolvedPullRequest || !cwd) {
+      return;
+    }
+    setPrepareErrorMessage(null);
+    setPreparingMode(mode);
+    const result = await preparePullRequestThreadAction.run({
+      reference: parsedReference,
+      mode,
+      ...(mode === "worktree" ? { threadId } : {}),
+    });
+    setPreparingMode(null);
+    if (result._tag === "Failure") {
+      if (isAtomCommandInterrupted(result)) {
+        preparePullRequestThreadAction.resetError();
+      } else {
+        const error = squashAtomCommandFailure(result);
+        setPrepareErrorMessage(
+          error instanceof Error
+            ? error.message
+            : `Failed to prepare ${terminology.singular} thread.`,
+        );
       }
-      if (!parsedReference || !resolvedPullRequest || !cwd) {
-        return;
-      }
-      setPreparingMode(mode);
-      const result = await preparePullRequestThreadAction.run({
-        reference: parsedReference,
-        mode,
-        ...(mode === "worktree" ? { threadId } : {}),
-      });
-      setPreparingMode(null);
-      if (result._tag === "Failure") {
-        if (isAtomCommandInterrupted(result)) {
-          preparePullRequestThreadAction.resetError();
-        }
-        return;
-      }
-      await onPrepared({
-        branch: result.value.branch,
-        worktreePath: result.value.worktreePath,
-      });
-      onOpenChange(false);
-    },
-    [
-      cwd,
-      onOpenChange,
-      onPrepared,
-      parsedReference,
-      preparePullRequestThreadAction,
-      resolvedPullRequest,
-      threadId,
-    ],
-  );
+      return;
+    }
+    await onPrepared({
+      branch: result.value.branch,
+      worktreePath: result.value.worktreePath,
+      pullRequestUrl: result.value.pullRequest.url,
+    });
+    if (!result.value.isOnPullRequestHead) {
+      toastManager.add(offHeadPullRequestCheckoutToast(terminology));
+    }
+    onOpenChange(false);
+  };
 
   const validationMessage = !referenceDirty
     ? null
     : reference.trim().length === 0
-      ? t("git.checkout.validationEmpty", { request: terminology.singular })
+      ? `Paste a ${terminology.singular} URL, checkout command, or enter 123 / #123.`
       : parsedReference === null
-        ? t("git.checkout.validationInvalid", { request: terminology.singular })
+        ? `Use a ${terminology.singular} URL, checkout command, 123, or #123.`
         : null;
   const errorMessage =
     validationMessage ??
+    prepareErrorMessage ??
     (resolvedPullRequest === null && pullRequestResolution.error
       ? pullRequestResolution.error
       : preparePullRequestThreadAction.error instanceof Error
         ? preparePullRequestThreadAction.error.message
         : preparePullRequestThreadAction.error
-          ? t("git.checkout.prepareFailed", { request: terminology.singular })
+          ? `Failed to prepare ${terminology.singular} thread.`
           : null);
 
   return (
@@ -196,20 +199,25 @@ export function PullRequestThreadDialog({
         }
       }}
     >
-      <DialogPopup className="max-w-xl">
+      <DialogPopup
+        className="max-w-xl"
+        initialFocus={() => {
+          referenceInputRef.current?.focus();
+          referenceInputRef.current?.select();
+          return false;
+        }}
+      >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <SourceControlIcon className="size-4" />
-            {t("git.checkout.title", { request: terminology.singular })}
+          <DialogTitle className="flex items-center">
+            <SourceControlIcon className="me-2 size-4" />
+            Checkout {terminology.singular}
           </DialogTitle>
           <DialogDescription>
-            {t("git.checkout.description", {
-              provider: sourceControlPresentation.providerName,
-              request: terminology.singular,
-            })}
+            Resolve a {sourceControlPresentation.providerName} {terminology.singular}, then create
+            the draft thread in the main repo or in a dedicated worktree.
           </DialogDescription>
         </DialogHeader>
-        <DialogPanel className="space-y-4">
+        <DialogPanel>
           <label className="grid gap-1.5">
             <span className="text-xs font-medium text-foreground capitalize">
               {terminology.singular}
@@ -226,9 +234,12 @@ export function PullRequestThreadDialog({
                 if (event.key !== "Enter") {
                   return;
                 }
+                if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                  return;
+                }
                 event.preventDefault();
                 if (!isResolving && !preparePullRequestThreadAction.isPending) {
-                  void handleConfirm("local");
+                  void handleConfirm("worktree");
                 }
               }}
             />
@@ -240,15 +251,12 @@ export function PullRequestThreadDialog({
                 <div className="min-w-0">
                   <p className="truncate font-medium text-sm">{resolvedPullRequest.title}</p>
                   <p className="truncate text-muted-foreground text-xs">
-                    {t("git.checkout.branchRange", {
-                      number: resolvedPullRequest.number,
-                      head: resolvedPullRequest.headBranch,
-                      base: resolvedPullRequest.baseBranch,
-                    })}
+                    #{resolvedPullRequest.number} · {resolvedPullRequest.headBranch} to{" "}
+                    {resolvedPullRequest.baseBranch}
                   </p>
                 </div>
                 <span className={cn("shrink-0 text-xs capitalize", statusTone)}>
-                  {t(`git.checkout.state.${resolvedPullRequest.state}` as Parameters<typeof t>[0])}
+                  {resolvedPullRequest.state}
                 </span>
               </div>
             </div>
@@ -256,8 +264,8 @@ export function PullRequestThreadDialog({
 
           {isResolving ? (
             <div className="flex items-center gap-2 text-muted-foreground text-xs">
-              <Spinner className="size-3.5" />
-              {t("git.checkout.resolving", { request: terminology.singular })}
+              <Spinner size="sm" />
+              Resolving {terminology.singular}...
             </div>
           ) : null}
 
@@ -271,42 +279,37 @@ export function PullRequestThreadDialog({
             onClick={() => onOpenChange(false)}
             disabled={preparePullRequestThreadAction.isPending}
           >
-            {t("common.cancel")}
+            Cancel
           </Button>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => {
-              void handleConfirm("local");
-            }}
+            onClick={() => handleConfirm("local")}
             disabled={
+              !preparePullRequestThreadAction.isAllowed ||
               !cwd ||
               !resolvedPullRequest ||
               isResolving ||
               preparePullRequestThreadAction.isPending
             }
           >
-            {preparingMode === "local"
-              ? t("git.checkout.preparingLocal")
-              : t("settings.newThreads.local")}
+            {preparingMode === "local" ? "Preparing local..." : "Local"}
           </Button>
           <Button
             type="button"
             size="sm"
-            onClick={() => {
-              void handleConfirm("worktree");
-            }}
+            onClick={() => handleConfirm("worktree")}
             disabled={
+              !preparePullRequestThreadAction.isAllowed ||
+              !canOperateThread ||
               !cwd ||
               !resolvedPullRequest ||
               isResolving ||
               preparePullRequestThreadAction.isPending
             }
           >
-            {preparingMode === "worktree"
-              ? t("git.checkout.preparingWorktree")
-              : t("git.checkout.worktree")}
+            {preparingMode === "worktree" ? "Preparing worktree..." : "Worktree"}
           </Button>
         </DialogFooter>
       </DialogPopup>

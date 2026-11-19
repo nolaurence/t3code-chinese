@@ -1,109 +1,235 @@
 import type {
-  ProviderDriverKind,
+  BackgroundActivityProfile,
+  BackgroundActivitySettings,
   ProviderInstanceConfig,
+  PreviewViewportSetting,
   ProviderInstanceId,
   ServerSettings,
+  SidebarProjectGroupingMode,
   UnifiedSettings,
 } from "@t3tools/contracts";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
-import { createTranslator, type Translate } from "../../i18n/messages";
+import {
+  DEFAULT_UNIFIED_SETTINGS,
+  MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+  MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+} from "@t3tools/contracts/settings";
+import {
+  getBackgroundActivityBaseProfile,
+  normalizeBackgroundActivitySettings,
+  normalizeServerBackgroundActivitySettings,
+  resolveServerBackgroundActivitySettings,
+} from "@t3tools/shared/backgroundActivitySettings";
+import * as Duration from "effect/Duration";
+import * as Equal from "effect/Equal";
 
-const DEFAULT_TRANSLATE = createTranslator("en");
+import type { Translate } from "../../i18n";
 
-export function getThemeOptions(t: Translate) {
+export function isProjectGroupingEnabled(mode: SidebarProjectGroupingMode): boolean {
+  return mode !== "separate";
+}
+
+export function projectGroupingModeFromToggle(
+  enabled: boolean,
+  lastEnabledMode: SidebarProjectGroupingMode = "repository",
+): SidebarProjectGroupingMode {
+  if (!enabled) return "separate";
+  return lastEnabledMode === "repository_path" ? "repository_path" : "repository";
+}
+
+const LAST_ENABLED_PROJECT_GROUPING_MODE_KEY = "t3code:last-enabled-project-grouping-mode";
+
+export function readLastEnabledProjectGroupingMode(): SidebarProjectGroupingMode {
+  try {
+    return localStorage.getItem(LAST_ENABLED_PROJECT_GROUPING_MODE_KEY) === "repository_path"
+      ? "repository_path"
+      : "repository";
+  } catch {
+    return "repository";
+  }
+}
+
+export function rememberEnabledProjectGroupingMode(mode: SidebarProjectGroupingMode): void {
+  if (mode === "separate") return;
+  try {
+    localStorage.setItem(LAST_ENABLED_PROJECT_GROUPING_MODE_KEY, mode);
+  } catch {}
+}
+
+export function hasChangedBackgroundActivitySettings(
+  settings: Pick<
+    UnifiedSettings,
+    | "backgroundActivity"
+    | "backgroundActivityProfile"
+    | "automaticGitFetchInterval"
+    | "providerHealthRefreshInterval"
+  >,
+): boolean {
+  return (
+    !Equal.equals(settings.backgroundActivity, DEFAULT_UNIFIED_SETTINGS.backgroundActivity) ||
+    settings.backgroundActivityProfile !== DEFAULT_UNIFIED_SETTINGS.backgroundActivityProfile ||
+    !Equal.equals(
+      settings.automaticGitFetchInterval,
+      DEFAULT_UNIFIED_SETTINGS.automaticGitFetchInterval,
+    ) ||
+    !Equal.equals(
+      settings.providerHealthRefreshInterval,
+      DEFAULT_UNIFIED_SETTINGS.providerHealthRefreshInterval,
+    )
+  );
+}
+
+type TypographySettings = Pick<
+  UnifiedSettings,
+  | "fontFamilySans"
+  | "fontFamilyComposer"
+  | "fontFamilyCode"
+  | "fontFamilyTerminal"
+  | "fontSizeInterface"
+  | "fontSizePrompt"
+  | "fontSizeCode"
+  | "fontSizeTerminal"
+>;
+
+export function getChangedTypographySettingLabels(
+  settings: TypographySettings,
+  t?: Translate,
+): string[] {
   return [
-    { value: "system", label: t("settings.theme.system") },
-    { value: "light", label: t("settings.theme.light") },
-    { value: "dark", label: t("settings.theme.dark") },
-  ] as const;
+    ...(settings.fontFamilySans !== DEFAULT_UNIFIED_SETTINGS.fontFamilySans ||
+    settings.fontSizeInterface !== DEFAULT_UNIFIED_SETTINGS.fontSizeInterface
+      ? [t?.("settings.typography.interfaceFont") ?? "Interface font"]
+      : []),
+    ...(settings.fontFamilyComposer !== DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer ||
+    settings.fontSizePrompt !== DEFAULT_UNIFIED_SETTINGS.fontSizePrompt
+      ? [t?.("settings.typography.promptFont") ?? "Prompt font"]
+      : []),
+    ...(settings.fontFamilyCode !== DEFAULT_UNIFIED_SETTINGS.fontFamilyCode ||
+    settings.fontSizeCode !== DEFAULT_UNIFIED_SETTINGS.fontSizeCode
+      ? [t?.("settings.typography.codeFont") ?? "Code font"]
+      : []),
+    ...(settings.fontFamilyTerminal !== DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal ||
+    settings.fontSizeTerminal !== DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal
+      ? [t?.("settings.typography.terminalFont") ?? "Terminal font"]
+      : []),
+  ];
 }
 
-export function getTimestampFormatLabels(t: Translate) {
+export type BrowserDefaultSettings = Pick<
+  UnifiedSettings,
+  | "browserDefaultViewport"
+  | "browserDefaultZoomFactor"
+  | "browserDefaultAppearance"
+  | "browserRecordingFrameRate"
+  | "browserRecordingShowKeyPresses"
+  | "browserRecordingShowMousePresses"
+  | "browserLinkTarget"
+  | "browserSearchEngine"
+  | "browserCustomSearchUrl"
+  | "browserAutoShowFloatingPreview"
+  | "pullRequestLinksOpenInApp"
+>;
+
+function isSamePreviewViewport(
+  left: PreviewViewportSetting,
+  right: PreviewViewportSetting,
+): boolean {
+  if (left._tag !== right._tag) return false;
+  if (left._tag === "fill" || right._tag === "fill") return true;
+  if (left.width !== right.width || left.height !== right.height) return false;
+  return left._tag === "preset" && right._tag === "preset"
+    ? left.presetId === right.presetId
+    : true;
+}
+
+export function getChangedBrowserSettingLabels(
+  settings: BrowserDefaultSettings,
+  t?: Translate,
+): string[] {
+  return [
+    ...(isSamePreviewViewport(
+      settings.browserDefaultViewport,
+      DEFAULT_UNIFIED_SETTINGS.browserDefaultViewport,
+    )
+      ? []
+      : [t?.("settings.restore.browserViewport") ?? "Browser viewport"]),
+    ...(settings.browserDefaultZoomFactor !== DEFAULT_UNIFIED_SETTINGS.browserDefaultZoomFactor
+      ? [t?.("settings.restore.browserZoom") ?? "Browser zoom"]
+      : []),
+    ...(settings.browserDefaultAppearance !== DEFAULT_UNIFIED_SETTINGS.browserDefaultAppearance
+      ? [t?.("settings.restore.browserAppearance") ?? "Browser appearance"]
+      : []),
+    ...(settings.browserRecordingFrameRate !== DEFAULT_UNIFIED_SETTINGS.browserRecordingFrameRate
+      ? [t?.("settings.restore.recordingFrameRate") ?? "Recording frame rate"]
+      : []),
+    ...(settings.browserRecordingShowKeyPresses !==
+    DEFAULT_UNIFIED_SETTINGS.browserRecordingShowKeyPresses
+      ? [t?.("settings.restore.recordingKeyPresses") ?? "Recording key presses"]
+      : []),
+    ...(settings.browserRecordingShowMousePresses !==
+    DEFAULT_UNIFIED_SETTINGS.browserRecordingShowMousePresses
+      ? [t?.("settings.restore.recordingMousePresses") ?? "Recording mouse presses"]
+      : []),
+    ...(settings.browserLinkTarget !== DEFAULT_UNIFIED_SETTINGS.browserLinkTarget
+      ? [t?.("settings.restore.openLinksIn") ?? "Open links in"]
+      : []),
+    ...(settings.browserSearchEngine !== DEFAULT_UNIFIED_SETTINGS.browserSearchEngine ||
+    settings.browserCustomSearchUrl !== DEFAULT_UNIFIED_SETTINGS.browserCustomSearchUrl
+      ? ["Search engine"]
+      : []),
+    ...(settings.browserAutoShowFloatingPreview !==
+    DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview
+      ? [t?.("settings.restore.floatingPreview") ?? "Floating preview"]
+      : []),
+    ...(settings.pullRequestLinksOpenInApp !== DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp
+      ? ["Open pull requests in T3 Code"]
+      : []),
+  ];
+}
+
+export function resolveBackgroundActivityProfileOption(
+  settings: ServerSettings,
+): BackgroundActivityProfile | "advanced" {
+  const resolved = resolveServerBackgroundActivitySettings(settings);
+  const normalized = normalizeBackgroundActivitySettings({
+    schemaVersion: 1,
+    profile: "custom",
+    baseProfile: resolved.profile,
+    overrides: {
+      automaticGitFetchInterval: resolved.automaticGitFetchInterval,
+      providerHealthRefreshInterval: resolved.providerHealthRefreshInterval,
+      hostPowerMonitorActiveInterval: resolved.hostPowerMonitorActiveInterval,
+      hostPowerMonitorIdleInterval: resolved.hostPowerMonitorIdleInterval,
+      pauseWhenHostLocked: resolved.pauseWhenHostLocked,
+      pauseWhenHostLowPower: resolved.pauseWhenHostLowPower,
+      pauseWhenClientLowPower: resolved.pauseWhenClientLowPower,
+      pauseWhenOnBattery: resolved.pauseWhenOnBattery,
+    },
+  });
+  return normalized.profile === "custom" ? "advanced" : normalized.profile;
+}
+
+export function backgroundActivitySharedPolicySettings(
+  settings: ServerSettings,
+  profile: BackgroundActivityProfile,
+): BackgroundActivitySettings {
+  const normalized = normalizeServerBackgroundActivitySettings(settings);
   return {
-    locale: t("settings.time.system"),
-    "12-hour": t("settings.time.12Hour"),
-    "24-hour": t("settings.time.24Hour"),
-  } as const;
-}
-
-function collapseOtelSignalsUrl(input: {
-  readonly tracesUrl: string;
-  readonly metricsUrl: string;
-}): string | null {
-  const tracesSuffix = "/traces";
-  const metricsSuffix = "/metrics";
-  if (!input.tracesUrl.endsWith(tracesSuffix) || !input.metricsUrl.endsWith(metricsSuffix)) {
-    return null;
-  }
-
-  const tracesBase = input.tracesUrl.slice(0, -tracesSuffix.length);
-  const metricsBase = input.metricsUrl.slice(0, -metricsSuffix.length);
-  if (tracesBase !== metricsBase) {
-    return null;
-  }
-
-  return `${tracesBase}/{traces,metrics}`;
-}
-
-export function formatDiagnosticsDescription(
-  input: {
-    readonly localTracingEnabled: boolean;
-    readonly otlpTracesEnabled: boolean;
-    readonly otlpTracesUrl?: string | undefined;
-    readonly otlpMetricsEnabled: boolean;
-    readonly otlpMetricsUrl?: string | undefined;
-  },
-  t: Translate = DEFAULT_TRANSLATE,
-): string {
-  const mode = input.localTracingEnabled
-    ? t("settings.diagnostics.localTrace")
-    : t("settings.diagnostics.terminalLogs");
-  const tracesUrl = input.otlpTracesEnabled ? input.otlpTracesUrl : undefined;
-  const metricsUrl = input.otlpMetricsEnabled ? input.otlpMetricsUrl : undefined;
-
-  if (tracesUrl && metricsUrl) {
-    const collapsedUrl = collapseOtelSignalsUrl({ tracesUrl, metricsUrl });
-    return collapsedUrl
-      ? t("settings.diagnostics.exportCombined", { mode, url: collapsedUrl })
-      : t("settings.diagnostics.exportSeparate", { mode, tracesUrl, metricsUrl });
-  }
-
-  if (tracesUrl) {
-    return t("settings.diagnostics.exportTraces", { mode, url: tracesUrl });
-  }
-
-  if (metricsUrl) {
-    return t("settings.diagnostics.exportMetrics", { mode, url: metricsUrl });
-  }
-
-  return t("settings.diagnostics.modeOnly", { mode });
+    schemaVersion: 1,
+    profile: "custom",
+    baseProfile: profile,
+    overrides: normalized.profile === "custom" ? normalized.overrides : {},
+  };
 }
 
 export function buildProviderInstanceUpdatePatch(input: {
-  readonly settings: Pick<ServerSettings, "providers" | "providerInstances">;
+  readonly settings: Pick<ServerSettings, "providerInstances">;
   readonly instanceId: ProviderInstanceId;
   readonly instance: ProviderInstanceConfig;
-  readonly driver: ProviderDriverKind;
-  readonly isDefault: boolean;
   readonly textGenerationModelSelection?:
     | ServerSettings["textGenerationModelSelection"]
     | undefined;
 }): Partial<UnifiedSettings> {
-  type LegacyProviderSettings = ServerSettings["providers"][keyof ServerSettings["providers"]];
-  const legacyProviderDefaults = DEFAULT_UNIFIED_SETTINGS.providers as Record<
-    string,
-    LegacyProviderSettings | undefined
-  >;
-  const legacyProviderDefault = input.isDefault ? legacyProviderDefaults[input.driver] : undefined;
   return {
-    ...(legacyProviderDefault !== undefined
-      ? {
-          providers: {
-            ...input.settings.providers,
-            [input.driver]: legacyProviderDefault,
-          } as ServerSettings["providers"],
-        }
-      : {}),
     providerInstances: {
       ...input.settings.providerInstances,
       [input.instanceId]: input.instance,
@@ -112,4 +238,124 @@ export function buildProviderInstanceUpdatePatch(input: {
       ? { textGenerationModelSelection: input.textGenerationModelSelection }
       : {}),
   };
+}
+
+export const PROVIDER_HEALTH_INTERVAL_STEP_SECONDS = 30;
+
+type BackgroundActivityOverridePatch = Partial<{
+  [K in keyof BackgroundActivitySettings["overrides"]]:
+    | BackgroundActivitySettings["overrides"][K]
+    | undefined;
+}>;
+
+export function durationToSeconds(duration: Duration.Duration): number {
+  return Math.round(Duration.toMillis(duration) / 1_000);
+}
+
+export function normalizeIntervalSeconds(value: number | null, minimum = 0): number {
+  if (value === null || !Number.isFinite(value)) {
+    return minimum;
+  }
+  return Math.max(minimum, Math.round(value));
+}
+
+export function backgroundActivityOverrideSettings(
+  current: BackgroundActivitySettings,
+  resolved: ReturnType<typeof resolveServerBackgroundActivitySettings>,
+  overrides: BackgroundActivityOverridePatch,
+) {
+  const nextOverrides: BackgroundActivityOverridePatch = {
+    automaticGitFetchInterval: resolved.automaticGitFetchInterval,
+    providerHealthRefreshInterval: resolved.providerHealthRefreshInterval,
+    hostPowerMonitorActiveInterval: resolved.hostPowerMonitorActiveInterval,
+    hostPowerMonitorIdleInterval: resolved.hostPowerMonitorIdleInterval,
+    pauseWhenHostLocked: resolved.pauseWhenHostLocked,
+    pauseWhenHostLowPower: resolved.pauseWhenHostLowPower,
+    pauseWhenClientLowPower: resolved.pauseWhenClientLowPower,
+    pauseWhenOnBattery: resolved.pauseWhenOnBattery,
+    ...overrides,
+  };
+  for (const [key, value] of Object.entries(nextOverrides)) {
+    if (value === undefined) {
+      delete nextOverrides[key as keyof typeof nextOverrides];
+    }
+  }
+  return {
+    backgroundActivity: {
+      schemaVersion: 1 as const,
+      profile: "custom" as const,
+      baseProfile: getBackgroundActivityBaseProfile(current),
+      overrides: nextOverrides as BackgroundActivitySettings["overrides"],
+    },
+  };
+}
+
+/**
+ * Saving a shorter age settles threads at once, so typing stays in `draft` until the edit is
+ * finished. `pending` is the submission in flight; `saved` is the only value a draft falls back to.
+ */
+export interface AutoSettleDaysField {
+  readonly saved: number;
+  readonly draft: string;
+  readonly dirty: boolean;
+  readonly pending: number | null;
+  readonly revision: number;
+}
+
+export function autoSettleDaysField(saved: number): AutoSettleDaysField {
+  return { saved, draft: String(saved), dirty: false, pending: null, revision: 0 };
+}
+
+export function syncAutoSettleDaysField(
+  field: AutoSettleDaysField,
+  saved: number,
+): AutoSettleDaysField {
+  // An earlier save can be confirmed while a later one is still in flight.
+  const pending = field.pending === saved ? null : field.pending;
+  if (field.saved === saved && pending === field.pending) return field;
+  return {
+    ...field,
+    saved,
+    pending,
+    draft: field.dirty ? field.draft : String(pending ?? saved),
+  };
+}
+
+export function editAutoSettleDaysField(
+  field: AutoSettleDaysField,
+  draft: string,
+): AutoSettleDaysField {
+  return { ...field, draft, dirty: true };
+}
+
+export function cancelAutoSettleDaysField(field: AutoSettleDaysField): AutoSettleDaysField {
+  return { ...field, draft: String(field.pending ?? field.saved), dirty: false };
+}
+
+export function commitAutoSettleDaysField(field: AutoSettleDaysField): {
+  readonly field: AutoSettleDaysField;
+  readonly submit: number | null;
+} {
+  const current = field.pending ?? field.saved;
+  const days = field.draft.trim() === "" ? Number.NaN : Number(field.draft);
+  if (
+    !Number.isInteger(days) ||
+    days < MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS ||
+    days > MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS
+  ) {
+    return { field: { ...field, draft: String(current), dirty: false }, submit: null };
+  }
+  const settled = { ...field, draft: String(days), dirty: false };
+  // An edit ending on the saved value is sent again: a save can land on the shown environment
+  // and fail on another, and retyping the number is how it is retried.
+  if (!field.dirty || days === field.pending) return { field: settled, submit: null };
+  return { field: { ...settled, pending: days, revision: field.revision + 1 }, submit: days };
+}
+
+export function failAutoSettleDaysField(
+  field: AutoSettleDaysField,
+  revision: number,
+): AutoSettleDaysField {
+  if (field.revision !== revision) return field;
+  return { ...field, pending: null, draft: field.dirty ? field.draft : String(field.saved) };
 }

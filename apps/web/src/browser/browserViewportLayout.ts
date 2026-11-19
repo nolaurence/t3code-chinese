@@ -11,15 +11,13 @@ export interface BrowserViewportLayout {
   readonly canvasHeight: number;
   readonly viewportX: number;
   readonly viewportY: number;
-  /** Visible footprint inside the preview panel after fit-to-panel scaling. */
   readonly viewportWidth: number;
   readonly viewportHeight: number;
-  /** Presentation-only scale; the guest keeps its requested CSS viewport. */
   readonly viewportScale: number;
   readonly fillsPanel: boolean;
 }
 
-export const BROWSER_DEVICE_TOOLBAR_HEIGHT = 32;
+export const BROWSER_DEVICE_TOOLBAR_HEIGHT = 38;
 export const BROWSER_VIEWPORT_RESIZE_RAIL_SIZE = 10;
 
 export type BrowserViewportResizeDirection =
@@ -39,6 +37,39 @@ export const browserViewportSettingKey = (setting: PreviewViewportSetting): stri
 
 const normalizeZoomFactor = (zoomFactor: number): number =>
   Number.isFinite(zoomFactor) && zoomFactor > 0 ? zoomFactor : 1;
+
+// Convert guest CSS pixels to host CSS pixels without changing the guest's page zoom.
+export const resolveBrowserLayoutZoomFactor = (
+  previewZoomFactor: number,
+  windowZoomFactor: number,
+): number => normalizeZoomFactor(previewZoomFactor) / normalizeZoomFactor(windowZoomFactor);
+
+export function resolveFittedBrowserViewport(
+  setting: PreviewViewportSetting,
+  sourceContent: {
+    readonly width: number;
+    readonly height: number;
+    readonly scale: number;
+  } | null,
+  zoomFactor = 1,
+): Exclude<PreviewViewportSetting, { readonly _tag: "fill" }> {
+  if (setting._tag !== "fill") return setting;
+  const normalizedZoomFactor = normalizeZoomFactor(zoomFactor);
+  if (sourceContent) {
+    return {
+      _tag: "freeform",
+      width: Math.max(
+        1,
+        Math.round(sourceContent.width / sourceContent.scale / normalizedZoomFactor),
+      ),
+      height: Math.max(
+        1,
+        Math.round(sourceContent.height / sourceContent.scale / normalizedZoomFactor),
+      ),
+    };
+  }
+  return { _tag: "freeform", width: 1280, height: 800 };
+}
 
 export function resolveBrowserDeviceViewportArea(container: {
   readonly width: number;
@@ -92,6 +123,22 @@ export function resolveBrowserViewportLayout(
     viewportScale,
     fillsPanel: false,
   };
+}
+
+/**
+ * Chromium rasters a CSS-scaled guest at its on-screen scale, so captures of it lose detail.
+ * Its raster scale also counts x/y-to-z terms, which a `preserve-3d` parent keeps and the
+ * screen drops, so `fullDetail` draws like `scale()` but keeps full-resolution frames.
+ */
+export function resolveBrowserViewportTransform(
+  scale: number,
+  fullDetail: boolean,
+): string | undefined {
+  if (scale >= 1) return undefined;
+  if (!fullDetail) return `scale(${scale})`;
+  // Positive depth keeps the guest in front of its parent for hit testing.
+  const depth = Math.sqrt(1 - scale * scale);
+  return `matrix3d(${scale}, 0, ${depth}, 0, 0, ${scale}, ${depth}, 0, 0, 0, 1, 0, 0, 0, 0, 1)`;
 }
 
 export function resolveBrowserDeviceViewportLayout(

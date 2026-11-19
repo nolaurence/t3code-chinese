@@ -1,17 +1,17 @@
+import { RefreshIcon } from "~/components/ui/refresh-icon";
 import {
   ArrowLeft,
   ArrowRight,
   Camera,
   ExternalLink,
   MousePointerClick,
-  RotateCw,
+  PictureInPicture2,
 } from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
-  useEffect,
-  useRef,
+  type RefObject,
   useState,
 } from "react";
 
@@ -19,82 +19,67 @@ import { Button } from "~/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
-import { useI18n } from "~/i18n";
 
 interface Props {
   url: string;
-  displayUrl?: string | undefined;
   loading: boolean;
-  loadProgress: number;
   canGoBack: boolean;
   canGoForward: boolean;
   refreshDisabled: boolean;
   inputDisabled?: boolean | undefined;
-  /** Bumping this value re-focuses and selects the URL input. */
-  focusUrlNonce?: number | undefined;
+  /** Owned by the caller so its shortcut handler can focus the address bar directly. */
+  urlInputRef: RefObject<HTMLInputElement | null>;
   onBack: () => void;
   onForward: () => void;
   onRefresh: () => void;
+  onStopLoading: () => void;
   onSubmit: (url: string) => void;
-  /** When provided, renders an "Open in browser" affordance to the right. */
   onOpenInBrowser?: (() => void) | undefined;
   onCapture?: ((record: boolean) => void) | undefined;
   captureDisabled?: boolean | undefined;
   recording?: boolean | undefined;
-  /**
-   * When provided, renders an annotation-mode toggle button to the right of
-   * the URL input. Pressed while annotation mode is active (button shows in `pressed`
-   * state). Disabled in `pickDisabled` mode.
-   */
+  onPictureInPicture?: (() => void) | undefined;
+  pictureInPicture?: boolean | undefined;
+  pictureInPictureDisabled?: boolean | undefined;
   onPickElement?: (() => void) | undefined;
   pickActive?: boolean | undefined;
   pickDisabled?: boolean | undefined;
-  /** Optional reason string surfaced in the disabled tooltip. */
   pickDisabledReason?: string | undefined;
-  /**
-   * Trailing slot rendered after the URL input. Used by the preview view
-   * to mount the three-dot menu (hard reload, devtools, zoom, clear data).
-   */
   trailingActions?: ReactNode;
+  leadingActions?: ReactNode;
 }
 
 const NOOP = () => {};
 
 export function PreviewChromeRow({
   url,
-  displayUrl,
   loading,
-  loadProgress,
   canGoBack,
   canGoForward,
   refreshDisabled,
   inputDisabled,
-  focusUrlNonce,
+  urlInputRef: inputRef,
   onBack,
   onForward,
   onRefresh,
+  onStopLoading,
   onSubmit,
   onOpenInBrowser,
   onCapture,
   captureDisabled,
   recording,
+  onPictureInPicture,
+  pictureInPicture,
+  pictureInPictureDisabled,
   onPickElement,
   pickActive,
   pickDisabled,
   pickDisabledReason,
   trailingActions,
+  leadingActions,
 }: Props) {
-  const { t } = useI18n();
-  const inputRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState(url);
   const [inputFocused, setInputFocused] = useState(false);
-
-  useEffect(() => {
-    if (focusUrlNonce == null) return;
-    const node = inputRef.current;
-    if (!node) return;
-    node.focus();
-  }, [focusUrlNonce]);
 
   const submit = (event?: FormEvent | KeyboardEvent) => {
     event?.preventDefault();
@@ -106,12 +91,12 @@ export function PreviewChromeRow({
 
   return (
     <div className="relative">
-      <form onSubmit={submit} className="surface-subheader gap-1 px-2" data-surface-subheader>
-        <div
-          className="flex items-center gap-0.5"
-          role="group"
-          aria-label={t("preview.navigation")}
-        >
+      <form
+        onSubmit={submit}
+        className="flex h-10 min-h-10 shrink-0 items-center gap-1 border-b border-border/60 bg-background px-2 in-data-[preview-panel-mode=inline]:mb-3 in-data-[preview-panel-mode=inline]:h-7 in-data-[preview-panel-mode=inline]:min-h-7 in-data-[preview-panel-mode=inline]:border-b-transparent"
+        data-surface-subheader
+      >
+        <div className="flex items-center gap-0.5" role="group" aria-label="Navigation">
           <Tooltip>
             <TooltipTrigger
               render={
@@ -120,14 +105,14 @@ export function PreviewChromeRow({
                   size="icon-xs"
                   onClick={canGoBack ? onBack : NOOP}
                   disabled={!canGoBack}
-                  aria-label={t("common.back")}
+                  aria-label="Back"
                   type="button"
                 />
               }
             >
               <ArrowLeft />
             </TooltipTrigger>
-            <TooltipPopup>{t("common.back")}</TooltipPopup>
+            <TooltipPopup>Back</TooltipPopup>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger
@@ -137,14 +122,14 @@ export function PreviewChromeRow({
                   size="icon-xs"
                   onClick={canGoForward ? onForward : NOOP}
                   disabled={!canGoForward}
-                  aria-label={t("preview.forward")}
+                  aria-label="Forward"
                   type="button"
                 />
               }
             >
               <ArrowRight />
             </TooltipTrigger>
-            <TooltipPopup>{t("preview.forward")}</TooltipPopup>
+            <TooltipPopup>Forward</TooltipPopup>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger
@@ -152,31 +137,28 @@ export function PreviewChromeRow({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  onClick={refreshDisabled ? NOOP : onRefresh}
+                  onClick={refreshDisabled ? NOOP : loading ? onStopLoading : onRefresh}
                   disabled={refreshDisabled}
-                  aria-label={loading ? t("preview.stop") : t("preview.refresh")}
+                  aria-label={loading ? "Stop" : "Refresh"}
                   type="button"
                 />
               }
             >
-              <RotateCw className={cn(loading && "animate-spin")} />
+              <RefreshIcon refreshing={loading} />
             </TooltipTrigger>
-            <TooltipPopup>{loading ? t("preview.loading") : t("preview.refresh")}</TooltipPopup>
+            <TooltipPopup>{loading ? "Stop" : "Refresh"}</TooltipPopup>
           </Tooltip>
         </div>
 
-        <InputGroup className="group/address h-7 flex-1 rounded-md border-transparent bg-transparent shadow-none before:shadow-none hover:bg-muted/40 focus-within:bg-background">
+        {leadingActions}
+
+        <InputGroup variant="ghost" className="group/address h-7 flex-1">
           <Tooltip>
             <TooltipTrigger
               render={
                 <InputGroupInput
                   ref={inputRef}
-                  value={inputFocused ? draft : (displayUrl ?? url)}
-                  className={cn(
-                    onOpenInBrowser &&
-                      !inputFocused &&
-                      "group-hover/address:pe-7 transition-[padding]",
-                  )}
+                  value={inputFocused ? draft : url}
                   onChange={(event) => setDraft(event.target.value)}
                   onFocus={() => {
                     setDraft(url);
@@ -187,6 +169,11 @@ export function PreviewChromeRow({
                     setInputFocused(false);
                   }}
                   onKeyDown={(event) => {
+                    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                      // A trusted Enter would still submit the form implicitly.
+                      if (event.key === "Enter") event.preventDefault();
+                      return;
+                    }
                     if (event.key === "Enter") submit(event);
                     if (event.key === "Escape") {
                       event.preventDefault();
@@ -194,7 +181,9 @@ export function PreviewChromeRow({
                       inputRef.current?.blur();
                     }
                   }}
-                  placeholder={t("preview.urlPlaceholder")}
+                  placeholder="Search or enter URL"
+                  aria-label="Search or enter URL"
+                  data-workspace-focus-default
                   spellCheck={false}
                   disabled={inputDisabled}
                   data-preview-url-input
@@ -202,29 +191,28 @@ export function PreviewChromeRow({
                 />
               }
             />
-            {!inputFocused && displayUrl ? <TooltipPopup>{url}</TooltipPopup> : null}
           </Tooltip>
           {onOpenInBrowser && !inputFocused ? (
-            <InputGroupAddon
-              align="inline-end"
-              className="pointer-events-none absolute inset-y-0 right-0 opacity-0 transition-opacity group-hover/address:pointer-events-auto group-hover/address:opacity-100"
-            >
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={onOpenInBrowser}
-                      aria-label={t("preview.openSystemBrowser")}
-                      type="button"
-                    />
-                  }
-                >
-                  <ExternalLink />
-                </TooltipTrigger>
-                <TooltipPopup>{t("preview.openSystemBrowser")}</TooltipPopup>
-              </Tooltip>
+            <InputGroupAddon align="inline-end">
+              {}
+              <span className="pointer-events-none flex opacity-0 transition-opacity focus-within:pointer-events-auto focus-within:opacity-100 group-hover/address:pointer-events-auto group-hover/address:opacity-100">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={onOpenInBrowser}
+                        aria-label="Open in system browser"
+                        type="button"
+                      />
+                    }
+                  >
+                    <ExternalLink />
+                  </TooltipTrigger>
+                  <TooltipPopup>Open in system browser</TooltipPopup>
+                </Tooltip>
+              </span>
             </InputGroupAddon>
           ) : null}
         </InputGroup>
@@ -238,7 +226,7 @@ export function PreviewChromeRow({
                   size="icon-xs"
                   onClick={onPickElement}
                   disabled={pickDisabled}
-                  aria-label={pickActive ? t("preview.cancelAnnotation") : t("preview.annotate")}
+                  aria-label={pickActive ? "Cancel annotation" : "Annotate preview"}
                   aria-pressed={pickActive ? "true" : "false"}
                   type="button"
                 />
@@ -250,8 +238,8 @@ export function PreviewChromeRow({
               {pickDisabled && pickDisabledReason
                 ? pickDisabledReason
                 : pickActive
-                  ? t("preview.cancelAnnotationEsc")
-                  : t("preview.annotateDescription")}
+                  ? "Cancel annotation (Esc)"
+                  : "Annotate elements, regions, and drawings"}
             </TooltipPopup>
           </Tooltip>
         ) : null}
@@ -263,9 +251,7 @@ export function PreviewChromeRow({
                   variant={recording ? "secondary" : "ghost"}
                   size="icon-xs"
                   onClick={(event) => onCapture(event.shiftKey)}
-                  aria-label={
-                    recording ? t("preview.stopRecording") : t("preview.captureScreenshot")
-                  }
+                  aria-label={recording ? "Stop recording" : "Capture screenshot"}
                   type="button"
                   className="relative"
                   disabled={captureDisabled}
@@ -274,26 +260,46 @@ export function PreviewChromeRow({
             >
               <Camera className={cn(recording && "text-destructive")} />
               {recording ? (
-                <span className="absolute right-0.5 top-0.5 size-1.5 animate-pulse rounded-full bg-destructive" />
+                <span className="absolute right-0.5 top-0.5 size-1.5 motion-safe:animate-status-pulse rounded-full bg-destructive" />
               ) : null}
             </TooltipTrigger>
             <TooltipPopup>
-              {recording ? t("preview.stopRecording") : t("preview.screenshotHint")}
+              {recording ? "Stop recording" : "Screenshot · Shift-click to record"}
+            </TooltipPopup>
+          </Tooltip>
+        ) : null}
+        {onPictureInPicture ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant={pictureInPicture ? "secondary" : "ghost"}
+                  size="icon-xs"
+                  onClick={onPictureInPicture}
+                  aria-label={
+                    pictureInPicture ? "Close floating preview" : "Float preview over chat"
+                  }
+                  aria-pressed={pictureInPicture ? "true" : "false"}
+                  type="button"
+                  disabled={pictureInPictureDisabled}
+                />
+              }
+            >
+              <PictureInPicture2 className={cn(pictureInPicture && "text-primary")} />
+            </TooltipTrigger>
+            <TooltipPopup>
+              {pictureInPicture ? "Close floating preview" : "Float preview over chat"}
             </TooltipPopup>
           </Tooltip>
         ) : null}
         {trailingActions}
       </form>
-      {loadProgress > 0 ? (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute bottom-0 left-0 z-10 h-0.5 rounded-r-full bg-primary transition-all duration-150 ease-out"
-          style={{
-            width: `${loadProgress}%`,
-            boxShadow: "0 0 6px 1px var(--color-ring)",
-          }}
-        />
-      ) : null}
+      <div
+        aria-hidden
+        data-loading={loading}
+        className="preview-loading-progress pointer-events-none absolute bottom-0 left-0 z-10 h-0.5 w-full origin-left rounded-r-full bg-primary"
+        style={{ boxShadow: "0 0 6px 1px var(--color-ring)" }}
+      />
     </div>
   );
 }

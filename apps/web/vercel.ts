@@ -30,7 +30,7 @@ export const config: VercelConfig = {
     deploymentEnabled: false,
   },
   installCommand:
-    "npm install -g vite-plus && vp install --filter '@t3tools/scripts...' --filter '@t3tools/web...'",
+    "npm install -g vite-plus && vp install --ignore-scripts --filter '@t3tools/scripts...' --filter '@t3tools/web...'",
   routes: [
     {
       src: "/__t3code/channel",
@@ -62,5 +62,12 @@ export const config: VercelConfig = {
       dest: `${LATEST_ORIGIN}/$1`,
     },
   ],
-  rewrites: [routes.rewrite("/(.*)", "/index.html")],
+  rewrites: [
+    // Apple fetches it without an extension; the .json file is served as application/json.
+    routes.rewrite(
+      "/.well-known/apple-app-site-association",
+      "/.well-known/apple-app-site-association.json",
+    ),
+    routes.rewrite("/(.*)", "/index.html"),
+  ],
 };

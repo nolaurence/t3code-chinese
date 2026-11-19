@@ -1,13 +1,4 @@
-import {
-  createContext,
-  use,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+import { createContext, use, useEffect, useState, type ReactElement, type ReactNode } from "react";
 
 import {
   DEFAULT_LOCALE,
@@ -41,24 +32,35 @@ export function I18nProvider({
 }): ReactElement {
   const [locale, setLocaleState] = useState<Locale>(() => initialLocale ?? readLocalePreference());
 
-  const setLocale = useCallback((nextLocale: Locale) => {
+  const setLocale = (nextLocale: Locale) => {
     setLocaleState(nextLocale);
     syncDocumentLocale(nextLocale);
     writeLocalePreference(nextLocale);
-  }, []);
+    // Breaks the toast -> I18nProvider -> GT runtime -> useSettings -> toast import cycle.
+    void import("./runtime").then(({ persistGTLocale }) => {
+      persistGTLocale(nextLocale === "zh-CN" ? "zh" : "en");
+    });
+  };
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps document.lang in step with the provider locale.
   useEffect(() => {
     syncDocumentLocale(locale);
   }, [locale]);
 
-  const value = useMemo<I18nValue>(
-    () => ({ locale, setLocale, t: createTranslator(locale) }),
-    [locale, setLocale],
-  );
+  const value: I18nValue = { locale, setLocale, t: createTranslator(locale) };
 
   return <I18nContext value={value}>{children}</I18nContext>;
 }
 
 export function useI18n(): I18nValue {
   return use(I18nContext);
+}
+
+export function I18nText({
+  children,
+}: {
+  readonly children: (t: Translate) => ReactNode;
+}): ReactElement {
+  const { t } = useI18n();
+  return <>{children(t)}</>;
 }

@@ -43,7 +43,33 @@ function tcpPortIsReady({ host, port, connectTimeoutMs = 500 }) {
   });
 }
 
-async function resolvePendingResources({ baseDir, files, tcpPort, tcpHosts, connectTimeoutMs }) {
+async function httpPathIsReady({ origin, pathname, fetchTimeoutMs }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs);
+  try {
+    const response = await fetch(new URL(pathname, origin), {
+      method: "GET",
+      signal: controller.signal,
+      headers: { accept: "*/*" },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function resolvePendingResources({
+  baseDir,
+  files,
+  tcpPort,
+  tcpHosts,
+  connectTimeoutMs,
+  httpOrigin,
+  httpPaths,
+  fetchTimeoutMs,
+}) {
   const pendingFiles = [];
 
   for (const relativeFilePath of files) {
@@ -65,8 +91,23 @@ async function resolvePendingResources({ baseDir, files, tcpPort, tcpHosts, conn
     }
   }
 
+  const pendingHttpPaths = [];
+  if (httpOrigin !== undefined) {
+    for (const pathname of httpPaths) {
+      const ready = await httpPathIsReady({
+        origin: httpOrigin,
+        pathname,
+        fetchTimeoutMs,
+      });
+      if (!ready) {
+        pendingHttpPaths.push(pathname);
+      }
+    }
+  }
+
   return {
     pendingFiles,
+    pendingHttpPaths,
     tcpReady,
   };
 }
@@ -79,6 +120,9 @@ export async function waitForResources({
   tcpHost,
   tcpPort,
   connectTimeoutMs = 500,
+  httpOrigin,
+  httpPaths = [],
+  fetchTimeoutMs = 10_000,
 }) {
   if (!Number.isInteger(tcpPort) || tcpPort <= 0) {
     throw new TypeError("waitForResources requires a positive integer tcpPort");
@@ -88,15 +132,18 @@ export async function waitForResources({
   const tcpHosts = tcpHost ? [tcpHost] : defaultTcpHosts;
 
   while (true) {
-    const { pendingFiles, tcpReady } = await resolvePendingResources({
+    const { pendingFiles, pendingHttpPaths, tcpReady } = await resolvePendingResources({
       baseDir,
       files,
       tcpPort,
       tcpHosts,
       connectTimeoutMs,
+      httpOrigin,
+      httpPaths,
+      fetchTimeoutMs,
     });
 
-    if (pendingFiles.length === 0 && tcpReady) {
+    if (pendingFiles.length === 0 && pendingHttpPaths.length === 0 && tcpReady) {
       return;
     }
 
@@ -107,6 +154,9 @@ export async function waitForResources({
       }
       for (const filePath of pendingFiles) {
         pendingResources.push(`file:${filePath}`);
+      }
+      for (const pathname of pendingHttpPaths) {
+        pendingResources.push(`http:${pathname}`);
       }
 
       throw new Error(

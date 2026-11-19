@@ -1,8 +1,11 @@
 import { Debouncer } from "@tanstack/react-pacer";
+import { PullRequestMergeMethod } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { create } from "zustand";
-import { normalizeProjectPathForComparison } from "./lib/projectPaths";
+import { normalizeProjectPathForComparison } from "@t3tools/client-runtime/state/projects";
 
 export const PERSISTED_STATE_KEY = "t3code:ui-state:v1";
+const THREAD_CHANGED_FILES_EXPANSION_VERSION = 2;
 const LEGACY_PERSISTED_STATE_KEYS = [
   "t3code:renderer-state:v8",
   "t3code:renderer-state:v7",
@@ -24,12 +27,17 @@ export interface PersistedUiState {
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
+  sidebarProjectScopeKey?: string | null;
+  sidebarProjectScopeKeys?: string[];
+  threadChangedFilesExpansionVersion?: number;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  pullRequestMergeMethod?: string;
 }
 
 export interface UiProjectState {
   projectExpandedById: Record<string, boolean>;
   projectOrder: string[];
+  sidebarProjectScopeKeys: string[];
 }
 
 export interface UiThreadState {
@@ -41,14 +49,21 @@ export interface UiEndpointState {
   defaultAdvertisedEndpointKey: string | null;
 }
 
-export interface UiState extends UiProjectState, UiThreadState, UiEndpointState {}
+export interface UiPullRequestState {
+  pullRequestMergeMethod: PullRequestMergeMethod;
+}
+
+export interface UiState
+  extends UiProjectState, UiThreadState, UiEndpointState, UiPullRequestState {}
 
 const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
+  sidebarProjectScopeKeys: [],
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
+  pullRequestMergeMethod: "merge",
 };
 
 const LEGACY_PROJECT_CWD_PREFERENCE_PREFIX = "legacy-project-cwd:";
@@ -80,6 +95,12 @@ function sanitizeBooleanRecord(value: unknown): Record<string, boolean> {
     ),
   );
 }
+
+function sanitizeOptionalKey(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+const isPullRequestMergeMethod = Schema.is(PullRequestMergeMethod);
 
 function sanitizeTimestampRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object") {
@@ -124,14 +145,17 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
     projectExpandedById,
     projectOrder,
     threadLastVisitedAtById: sanitizeTimestampRecord(parsed.threadLastVisitedAtById),
-    threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
-      parsed.threadChangedFilesExpandedById,
+    threadChangedFilesExpandedById:
+      parsed.threadChangedFilesExpansionVersion === THREAD_CHANGED_FILES_EXPANSION_VERSION
+        ? sanitizePersistedThreadChangedFilesExpanded(parsed.threadChangedFilesExpandedById)
+        : {},
+    defaultAdvertisedEndpointKey: sanitizeOptionalKey(parsed.defaultAdvertisedEndpointKey),
+    sidebarProjectScopeKeys: sanitizeStringArray(
+      parsed.sidebarProjectScopeKeys ?? [parsed.sidebarProjectScopeKey],
     ),
-    defaultAdvertisedEndpointKey:
-      typeof parsed.defaultAdvertisedEndpointKey === "string" &&
-      parsed.defaultAdvertisedEndpointKey.length > 0
-        ? parsed.defaultAdvertisedEndpointKey
-        : null,
+    pullRequestMergeMethod: isPullRequestMergeMethod(parsed.pullRequestMergeMethod)
+      ? parsed.pullRequestMergeMethod
+      : initialState.pullRequestMergeMethod,
   };
 }
 
@@ -172,8 +196,8 @@ function sanitizePersistedThreadChangedFilesExpanded(
 
     const nextTurns: Record<string, boolean> = {};
     for (const [turnId, expanded] of Object.entries(turns)) {
-      if (turnId && typeof expanded === "boolean" && expanded === false) {
-        nextTurns[turnId] = false;
+      if (turnId && typeof expanded === "boolean") {
+        nextTurns[turnId] = expanded;
       }
     }
 
@@ -190,27 +214,22 @@ export function persistState(state: UiState): void {
     return;
   }
   try {
-    const projectExpandedById = Object.fromEntries(
-      Object.entries(state.projectExpandedById).filter(
-        ([key]) => key !== LEGACY_PROJECT_EXPANSION_DEFAULT_KEY,
-      ),
-    );
-    const threadChangedFilesExpandedById = Object.fromEntries(
-      Object.entries(state.threadChangedFilesExpandedById).flatMap(([threadId, turns]) => {
-        const nextTurns = Object.fromEntries(
-          Object.entries(turns).filter(([, expanded]) => expanded === false),
-        );
-        return Object.keys(nextTurns).length > 0 ? [[threadId, nextTurns]] : [];
-      }),
-    );
     window.localStorage.setItem(
       PERSISTED_STATE_KEY,
       JSON.stringify({
-        projectExpandedById,
+        projectExpandedById: state.projectExpandedById,
         projectOrder: state.projectOrder,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
-        threadChangedFilesExpandedById,
+        sidebarProjectScopeKeys: state.sidebarProjectScopeKeys,
+        // Older clients read only this field.
+        sidebarProjectScopeKey:
+          state.sidebarProjectScopeKeys.length === 1
+            ? (state.sidebarProjectScopeKeys[0] ?? null)
+            : null,
+        threadChangedFilesExpansionVersion: THREAD_CHANGED_FILES_EXPANSION_VERSION,
+        threadChangedFilesExpandedById: state.threadChangedFilesExpandedById,
+        pullRequestMergeMethod: state.pullRequestMergeMethod,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {
@@ -219,9 +238,7 @@ export function persistState(state: UiState): void {
         window.localStorage.removeItem(legacyKey);
       }
     }
-  } catch {
-    // Ignore quota/storage errors to avoid breaking chat UX.
-  }
+  } catch {}
 }
 
 const debouncedPersistState = new Debouncer(persistState, { wait: 500 });
@@ -274,41 +291,15 @@ export function markThreadUnread(
   };
 }
 
-export function setThreadChangedFilesExpanded(
+function setThreadChangedFilesExpanded(
   state: UiState,
   threadId: string,
   turnId: string,
   expanded: boolean,
 ): UiState {
   const currentThreadState = state.threadChangedFilesExpandedById[threadId] ?? {};
-  const currentExpanded = currentThreadState[turnId] ?? true;
-  if (currentExpanded === expanded) {
+  if (currentThreadState[turnId] === expanded) {
     return state;
-  }
-
-  if (expanded) {
-    if (!(turnId in currentThreadState)) {
-      return state;
-    }
-
-    const nextThreadState = { ...currentThreadState };
-    delete nextThreadState[turnId];
-    if (Object.keys(nextThreadState).length === 0) {
-      const nextState = { ...state.threadChangedFilesExpandedById };
-      delete nextState[threadId];
-      return {
-        ...state,
-        threadChangedFilesExpandedById: nextState,
-      };
-    }
-
-    return {
-      ...state,
-      threadChangedFilesExpandedById: {
-        ...state.threadChangedFilesExpandedById,
-        [threadId]: nextThreadState,
-      },
-    };
   }
 
   return {
@@ -317,13 +308,13 @@ export function setThreadChangedFilesExpanded(
       ...state.threadChangedFilesExpandedById,
       [threadId]: {
         ...currentThreadState,
-        [turnId]: false,
+        [turnId]: expanded,
       },
     },
   };
 }
 
-export function setDefaultAdvertisedEndpointKey(state: UiState, key: string | null): UiState {
+function setDefaultAdvertisedEndpointKey(state: UiState, key: string | null): UiState {
   const nextKey = key && key.length > 0 ? key : null;
   if (state.defaultAdvertisedEndpointKey === nextKey) {
     return state;
@@ -332,6 +323,26 @@ export function setDefaultAdvertisedEndpointKey(state: UiState, key: string | nu
     ...state,
     defaultAdvertisedEndpointKey: nextKey,
   };
+}
+
+function setSidebarProjectScopeKeys(state: UiState, projectKeys: readonly string[]): UiState {
+  const nextKeys = sanitizeStringArray(projectKeys);
+  if (
+    nextKeys.length === state.sidebarProjectScopeKeys.length &&
+    nextKeys.every((key, index) => key === state.sidebarProjectScopeKeys[index])
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    sidebarProjectScopeKeys: nextKeys,
+  };
+}
+
+function setPullRequestMergeMethod(state: UiState, method: PullRequestMergeMethod): UiState {
+  return state.pullRequestMergeMethod === method
+    ? state
+    : { ...state, pullRequestMergeMethod: method };
 }
 
 export function resolveProjectExpanded(
@@ -416,6 +427,8 @@ interface UiStateStore extends UiState {
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
+  setSidebarProjectScopeKeys: (projectKeys: readonly string[]) => void;
+  setPullRequestMergeMethod: (method: PullRequestMergeMethod) => void;
   setProjectExpanded: (projectIds: string | readonly string[], expanded: boolean) => void;
   reorderProjects: (
     currentProjectOrder: readonly string[],
@@ -434,6 +447,9 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
+  setSidebarProjectScopeKeys: (projectKeys) =>
+    set((state) => setSidebarProjectScopeKeys(state, projectKeys)),
+  setPullRequestMergeMethod: (method) => set((state) => setPullRequestMergeMethod(state, method)),
   setProjectExpanded: (projectIds, expanded) =>
     set((state) => setProjectExpanded(state, projectIds, expanded)),
   reorderProjects: (currentProjectOrder, draggedProjectIds, targetProjectIds) =>
