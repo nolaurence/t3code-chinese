@@ -27,12 +27,17 @@ import { getVirtualizedScrollFadeClassName } from "./ui/scroll-area";
 import { ProjectPinButton } from "./ProjectPinButton";
 import { SearchMatchHintLine, ThreadSearchMatchExcerpt } from "./ThreadSearchMatch";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 interface CommandPaletteResultsProps {
   emptyStateMessage?: string;
@@ -261,6 +266,9 @@ function CommandPaletteResultRow(props: {
       {...(props.index === undefined ? {} : { index: props.index })}
       value={props.item.value}
       active={props.isActive}
+      {...(props.item.kind === "action" && props.item.checked !== undefined
+        ? { "aria-checked": props.item.checked }
+        : {})}
       onPointerDown={(event) => {
         if (props.item.threadRef) {
           startPaletteThreadDrag(

@@ -21,16 +21,21 @@ import {
 } from "../ui/menu";
 import { useI18n, type Translate } from "../../i18n";
 
-
-export function resolveEnvironmentIconPickerLock(input: {
-  readonly serverConfig: Pick<ServerConfig, "environment"> | null;
-  readonly operateAccess: "granted" | "denied" | "pending";
-}, t?: Translate): string | null {
+export function resolveEnvironmentIconPickerLock(
+  input: {
+    readonly serverConfig: Pick<ServerConfig, "environment"> | null;
+    readonly operateAccess: "granted" | "denied" | "pending";
+  },
+  t?: Translate,
+): string | null {
   if (input.serverConfig === null) {
     return t?.("environment.icon.connect") ?? "Connect to this environment to change its icon.";
   }
   if (input.operateAccess !== "granted") {
-    return t?.("environment.icon.cannotChange") ?? "Your session on this environment cannot change its settings.";
+    return (
+      t?.("environment.icon.cannotChange") ??
+      "Your session on this environment cannot change its settings."
+    );
   }
   return null;
 }
@@ -82,7 +87,9 @@ export function EnvironmentIconMenu({
                 </span>
                 {kind === detected ? (
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {serverConfig?.environment.platform.machine ? t("environment.icon.detected") : t("environment.icon.default")}
+                    {serverConfig?.environment.platform.machine
+                      ? t("environment.icon.detected")
+                      : t("environment.icon.default")}
                   </span>
                 ) : null}
               </span>

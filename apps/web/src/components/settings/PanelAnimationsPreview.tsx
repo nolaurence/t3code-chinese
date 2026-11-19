@@ -3,7 +3,6 @@ import { type CSSProperties, useState } from "react";
 import { cn } from "~/lib/utils";
 import { useI18n } from "../../i18n";
 
-
 export function PanelAnimationsPreview({ durationMs }: { durationMs: number }) {
   const { t } = useI18n();
   const [panelsOpen, setPanelsOpen] = useState(true);

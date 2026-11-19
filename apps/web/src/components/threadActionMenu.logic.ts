@@ -1,12 +1,16 @@
 import type { ContextMenuItem } from "@t3tools/contracts";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 
-import { createTranslator, readLocalePreference, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 export type ThreadActionMenuId =
   | "find"

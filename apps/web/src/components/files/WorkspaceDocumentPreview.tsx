@@ -88,9 +88,9 @@ function xmlAttribute(element: Element | null, ...names: string[]): string | nul
 
 /** Resolves an OOXML relationship target (`../media/image1.png`) against its part directory. */
 function resolveZipPath(baseDirectory: string, target: string): string {
-  const segments = (
-    target.startsWith("/") ? target.slice(1) : `${baseDirectory}${target}`
-  ).split("/");
+  const segments = (target.startsWith("/") ? target.slice(1) : `${baseDirectory}${target}`).split(
+    "/",
+  );
   const resolved: string[] = [];
   for (const segment of segments) {
     if (segment === "" || segment === ".") continue;
@@ -211,10 +211,7 @@ export async function parseWorkbookImages(
  * Merged cells span multiple grid slots, so the walk tracks occupancy like
  * the HTML table layout algorithm does instead of trusting child order.
  */
-function tableCellRects(
-  table: HTMLTableElement,
-  origin: DOMRect,
-): Map<string, SheetTableCellRect> {
+function tableCellRects(table: HTMLTableElement, origin: DOMRect): Map<string, SheetTableCellRect> {
   const cells = new Map<string, SheetTableCellRect>();
   const occupied = new Set<string>();
   for (let rowIndex = 0; rowIndex < table.rows.length; rowIndex += 1) {
@@ -249,9 +246,7 @@ function cellRectAt(
   tableWidth: number,
   tableHeight: number,
 ): SheetTableCellRect {
-  return (
-    cells.get(`${row}:${col}`) ?? { left: tableWidth, top: tableHeight, width: 0, height: 0 }
-  );
+  return cells.get(`${row}:${col}`) ?? { left: tableWidth, top: tableHeight, width: 0, height: 0 };
 }
 
 function sheetImageBox(

@@ -22,6 +22,7 @@ import {
   getProviderOptionDescriptors,
 } from "@t3tools/shared/model";
 import { resolveModelShortName } from "@t3tools/client-runtime/provider-clients";
+import { resolveProvidersForCwd } from "@t3tools/client-runtime/providerSkills";
 
 export type ModelOption = {
   readonly key: string;
@@ -68,6 +69,7 @@ function providerDisplayLabel(provider: {
   if (provider.displayName) return provider.displayName;
   if (provider.driver === "codex") return "Codex";
   if (provider.driver === "claudeAgent") return "Claude";
+  if (provider.driver === "pi") return "Pi";
   return provider.instanceId;
 }
 
@@ -156,6 +158,16 @@ function normalizeSelectionOptions(
         instanceId: selection.instanceId,
         model: selection.model,
       };
+}
+
+/** The config as a project at `cwd` sees it, with that project's own provider models. */
+export function serverConfigForCwd<C extends T3ServerConfig | null | undefined>(
+  config: C,
+  cwd: string | null,
+): C {
+  if (!config) return config;
+  const providers = resolveProvidersForCwd(config.providers, cwd);
+  return providers === config.providers ? config : { ...config, providers };
 }
 
 /** Require explicit projectId or null so omissions cannot bypass project provider disablement. */
@@ -273,6 +285,22 @@ export function resolveNewTaskModelSelection(input: {
     input.modelOptions.find((option) => !option.isUnavailable)?.selection ??
     null
   );
+}
+
+// Rows built after a pick on another instance carry no options for the thread's own model.
+export function withStoredThreadModelOptions(
+  selection: ModelSelection,
+  stored: ModelSelection,
+): ModelSelection {
+  if (
+    (selection.options?.length ?? 0) > 0 ||
+    !stored.options?.length ||
+    selection.instanceId !== stored.instanceId ||
+    selection.model !== stored.model
+  ) {
+    return selection;
+  }
+  return { ...selection, options: stored.options };
 }
 
 export function buildModelOptions(

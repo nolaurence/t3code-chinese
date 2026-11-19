@@ -7,7 +7,6 @@ import { Button } from "../ui/button";
 import { SettingsRow } from "./settingsLayout";
 import { useI18n } from "../../i18n";
 
-
 export function ProjectActionsList({
   scripts,
   keybindings,

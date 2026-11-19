@@ -174,13 +174,6 @@ export function MediaActions({
         const clipboardText =
           reference?.kind === "file" ? formatFilePathForClipboard(text, reference.path) : text;
         await writeTextToClipboard(clipboardText, reference?.kind === "file" ? "file path" : "URL");
-        toastManager.add({
-          type: "success",
-          title:
-            action === "copy-url"
-              ? translateCurrent("toast.feedback.uRLCopied")
-              : translateCurrent("panel.pathCopied"),
-        });
       } else if (action === "open-file") {
         assertCanReadMedia();
         source.onOpenFile?.();
@@ -193,13 +186,7 @@ export function MediaActions({
               : translateCurrent("toast.feedback.copyingImage"),
         });
         await (action === "save" ? save() : copyImage());
-        toastManager.update(progressToast, {
-          type: "success",
-          title:
-            action === "save"
-              ? translateCurrent("toast.feedback.downloadStarted")
-              : translateCurrent("toast.feedback.imageCopied"),
-        });
+        toastManager.close(progressToast);
       }
     });
     if (AsyncResult.isFailure(result)) {

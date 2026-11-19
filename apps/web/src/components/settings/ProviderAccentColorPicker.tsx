@@ -9,7 +9,6 @@ import { Popover, PopoverClose, PopoverPopup, PopoverTrigger } from "../ui/popov
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { useI18n } from "../../i18n";
 
-
 const FALLBACK_ACCENT_COLOR = "#2563eb";
 
 function ProviderCustomColorPanel(props: {

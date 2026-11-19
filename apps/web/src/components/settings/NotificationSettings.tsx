@@ -12,7 +12,6 @@ import { SettingsRow } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 
-
 export function NotificationSettings() {
   const { t } = useI18n();
   const modeLabels = {
@@ -29,10 +28,7 @@ export function NotificationSettings() {
   return (
     <SettingsRow
       {...searchableSetting("thread-notifications", t)}
-      description={
-        permissionMessage ??
-        t("settings.notifications.description")
-      }
+      description={permissionMessage ?? t("settings.notifications.description")}
       control={
         <Select
           value={mode}
@@ -49,31 +45,29 @@ export function NotificationSettings() {
             if (hasNotificationSound(value)) unlockNotificationAudio();
             if (hasDesktopNotifications(value)) {
               if (typeof Notification === "undefined" || !window.isSecureContext) {
-                setPermissionMessage(
-                  t("settings.notifications.needHttps"),
-                );
+                setPermissionMessage(t("settings.notifications.needHttps"));
                 return;
               }
               setRequesting(true);
               const permission = await settlePromise(() => Notification.requestPermission());
               setRequesting(false);
               if (permission._tag === "Failure") {
-                setPermissionMessage(
-                  t("settings.notifications.unavailable"),
-                );
+                setPermissionMessage(t("settings.notifications.unavailable"));
                 return;
               }
               if (permission.value !== "granted") {
-                setPermissionMessage(
-                  t("settings.notifications.allowPermission"),
-                );
+                setPermissionMessage(t("settings.notifications.allowPermission"));
                 return;
               }
             }
             updateSettings({ notificationMode: value });
           }}
         >
-          <SelectTrigger size="sm" className="w-full sm:w-56" aria-label={t("settings.notifications.aria")}>
+          <SelectTrigger
+            size="sm"
+            className="w-full sm:w-56"
+            aria-label={t("settings.notifications.aria")}
+          >
             <SelectValue>{modeLabels[mode]}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>

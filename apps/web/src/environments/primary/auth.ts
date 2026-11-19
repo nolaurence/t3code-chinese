@@ -1,6 +1,7 @@
 import type {
   AuthBrowserSessionResult,
   AuthClientMetadata,
+  AuthConnectDeviceRequest,
   AuthEnvironmentScope,
   ServerAuthSessionMethod,
   AuthSessionId,
@@ -110,6 +111,7 @@ export interface ServerPairingLinkRecord {
   readonly label?: string;
   readonly createdAt: string;
   readonly expiresAt: string;
+  readonly connectDeviceRequest?: AuthConnectDeviceRequest;
 }
 
 export interface ServerClientSessionRecord {
@@ -149,7 +151,7 @@ export function stripPairingTokenFromUrl() {
   if (next.toString() === url.toString()) {
     return;
   }
-  window.history.replaceState({}, document.title, next.toString());
+  window.history.replaceState(window.history.state, document.title, next.toString());
 }
 
 export function takePairingTokenFromUrl(): string | null {
@@ -204,6 +206,7 @@ function readEnvironmentHttpErrorStatus(error: EnvironmentHttpCommonErrorType): 
       return 401;
     case "EnvironmentScopeRequiredError":
     case "EnvironmentOperationForbiddenError":
+    case "EnvironmentConnectApprovalPendingError":
       return 403;
     case "EnvironmentResourceNotFoundError":
       return 404;

@@ -13,7 +13,6 @@ import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { searchableSetting } from "./settingsSearch";
 import { useI18n } from "../../i18n";
 
-
 const PREFERENCE_VALUES = [100, 50, 25, 0] as const;
 
 type LoadPreference = (typeof PREFERENCE_VALUES)[number];
@@ -24,10 +23,7 @@ function loadPreferenceForWeight(weight: number | undefined): LoadPreference {
   return weight < 50 ? 25 : 100;
 }
 
-function preferenceLabel(
-  preference: LoadPreference,
-  t: ReturnType<typeof useI18n>["t"],
-): string {
+function preferenceLabel(preference: LoadPreference, t: ReturnType<typeof useI18n>["t"]): string {
   switch (preference) {
     case 100:
       return t("settings.loadBalancing.prefer");
@@ -40,10 +36,7 @@ function preferenceLabel(
   }
 }
 
-function preferenceSummary(
-  preference: LoadPreference,
-  t: ReturnType<typeof useI18n>["t"],
-): string {
+function preferenceSummary(preference: LoadPreference, t: ReturnType<typeof useI18n>["t"]): string {
   switch (preference) {
     case 100:
       return t("settings.loadBalancing.preferSummary");
@@ -134,7 +127,9 @@ export function LoadBalancingSettings({
             <SelectTrigger
               size="xs"
               className="w-32"
-              aria-label={t("settings.loadBalancing.preferenceAria", { environment: environment.label })}
+              aria-label={t("settings.loadBalancing.preferenceAria", {
+                environment: environment.label,
+              })}
             >
               <SelectValue />
             </SelectTrigger>

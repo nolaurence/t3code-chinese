@@ -15,7 +15,6 @@ import { isDesktopLocalConnectionTarget } from "~/connection/desktopLocal";
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { useI18n, type Translate } from "../../i18n";
 
-
 export function formatDesktopSshTarget(target: DesktopSshEnvironmentTarget): string {
   const authority = target.username ? `${target.username}@${target.hostname}` : target.hostname;
   return target.port ? `${authority}:${target.port}` : authority;
@@ -27,7 +26,8 @@ export function environmentTransportLabel(
   t?: Translate,
 ): string {
   const { entry } = environment;
-  if (entry.target._tag === "PrimaryConnectionTarget") return t?.("connections.transport.thisMachine") ?? "This machine";
+  if (entry.target._tag === "PrimaryConnectionTarget")
+    return t?.("connections.transport.thisMachine") ?? "This machine";
   const routes = connectionRoutes(entry);
   if (routes.length > 1) {
     const active =
@@ -41,13 +41,18 @@ export function environmentTransportLabel(
       : `via ${connectionRouteLabel(active)}`;
   }
   if (environment.relayManaged) return t?.("connections.transport.t3Connect") ?? "T3 Connect";
-  if (isDesktopLocalConnectionTarget(entry.target)) return t?.("connections.transport.wsl") ?? "WSL";
+  if (isDesktopLocalConnectionTarget(entry.target))
+    return t?.("connections.transport.wsl") ?? "WSL";
   if (
     entry.target._tag === "SshConnectionTarget" &&
     Option.isSome(entry.profile) &&
     entry.profile.value._tag === "SshConnectionProfile"
   ) {
-    return t?.("connections.transport.ssh", { target: formatDesktopSshTarget(entry.profile.value.target) }) ?? `SSH ${formatDesktopSshTarget(entry.profile.value.target)}`;
+    return (
+      t?.("connections.transport.ssh", {
+        target: formatDesktopSshTarget(entry.profile.value.target),
+      }) ?? `SSH ${formatDesktopSshTarget(entry.profile.value.target)}`
+    );
   }
   return environment.displayUrl ?? t?.("connections.transport.remoteLink") ?? "Remote link";
 }

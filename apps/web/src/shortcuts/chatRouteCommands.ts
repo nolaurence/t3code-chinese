@@ -2,7 +2,12 @@ import { AuthPreviewOperateScope, type EnvironmentId } from "@t3tools/contracts"
 import type { AnyRouter } from "@tanstack/react-router";
 
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
-import { createTranslator, readLocalePreference, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 import { isPreviewAvailableFor } from "../browser/previewRuntime";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { useComposerDraftStore } from "../composerDraftStore";
@@ -59,6 +64,13 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
   const readRouteThreadRef = () => {
     const target = readRouteTarget();
     return target?.kind === "server" ? target.threadRef : null;
+  };
+  const readRouteEnvironmentId = () => {
+    const target = readRouteTarget();
+    if (!target) return null;
+    return target.kind === "server"
+      ? target.threadRef.environmentId
+      : (useComposerDraftStore.getState().getDraftSession(target.draftId)?.environmentId ?? null);
   };
   const readPreviewOpen = () => {
     const threadRef = readRouteThreadRef();
@@ -119,8 +131,8 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
     (action: PreviewAction): CommandHandler =>
     (event) => {
       claim(event);
-      const threadRef = readRouteThreadRef();
-      if (threadRef && canOperatePreview(threadRef.environmentId)) dispatchPreviewAction(action);
+      const environmentId = readRouteEnvironmentId();
+      if (environmentId && canOperatePreview(environmentId)) dispatchPreviewAction(action);
     };
 
   return registerCommands(
@@ -173,6 +185,7 @@ export function installChatRouteCommands(router: AnyRouter): () => void {
       "preview.zoomIn": previewCommand("zoom-in"),
       "preview.zoomOut": previewCommand("zoom-out"),
       "preview.resetZoom": previewCommand("reset-zoom"),
+      "preview.find": previewCommand("find"),
     },
     {
       when: () =>

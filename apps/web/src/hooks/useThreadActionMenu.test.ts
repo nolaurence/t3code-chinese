@@ -36,6 +36,8 @@ function recordEffect(action: string) {
 
 vi.mock("../components/CustomSnoozeDialog", () => ({ requestCustomSnooze: vi.fn() }));
 vi.mock("react", () => ({
+  createContext: (defaultValue: unknown) => ({ defaultValue }),
+  use: (context: { defaultValue: unknown }) => context.defaultValue,
   useCallback: (callback: unknown) => callback,
   useMemo: (factory: () => unknown) => factory(),
 }));

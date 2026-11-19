@@ -34,7 +34,6 @@ import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { useI18n } from "../../i18n";
 
-
 export function ProjectActionsSettings() {
   const { t } = useI18n();
   const { scope, targets, target } = useSettingsScope();

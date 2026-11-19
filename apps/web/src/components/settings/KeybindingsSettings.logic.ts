@@ -18,7 +18,6 @@ import { isMacPlatform } from "../../lib/utils";
 import { METRIC_OPTIONS, WINDOW_OPTIONS } from "../usage/usageShortcuts";
 import { type MessageKey, type Translate } from "../../i18n";
 
-
 // Rank every usage command; mixing rank and alphabetical comparisons makes order input-dependent.
 const usageCommandOrder = new Map<KeybindingCommand, number>(
   [
@@ -105,7 +104,11 @@ export function whenAstToExpression(node: KeybindingWhenNode | undefined): strin
   }
 }
 
-export function whenNodeRemoveLabel(node: KeybindingWhenNode, depth: number, t?: Translate): string {
+export function whenNodeRemoveLabel(
+  node: KeybindingWhenNode,
+  depth: number,
+  t?: Translate,
+): string {
   if (depth === 0) return t?.("keybindings.clearAllConditions") ?? "Clear all conditions";
   if (node.type === "identifier" || (node.type === "not" && node.node.type === "identifier")) {
     return t?.("keybindings.removeCondition") ?? "Remove condition";
@@ -119,7 +122,8 @@ function wrapWhenExpression(node: KeybindingWhenNode): string {
 }
 
 export function parseWhenExpressionDraft(
-  expression: string, t?: Translate,
+  expression: string,
+  t?: Translate,
 ): { ok: true; value: KeybindingWhenNode | undefined } | { ok: false; message: string } {
   const trimmed = expression.trim();
   if (trimmed.length === 0) return { ok: true, value: undefined };
@@ -199,7 +203,9 @@ export function keybindingConflictLabels(
       shortcutConflictKey(candidate.binding.shortcut, platform) === conflictKey &&
       conflictsWithWhen(candidate.when, input.when)
     ) {
-      conflicts.push(t ? localizedCommandLabel(candidate.command, t) : commandLabel(candidate.command));
+      conflicts.push(
+        t ? localizedCommandLabel(candidate.command, t) : commandLabel(candidate.command),
+      );
     }
   }
   return [...new Set(conflicts)].toSorted();
@@ -312,7 +318,9 @@ export function filterKeybindingRows(
         : row.source === "Project"
           ? (t?.("keybindings.source.project") ?? "Project")
           : row.source;
-    const label = (t ? localizedCommandLabel(row.command, t) : commandLabel(row.command)).toLowerCase();
+    const label = (
+      t ? localizedCommandLabel(row.command, t) : commandLabel(row.command)
+    ).toLowerCase();
     return (
       row.command.toLowerCase().includes(normalizedQuery) ||
       label.includes(normalizedQuery) ||
@@ -399,6 +407,7 @@ export function commandLabel(command: KeybindingCommand): string {
   if (usagePeriod) return `Usage: Period: ${usagePeriod.label}`;
   if (command === "view.reopenClosed") return "Reopen Closed Tab";
   if (command === "preview.focusUrl") return "Preview: Focus URL";
+  if (command === "preview.find") return "Preview: Find on Page";
   const raw = String(command);
   if (raw.startsWith("script.") && raw.endsWith(".run")) {
     return `Run Script: ${titleCaseCommandSegment(raw.slice("script.".length, -".run".length))}`;
@@ -410,7 +419,10 @@ const STATIC_COMMAND_LABELS = {
   "sidebar.toggle": ["keybindings.command.sidebarToggle", "Sidebar: Toggle"],
   "terminal.toggle": ["keybindings.command.terminalToggle", "Terminal: Toggle"],
   "terminal.split": ["keybindings.command.terminalSplit", "Terminal: Split"],
-  "terminal.splitVertical": ["keybindings.command.terminalSplitVertical", "Terminal: Split Vertical"],
+  "terminal.splitVertical": [
+    "keybindings.command.terminalSplitVertical",
+    "Terminal: Split Vertical",
+  ],
   "terminal.new": ["keybindings.command.terminalNew", "Terminal: New"],
   "terminal.close": ["keybindings.command.terminalClose", "Terminal: Close"],
   "rightPanel.toggle": ["keybindings.command.rightPanelToggle", "Right Panel: Toggle"],
@@ -419,7 +431,10 @@ const STATIC_COMMAND_LABELS = {
     "Right Panel: Toggle Maximized",
   ],
   "rightPanel.close": ["keybindings.command.rightPanelClose", "Right Panel: Close"],
-  "pullRequest.copyNumber": ["keybindings.command.pullRequestCopyNumber", "Pull Request: Copy Number"],
+  "pullRequest.copyNumber": [
+    "keybindings.command.pullRequestCopyNumber",
+    "Pull Request: Copy Number",
+  ],
   "diff.toggle": ["keybindings.command.diffToggle", "Diff: Toggle"],
   "preview.toggle": ["keybindings.command.previewToggle", "Preview: Toggle"],
   "preview.refresh": ["keybindings.command.previewRefresh", "Preview: Refresh"],

@@ -1,4 +1,5 @@
 import { translateCurrent } from "~/i18n/messages";
+import { pullRequestCommentPreview } from "./pullRequestMarkdown.logic";
 import { parsePullRequestAnchor } from "@t3tools/shared/pullRequestAnchor";
 import { holdLinkedNodeInView } from "./holdLinkedNodeInView";
 import { useAtomValue } from "@effect/atom-react";
@@ -7,13 +8,14 @@ import {
   sourceControlClients,
 } from "@t3tools/client-runtime/source-control-clients";
 import { useAtomCommand } from "~/state/use-atom-command";
-import type {
-  EnvironmentId,
-  PullRequestComment,
-  PullRequestDetailView,
-  PullRequestRef,
-  PullRequestReviewThread,
-  ScopedThreadRef,
+import {
+  type EnvironmentId,
+  type PullRequestComment,
+  type PullRequestDetailView,
+  type PullRequestRef,
+  type PullRequestConversationThread,
+  type ScopedThreadRef,
+  pullRequestConversationThreads,
 } from "@t3tools/contracts";
 import {
   ArrowDownUpIcon,
@@ -33,6 +35,8 @@ import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn } from "~/lib/utils";
 import { useOpenLink } from "~/browser/useOpenLink";
 import { RelativeTime } from "~/components/RelativeTime";
+import { useClientSettings } from "~/hooks/useSettings";
+import { formatFullTimestamp } from "~/timestampFormat";
 
 import { Button } from "../ui/button";
 import { PullRequestEditButton } from "./PullRequestEditButton";
@@ -94,6 +98,8 @@ import {
   pullRequestCompletionScope,
 } from "./PullRequestMarkdownTextarea";
 import { PullRequestReactionBar } from "./PullRequestReactions";
+import { canReactPullRequestComment } from "@t3tools/client-runtime/pull-request-reactions";
+import { PullRequestResolveThreadButton } from "./PullRequestResolveThreadButton";
 import { PullRequestConversationGhost } from "./PullRequestGhosts";
 import { sectionCollapseAnchorScrollTop } from "./pullRequestSummaryScroll.logic";
 
@@ -108,6 +114,7 @@ function CommentIdentity({
   comment: PullRequestComment;
   detail: PullRequestDetailView;
 }) {
+  const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   const actor = comment.author;
   const profileUrl = actor
     ? sourceControlClients.get(detail.provider).authorProfileUrl(actor.login, detail.url)
@@ -135,7 +142,7 @@ function CommentIdentity({
           </time>
         </TooltipTrigger>
         <TooltipPopup>
-          {new Date(comment.createdAt).toLocaleString()}
+          {formatFullTimestamp(comment.createdAt, timestampFormat)}
           {comment.url ? " · Open comment on host" : ""}
         </TooltipPopup>
       </Tooltip>
@@ -148,7 +155,7 @@ function CommentLocation({
   thread,
 }: {
   comment: PullRequestComment;
-  thread: PullRequestReviewThread | undefined;
+  thread: PullRequestConversationThread | undefined;
 }) {
   const path = thread?.path ?? comment.path;
   if (!path) return null;
@@ -229,9 +236,10 @@ function CommentBody({
  */
 function chatSubject(
   comment: PullRequestComment,
-  thread: PullRequestReviewThread | undefined,
+  thread: PullRequestConversationThread | undefined,
 ): PullRequestChatSubject | null {
-  if (thread !== undefined) {
+  // An overview thread has no line to attach, so it goes as its opening remark, as fixing it does.
+  if (thread !== undefined && thread.path !== null) {
     return thread.comments.some((entry) => visibleBody(entry.body) !== null)
       ? { kind: "thread", thread }
       : null;
@@ -257,6 +265,7 @@ function CollapsedComment({
   label,
   body,
   reactionBar,
+  resolveButton,
   detail,
   thread,
   replyCount = 0,
@@ -269,8 +278,9 @@ function CollapsedComment({
   label: string;
   body: string | null;
   reactionBar: ReactNode;
+  resolveButton: ReactNode;
   detail: PullRequestDetailView;
-  thread: PullRequestReviewThread | undefined;
+  thread: PullRequestConversationThread | undefined;
   replyCount?: number;
   replies?: ReactNode;
   moreReplies?: ReactNode;
@@ -299,6 +309,8 @@ function CollapsedComment({
                 className={cn("size-3.5 transition-transform", open && "rotate-180")}
               />
             </CollapsibleTrigger>
+            {/* Collapsed, the status label already says "Resolved". */}
+            {open ? resolveButton : null}
             {onAddToChat ? <AddToChatButton onClick={onAddToChat} /> : null}
             {reactionBar}
           </div>
@@ -308,14 +320,7 @@ function CollapsedComment({
               className="mt-2 block w-full truncate text-left text-xs text-muted-foreground hover:text-foreground"
               onClick={() => statusTriggerRef.current?.focus({ preventScroll: true })}
             >
-              {body
-                .replace(/<!--[\s\S]*?-->/gu, "")
-                .replace(/^\s*>?\s*\[!\w+\]\s*$/gmu, "")
-                .replace(/!?(\[([^\]]+)\])\([^)]*\)/gu, "$2")
-                .replace(/^[\s>#*-]+/gmu, "")
-                .replace(/[*`]/gu, "")
-                .replace(/\s+/g, " ")
-                .trim()}
+              {pullRequestCommentPreview(body)}
             </CollapsibleTrigger>
           ) : null}
         </div>
@@ -482,7 +487,10 @@ export function PullRequestSummaryTab({
     DEFAULT_COMMENT_FILTER,
     CommentFilterSchema,
   );
-  const items = pullRequestConversationItems(detail.comments, detail.reviewThreads);
+  const items = pullRequestConversationItems(
+    detail.comments,
+    pullRequestConversationThreads(detail),
+  );
   const filteredItems = filterPullRequestConversationItems(items, commentFilter);
   const commentCount = items.reduce(
     (count, item) => count + pullRequestConversationItemComments(item).length,
@@ -699,7 +707,7 @@ export function PullRequestSummaryTab({
     <PullRequestReactionBar
       className="ml-auto justify-end"
       reactions={comment.reactions ?? []}
-      canReact={detail.capabilities.reactions === true}
+      canReact={canReactPullRequestComment(detail, comment)}
       subjectId={comment.id}
       environmentId={environmentId}
       reference={reference}
@@ -707,9 +715,20 @@ export function PullRequestSummaryTab({
     />
   );
 
+  const resolveButtonFor = (thread: PullRequestConversationThread | undefined) =>
+    thread === undefined ? null : (
+      <PullRequestResolveThreadButton
+        environmentId={environmentId}
+        reference={reference}
+        detail={detail}
+        thread={thread}
+        onRefresh={onRefresh}
+      />
+    );
+
   const renderCommentCard = (
     comment: PullRequestComment,
-    thread: PullRequestReviewThread | undefined,
+    thread: PullRequestConversationThread | undefined,
     { reply = false }: { reply?: boolean } = {},
   ) => {
     const body = visibleBody(comment.body);
@@ -719,7 +738,7 @@ export function PullRequestSummaryTab({
       (comment.kind !== "review" && comment.kind !== "review-comment") ||
       outcome === "approved"
         ? null
-        : thread === undefined
+        : thread === undefined || thread.path === null
           ? body === null
             ? null
             : { kind: "comment", comment }
@@ -758,6 +777,7 @@ export function PullRequestSummaryTab({
               </span>
             </Button>
           ) : null}
+          {resolveButtonFor(thread)}
           {onAddToChat && chat !== null ? (
             <AddToChatButton onClick={() => onAddToChat(chat)} />
           ) : null}
@@ -802,6 +822,7 @@ export function PullRequestSummaryTab({
           moreReplies={moreReplies}
           onAddToChat={onAddToChat && chat !== null ? () => onAddToChat(chat) : undefined}
           reactionBar={reactionBarFor(comment)}
+          resolveButton={resolveButtonFor(thread)}
         />
       );
     }

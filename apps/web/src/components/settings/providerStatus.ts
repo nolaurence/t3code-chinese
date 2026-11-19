@@ -67,7 +67,8 @@ export function getProviderSummary(provider: ServerProvider | undefined, t?: Tra
   if (!provider.installed) {
     return {
       headline: t?.("providers.status.notFound") ?? "Not found",
-      detail: provider.message ?? t?.("providers.status.notFoundDetail") ?? "CLI not detected on PATH.",
+      detail:
+        provider.message ?? t?.("providers.status.notFoundDetail") ?? "CLI not detected on PATH.",
     };
   }
   if (provider.auth.status === "unauthenticated") {

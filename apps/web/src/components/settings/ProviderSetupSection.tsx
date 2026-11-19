@@ -71,7 +71,10 @@ export function ProviderSetupSection(props: ProviderSetupSectionProps) {
         }
       />
       {props.readOnly ? (
-        <SettingsRow title={t("providers.setup.unavailable")} description={t("providers.setup.readOnly")} />
+        <SettingsRow
+          title={t("providers.setup.unavailable")}
+          description={t("providers.setup.readOnly")}
+        />
       ) : props.provider?.setup === undefined ? (
         <SettingsRow
           title={t("providers.setup.updateRequired")}
@@ -150,7 +153,9 @@ function ProviderSetupActions({
                   ? t("providers.setup.customRuntimeUnavailable")
                   : t("providers.setup.customRuntimeUnchecked")
                 : installation?.totalBytes
-                  ? t("providers.setup.downloadSize", { size: Math.ceil(installation.totalBytes / 1_000_000) })
+                  ? t("providers.setup.downloadSize", {
+                      size: Math.ceil(installation.totalBytes / 1_000_000),
+                    })
                   : t("providers.setup.notInstalled");
 
   async function runCommand<A, E>(
@@ -202,14 +207,10 @@ function ProviderSetupActions({
         status={
           <div className="space-y-2">
             {usesCustomBinary ? (
-              <p className="text-muted-foreground">
-                {t("providers.setup.customBinary")}
-              </p>
+              <p className="text-muted-foreground">{t("providers.setup.customBinary")}</p>
             ) : null}
             {!installed && !provider.setup?.canInstall ? (
-              <p className="text-muted-foreground">
-                {t("providers.setup.autoInstallUnavailable")}
-              </p>
+              <p className="text-muted-foreground">{t("providers.setup.autoInstallUnavailable")}</p>
             ) : null}
           </div>
         }
@@ -264,7 +265,9 @@ function ProviderSetupActions({
                     variant="outline"
                     disabled={actionsDisabled || authActive}
                     onClick={() =>
-                      void runCommand(t("providers.setup.startingInstallation"), () => startInstall(target))
+                      void runCommand(t("providers.setup.startingInstallation"), () =>
+                        startInstall(target),
+                      )
                     }
                   >
                     {installation?.installedVersion

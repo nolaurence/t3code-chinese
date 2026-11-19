@@ -63,22 +63,16 @@ type SemanticInput =
 class PreviewMidsceneBrokerFailure extends Schema.TaggedError<PreviewMidsceneBrokerFailure>()(
   "PreviewMidsceneBrokerFailure",
   { error: PreviewAutomationError },
-) {
-  constructor(error: PreviewAutomationErrorType) {
-    super({ error });
-  }
-}
+) {}
 
 class PreviewMidsceneStageFailure extends Schema.TaggedError<PreviewMidsceneStageFailure>()(
   "PreviewMidsceneStageFailure",
   { stage: Schema.Literals(["initialize", "execute", "cleanup"]), error: Schema.Defect() },
-) {
-  constructor(stage: PreviewMidsceneExecutionError["stage"], error: unknown) {
-    super({ stage, error });
-  }
-}
+) {}
 
 const isPreviewAutomationError = Schema.is(PreviewAutomationError);
+const isPreviewMidsceneBrokerFailure = Schema.is(PreviewMidsceneBrokerFailure);
+const isPreviewMidsceneStageFailure = Schema.is(PreviewMidsceneStageFailure);
 const isPreviewMidsceneResultTooLargeError = Schema.is(PreviewMidsceneResultTooLargeError);
 const UnknownFromJsonString = Schema.fromJsonString(Schema.Unknown);
 const encodeUnknownJson = Schema.encodeUnknownSync(UnknownFromJsonString);
@@ -147,7 +141,7 @@ const findPreviewAutomationError = (
   depth = 0,
 ): PreviewAutomationErrorType | undefined => {
   if (depth > 8) return undefined;
-  if (value instanceof PreviewMidsceneBrokerFailure) return value.error;
+  if (isPreviewMidsceneBrokerFailure(value)) return value.error;
   if (isPreviewAutomationError(value)) return value;
   if (typeof value !== "object" || value === null || seen.has(value)) return undefined;
   seen.add(value);
@@ -168,9 +162,9 @@ const runBrokerPromise = async <A>(
   if (Exit.isSuccess(exit)) return exit.value;
   const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
   if (failure && isPreviewAutomationError(failure)) {
-    throw new PreviewMidsceneBrokerFailure(failure);
+    throw new PreviewMidsceneBrokerFailure({ error: failure });
   }
-  throw new PreviewMidsceneStageFailure("execute", Cause.squash(exit.cause));
+  throw new PreviewMidsceneStageFailure({ stage: "execute", error: Cause.squash(exit.cause) });
 };
 
 const canonicalizeQueryValue = (
@@ -353,7 +347,8 @@ export const makeWithEnvironment = Effect.fn("PreviewMidsceneService.makeWithEnv
                     target.modelConfig,
                   ),
                 }),
-                catch: (cause) => new PreviewMidsceneStageFailure("initialize", cause),
+                catch: (cause) =>
+                  new PreviewMidsceneStageFailure({ stage: "initialize", error: cause }),
               }),
             ),
           ),
@@ -365,7 +360,7 @@ export const makeWithEnvironment = Effect.fn("PreviewMidsceneService.makeWithEnv
                 });
                 return run(agent, controller.signal);
               },
-              catch: (cause) => new PreviewMidsceneStageFailure("execute", cause),
+              catch: (cause) => new PreviewMidsceneStageFailure({ stage: "execute", error: cause }),
             }).pipe(
               Effect.map((result) => ({
                 tabId: target.tabId,
@@ -377,7 +372,7 @@ export const makeWithEnvironment = Effect.fn("PreviewMidsceneService.makeWithEnv
             controller.abort();
             return Effect.tryPromise({
               try: () => agent.destroy(),
-              catch: (cause) => new PreviewMidsceneStageFailure("cleanup", cause),
+              catch: (cause) => new PreviewMidsceneStageFailure({ stage: "cleanup", error: cause }),
             }).pipe(
               Effect.catch((error) => (Exit.isSuccess(exit) ? Effect.fail(error) : Effect.void)),
             );
@@ -386,7 +381,7 @@ export const makeWithEnvironment = Effect.fn("PreviewMidsceneService.makeWithEnv
           Effect.catch((cause): Effect.Effect<never, PreviewMidsceneError> => {
             const brokerError = findPreviewAutomationError(cause);
             if (brokerError) return Effect.fail(brokerError);
-            const failure = cause instanceof PreviewMidsceneStageFailure ? cause : undefined;
+            const failure = isPreviewMidsceneStageFailure(cause) ? cause : undefined;
             return Effect.fail(
               new PreviewMidsceneExecutionError({
                 operation,

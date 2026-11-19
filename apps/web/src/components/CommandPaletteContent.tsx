@@ -4,12 +4,17 @@ import { type ComponentProps, type ReactNode, type RefObject } from "react";
 import { Command, CommandFooter, CommandInput, CommandPanel } from "./ui/command";
 import { Kbd, KbdGroup } from "./ui/kbd";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 /**
  * A view replacing another inside an open dialog mounts with focus on the body,
@@ -100,7 +105,7 @@ export function CommandPaletteContent({
           {children}
         </CommandPanel>
         <CommandFooter className="max-sm:flex-col max-sm:items-start">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
             <KbdGroup>
               <Kbd>
                 <ArrowUpIcon />

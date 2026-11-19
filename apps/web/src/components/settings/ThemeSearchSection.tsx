@@ -303,9 +303,7 @@ export function ThemeSearchSection({
         <h3 className="text-sm font-medium" id="theme-search-heading">
           {t("theme.search.title")}
         </h3>
-        <p className="mt-0.5 text-muted-foreground text-xs">
-          {t("theme.search.description")}
-        </p>
+        <p className="mt-0.5 text-muted-foreground text-xs">{t("theme.search.description")}</p>
       </div>
       <InputGroup>
         <InputGroupAddon>
@@ -359,7 +357,10 @@ export function ThemeSearchSection({
               >
                 <SelectTrigger size="sm" className="w-40" aria-label={t("theme.search.sortAria")}>
                   <SelectValue>
-                    {t(SORT_OPTIONS.find((option) => option.value === sortBy)?.labelKey ?? "theme.search.sort.downloads")}
+                    {t(
+                      SORT_OPTIONS.find((option) => option.value === sortBy)?.labelKey ??
+                        "theme.search.sort.downloads",
+                    )}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup align="end" alignItemWithTrigger={false}>
@@ -480,7 +481,9 @@ export function ThemeSearchSection({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>{t("common.cancel")}</AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline" />}>
+              {t("common.cancel")}
+            </AlertDialogClose>
             <Button
               onClick={() => {
                 const extension = pendingUpdate;

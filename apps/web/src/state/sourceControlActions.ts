@@ -32,12 +32,17 @@ import { useAtomCommand } from "./use-atom-command";
 import { vcsActionManager, vcsEnvironment } from "./vcs";
 import { suggestAppAccessForRemote } from "../components/sourceControlAppAccessToast";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 export type SourceControlActionKind =
   | "init"
@@ -186,7 +191,12 @@ export function useVcsInitAction(scope: SourceControlActionScope) {
       input: { cwd: target.cwd },
     });
   };
-  return useAction({ kind: "init", label: t("sourceControl.action.initializingRepository"), scope, action });
+  return useAction({
+    kind: "init",
+    label: t("sourceControl.action.initializingRepository"),
+    scope,
+    action,
+  });
 }
 
 export function useVcsPullAction(scope: SourceControlActionScope) {

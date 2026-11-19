@@ -4,12 +4,17 @@ import { Button } from "~/components/ui/button";
 
 import { describePreviewError } from "./errorCodeMessages";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 function t(key: MessageKey, values?: TranslateValues): string {
   return createTranslator(readLocalePreference())(key, values);
 }
-
 
 interface Props {
   url: string;

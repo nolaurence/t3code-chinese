@@ -113,7 +113,9 @@ function RemoveUsageProviderButton({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>{t("common.cancel")}</AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline" />}>
+              {t("common.cancel")}
+            </AlertDialogClose>
             <Button
               variant="destructive"
               onClick={() => {
