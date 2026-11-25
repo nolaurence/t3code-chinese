@@ -1,6 +1,8 @@
+import { useGT } from "gt-react";
 import {
   type CSSProperties,
   type FocusEvent,
+  type MouseEventHandler,
   type ReactNode,
   useLayoutEffect,
   useRef,
@@ -34,6 +36,8 @@ interface PreviewPanelShellProps {
   /** Use a distinct key per surface to keep remembered widths independent. */
   widthStorageKey?: string;
   defaultWidth?: number;
+  onMouseDown?: MouseEventHandler<HTMLDivElement>;
+  onMouseUp?: MouseEventHandler<HTMLDivElement>;
   children: ReactNode;
 }
 
@@ -70,7 +74,8 @@ function returnFocus(host: HTMLElement, origin: HTMLElement | null) {
 function PreviewPanelShellFrame(
   props: PreviewPanelShellProps & { inlineSize: PreviewPanelInlineSize },
 ) {
-  const panelArea = workspaceAreaProps("panel", 4, props.workspaceLabel ?? "Workspace panel");
+  const gt = useGT();
+  const panelArea = workspaceAreaProps("panel", 4, props.workspaceLabel ?? gt("Workspace panel"));
   const isInline = props.mode === "inline";
   const side = props.side ?? "right";
   const collapsible = isInline && props.open !== undefined;
@@ -159,6 +164,8 @@ function PreviewPanelShellFrame(
       {...(props.workspaceArea ? panelArea : {})}
       data-workspace-focus-key={props.workspaceFocusKey}
       data-workspace-unavailable={collapsible && !open ? "true" : undefined}
+      onMouseDown={props.onMouseDown}
+      onMouseUp={props.onMouseUp}
       className={cn(
         "relative flex h-full min-h-0 min-w-0 max-w-full flex-col self-stretch bg-background",
         isInline
@@ -199,7 +206,9 @@ function PreviewPanelShellFrame(
         className={cn(
           "h-full min-h-0 w-full",
           collapsible && "overflow-clip",
-          collapsible && !maximized && (side === "left" ? "flex justify-start" : "flex justify-end"),
+          collapsible &&
+            !maximized &&
+            (side === "left" ? "flex justify-start" : "flex justify-end"),
         )}
       >
         <div

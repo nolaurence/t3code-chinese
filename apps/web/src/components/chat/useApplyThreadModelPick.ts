@@ -1,4 +1,6 @@
-import { translateCurrent } from "~/i18n/messages";
+import { msg } from "gt-react";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
+import { m } from "~/i18n/messages";
 import { RegistryContext } from "@effect/atom-react";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import {
@@ -40,8 +42,12 @@ export function useApplyThreadModelPick() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: translateCurrent("toast.feedback.couldNotApplyModelSelection"),
-          description: `This model pick was not saved. ${error instanceof Error ? error.message : "Try again."}`,
+          title: m(msg("Could not apply model selection")),
+          description: m(
+            msg("This model pick was not saved. {detail}", {
+              detail: thrownErrorMessage(error, m) ?? m(msg("Try again.")),
+            }),
+          ),
         }),
       );
     }

@@ -1,13 +1,13 @@
 import type { PreviewAutomationFeature } from "@t3tools/contracts";
-import {
-  PreviewCaptureFailure,
-  type PreviewCaptureFailureEncoded,
-} from "@t3tools/contracts";
+import { PreviewCaptureFailure, type PreviewCaptureFailureEncoded } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 export const readPreviewAutomationSupportedFeatures = (
-  automation: { readonly supportedFeatures?: ReadonlyArray<PreviewAutomationFeature> } | null | undefined,
+  automation:
+    | { readonly supportedFeatures?: ReadonlyArray<PreviewAutomationFeature> }
+    | null
+    | undefined,
 ): ReadonlyArray<PreviewAutomationFeature> => automation?.supportedFeatures ?? [];
 
 const decodeCaptureFailure = Schema.decodeUnknownOption(PreviewCaptureFailure);

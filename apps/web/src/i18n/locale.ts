@@ -55,3 +55,12 @@ export function syncDocumentLocale(
 ): void {
   if (target) target.documentElement.lang = locale;
 }
+
+export function readLegacyLanguage(): "en" | "zh" | undefined {
+  try {
+    const value = resolveReadStorage()?.getItem(LOCALE_STORAGE_KEY);
+    return value === "zh-CN" ? "zh" : value === "en" ? "en" : undefined;
+  } catch {
+    return undefined;
+  }
+}

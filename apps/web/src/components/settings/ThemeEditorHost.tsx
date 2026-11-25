@@ -1,6 +1,8 @@
+import { msg } from "gt-react";
 import { lazy, Suspense, useSyncExternalStore } from "react";
 
 import { useTheme } from "../../hooks/useTheme";
+import { m } from "../../i18n/messages";
 import {
   getThemeDefinition,
   subscribeToCustomThemes,
@@ -24,7 +26,6 @@ function useThemeDefinition(id: string | null | undefined) {
 }
 
 export function ThemeEditorHost() {
-  const { t } = useI18n();
   const session = useThemeEditorStore((store) => store.session);
   const closeThemeEditor = useThemeEditorStore((store) => store.closeThemeEditor);
   const { theme, setTheme, themeHalves, refreshTheme } = useTheme();
@@ -40,19 +41,12 @@ export function ThemeEditorHost() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: t("theme.saveFailed"),
-            description: t("theme.storageUnavailable"),
+            title: m(msg("Could not save your theme")),
+            description: m(msg("Browser storage is unavailable, so the change was not kept.")),
           }),
         );
         return false;
       }
-      toastManager.add(
-        stackedThreadToast({
-          type: "success",
-          title: t("theme.updatedNamed", { name: savedTheme.label }),
-          description: t("theme.paletteAdded", { appearance: mergedAppearance }),
-        }),
-      );
       return true;
     }
     if (!created) {
@@ -62,13 +56,6 @@ export function ThemeEditorHost() {
         themeHalves?.light === savedTheme.id ||
         themeHalves?.dark === savedTheme.id;
       if (wasActive) refreshTheme();
-      toastManager.add(
-        stackedThreadToast({
-          type: "success",
-          title: t("theme.savedNamed", { name: savedTheme.label }),
-          description: wasActive ? t("theme.changesActive") : t("theme.changesSaved"),
-        }),
-      );
       return true;
     }
 
@@ -76,19 +63,12 @@ export function ThemeEditorHost() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: t("theme.saveFailed"),
-          description: t("theme.storageUnavailable"),
+          title: m(msg("Could not save your theme")),
+          description: m(msg("Browser storage is unavailable, so the change was not kept.")),
         }),
       );
       return false;
     }
-    toastManager.add(
-      stackedThreadToast({
-        type: "success",
-        title: t("theme.createdNamed", { name: savedTheme.label }),
-        description: t("theme.nowActive"),
-      }),
-    );
     return true;
   };
 

@@ -3,10 +3,13 @@ import { converter } from "culori/fn";
 import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
 
 import { CONTEXT_CHIP_ACCENTS, contextChipColorVariable } from "./lib/contextChipAccents";
+import { appAtomRegistry } from "./rpc/atomRegistry";
 
 import {
   applyThemePalette,
+  canonicalThemePreference,
   contextChipVariables,
+  getThemeDefinition,
   getThemeColorsForMode,
   getThemeModes,
   getCustomThemes,
@@ -15,6 +18,8 @@ import {
   invalidateCustomThemes,
   installCustomTheme,
   parseThemeFile,
+  parseThemeHalves,
+  publishedThemeDefinitions,
   removeCustomTheme,
   replaceCustomThemeCollection,
   resolveDesktopTheme,
@@ -101,21 +106,19 @@ describe("theme files", () => {
     }
   });
 
-  it("keeps stock dark controls in the DSH surface hierarchy", () => {
-    expect(
-      Object.fromEntries(
-        Object.entries(getStandardThemeColors("dark")).map(([key, value]) => [key, asHex(value)]),
-      ),
-    ).toMatchObject({
-      canvas: "#151517",
-      surface: "#232324",
-      surfaceRaised: "#2c2c2e",
-      surfaceOverlay: "#2c2c2e",
-      toolbarControl: "#2c2c2e",
-      secondary: "#353638",
-      muted: "#1b1b1c",
-      accentSurface: "#353638",
+  it("derives an imported palette from top-level canvas and accent like a published theme", () => {
+    const theme = parseThemeFile({
+      version: THEME_FILE_VERSION,
+      name: "Teal",
+      appearance: "dark",
+      canvas: "#0b1a1e",
+      accent: "#f08a2c",
+      colors: { sidebar: "#0f2126" },
     });
+
+    expect(theme.colors.canvas).toBe(canonical("#0b1a1e"));
+    expect(theme.colors.accent).toBe(canonical("#f08a2c"));
+    expect(theme.colors.sidebar).toBe(canonical("#0f2126"));
   });
 
   it("round-trips custom search colours and fills them in for older theme files", () => {
@@ -288,8 +291,10 @@ describe("theme files", () => {
       variants: {
         dark: { canvas: "#101827", text: "#eef5ff" },
       },
+      css: "[data-chat-header] { border-bottom: 1px solid red; }",
     });
 
+    expect(JSON.parse(serializeThemeFile(theme)).css).toBe(theme.css);
     expect(getThemeModes(theme)).toEqual(["light", "dark"]);
     expect(getThemeColorsForMode(theme, "dark")).toMatchObject({
       canvas: canonical("#101827"),
@@ -719,7 +724,7 @@ describe("context chip colors", () => {
 });
 
 describe("stored theme preferences", () => {
-  it("lets a configured half unlock an appearance the base theme lacks", () => {
+  it("lets built-in and published halves unlock an appearance the base theme lacks", () => {
     const lightOnly = parseThemeFile({
       version: THEME_FILE_VERSION,
       id: "paper",
@@ -727,6 +732,17 @@ describe("stored theme preferences", () => {
       appearance: "light",
       colors: { canvas: "#f8fbff" },
     });
+    const [publishedTheme] = publishedThemeDefinitions([
+      {
+        id: "constructor",
+        name: "Constructor",
+        appearance: "dark",
+        canvas: "#1a1b26",
+        accent: "#7aa2f7",
+      },
+    ]);
+    expect(publishedTheme).toBeDefined();
+    using _environmentThemes = vi.spyOn(appAtomRegistry, "get").mockReturnValue([publishedTheme]);
     vi.stubGlobal("window", {
       localStorage: {
         getItem: (key: string) =>
@@ -740,6 +756,12 @@ describe("stored theme preferences", () => {
       expect(resolveThemeAppearance("paper", true, true, undefined, halves)).toBe("dark");
       expect(resolveThemeAppearance("paper", false, false, "dark", halves)).toBe("dark");
       expect(resolveDesktopTheme("paper", true, undefined, halves)).toBe("system");
+
+      expect(getThemeDefinition("constructor")).toEqual(publishedTheme);
+      expect(canonicalThemePreference("constructor")).toBe("constructor");
+      const publishedHalves = parseThemeHalves(JSON.stringify({ dark: "constructor" }));
+      expect(publishedHalves).toEqual({ dark: "constructor" });
+      expect(resolveThemeAppearance("paper", true, true, undefined, publishedHalves)).toBe("dark");
     } finally {
       vi.unstubAllGlobals();
       invalidateCustomThemes();

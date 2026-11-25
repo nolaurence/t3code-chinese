@@ -1,22 +1,33 @@
 import { resolveEnvironmentMachineKind } from "@t3tools/contracts";
+import { msg, T, useGT, useMessages } from "gt-react";
 
 import {
   useClientSettings,
   useClientSettingsHydrated,
   updateClientSettings,
 } from "~/hooks/useSettings";
+import type { MessageResolver } from "~/i18n/messages";
 import type { EnvironmentPresentation } from "~/state/environments";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { EnvironmentRow, EnvironmentTransportLabel } from "./EnvironmentRow";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
-import { searchableSetting } from "./settingsSearch";
-import { useI18n } from "../../i18n";
+import { useSearchableSetting } from "./settingsSearch";
 
+const preferences = [
+  { value: 100, label: msg("Prefer") },
+  { value: 50, label: msg("Normal", { $context: "load balancing preference" }) },
+  { value: 25, label: msg("Less often") },
+  { value: 0, label: msg("Manual only") },
+] as const;
 
-const PREFERENCE_VALUES = [100, 50, 25, 0] as const;
+const summaryLabels = {
+  100: msg("{environment} prefer"),
+  25: msg("{environment} less often"),
+  0: msg("{environment} manual only"),
+} as const;
 
-type LoadPreference = (typeof PREFERENCE_VALUES)[number];
+type LoadPreference = (typeof preferences)[number]["value"];
 
 function loadPreferenceForWeight(weight: number | undefined): LoadPreference {
   if (weight === undefined || weight === 50) return 50;
@@ -24,46 +35,16 @@ function loadPreferenceForWeight(weight: number | undefined): LoadPreference {
   return weight < 50 ? 25 : 100;
 }
 
-function preferenceLabel(
-  preference: LoadPreference,
-  t: ReturnType<typeof useI18n>["t"],
-): string {
-  switch (preference) {
-    case 100:
-      return t("settings.loadBalancing.prefer");
-    case 25:
-      return t("settings.loadBalancing.lessOften");
-    case 0:
-      return t("settings.loadBalancing.manualOnly");
-    default:
-      return t("settings.loadBalancing.normal");
-  }
-}
-
-function preferenceSummary(
-  preference: LoadPreference,
-  t: ReturnType<typeof useI18n>["t"],
-): string {
-  switch (preference) {
-    case 100:
-      return t("settings.loadBalancing.preferSummary");
-    case 25:
-      return t("settings.loadBalancing.lessOftenSummary");
-    case 0:
-      return t("settings.loadBalancing.manualOnlySummary");
-    default:
-      return t("settings.loadBalancing.normal");
-  }
-}
-
 function summarizeLoadPreferences(
   environments: ReadonlyArray<Pick<EnvironmentPresentation, "environmentId" | "label">>,
   weights: Readonly<Record<string, number>>,
-  t: ReturnType<typeof useI18n>["t"],
+  resolve: MessageResolver,
 ): string | null {
   const parts = environments.flatMap((environment) => {
     const preference = loadPreferenceForWeight(weights[environment.environmentId]);
-    return preference === 50 ? [] : [`${environment.label} ${preferenceSummary(preference, t)}`];
+    return preference === 50
+      ? []
+      : [resolve(summaryLabels[preference], { environment: environment.label })];
   });
   return parts.length === 0 ? null : parts.join(" · ");
 }
@@ -73,32 +54,31 @@ export function LoadBalancingSettings({
 }: {
   environments: ReadonlyArray<EnvironmentPresentation>;
 }) {
-  const { t } = useI18n();
-  const preferences = PREFERENCE_VALUES.map((value) => ({
-    value,
-    label: preferenceLabel(value, t),
-  }));
+  const searchableSetting = useSearchableSetting();
   const settings = useClientSettings((current) => ({
     loadBalancingEnabled: current.loadBalancingEnabled,
     loadBalancingWeights: current.loadBalancingWeights,
   }));
   const settingsHydrated = useClientSettingsHydrated();
+  const gt = useGT();
+  const m = useMessages();
+  const items = preferences.map((entry) => ({ ...entry, label: m(entry.label) }));
 
   if (environments.length < 2) return null;
 
-  const { id, title } = searchableSetting("load-balancing", t);
+  const { id, title } = searchableSetting("load-balancing");
   return (
     <FoldedSettingsSection
       id={id}
       title={title}
       summary={
         settings.loadBalancingEnabled
-          ? summarizeLoadPreferences(environments, settings.loadBalancingWeights, t)
-          : t("common.off")
+          ? summarizeLoadPreferences(environments, settings.loadBalancingWeights, m)
+          : gt("Off", { $context: "load balancing is turned off" })
       }
       control={
         <Switch
-          aria-label={t("settings.loadBalancing.aria")}
+          aria-label={gt("Automatically balance load")}
           checked={settings.loadBalancingEnabled}
           disabled={!settingsHydrated}
           onCheckedChange={(loadBalancingEnabled) => updateClientSettings({ loadBalancingEnabled })}
@@ -106,7 +86,10 @@ export function LoadBalancingSettings({
       }
     >
       <p className="px-3 py-2.5 text-xs text-muted-foreground sm:px-4">
-        {t("settings.loadBalancing.description")}
+        <T>
+          New threads in shared projects start on the machine with the most free CPU and memory,
+          weighted by each machine's preference.
+        </T>
       </p>
       {environments.map((environment) => (
         <EnvironmentRow
@@ -116,7 +99,7 @@ export function LoadBalancingSettings({
           subtitle={<EnvironmentTransportLabel environment={environment} />}
         >
           <Select
-            items={preferences}
+            items={items}
             value={loadPreferenceForWeight(
               settings.loadBalancingWeights[environment.environmentId],
             )}
@@ -134,12 +117,12 @@ export function LoadBalancingSettings({
             <SelectTrigger
               size="xs"
               className="w-32"
-              aria-label={t("settings.loadBalancing.preferenceAria", { environment: environment.label })}
+              aria-label={gt("{environment} load preference", { environment: environment.label })}
             >
               <SelectValue />
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
-              {preferences.map(({ value, label }) => (
+              {items.map(({ value, label }) => (
                 <SelectItem key={value} value={value}>
                   {label}
                 </SelectItem>

@@ -2,6 +2,7 @@ import type { ServerProviderSkill } from "@t3tools/contracts";
 import { preloadPatchFile } from "@pierre/diffs/ssr";
 import { useAtomValue } from "@effect/atom-react";
 import * as Effect from "effect/Effect";
+import { useGT } from "gt-react";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -29,6 +30,7 @@ const PROMPT_PREVIEW_TEXT =
 function noop() {}
 
 export function PromptFontPreview() {
+  const gt = useGT();
   const editorRef = useRef<ComposerPromptEditorHandle>(null);
   const [prompt, setPrompt] = useState(PROMPT_PREVIEW_TEXT);
   const [cursor, setCursor] = useState(PROMPT_PREVIEW_TEXT.length);
@@ -39,7 +41,7 @@ export function PromptFontPreview() {
   return (
     <div className="mt-1 mb-2 rounded-lg border border-border bg-background px-3 py-2">
       <ComposerPromptEditor
-        ariaLabel="Prompt font preview"
+        ariaLabel={gt("Prompt font preview")}
         editorRef={editorRef}
         value={prompt}
         cursor={cursor}
@@ -94,7 +96,6 @@ const DIFF_PREVIEW_THEME_BRIDGE = `
 // Each host is keyed by its html, so the ref callback runs once per document.
 // React detaches a cleanup-less ref callback with null when an appearance switch drops the host.
 function StaticDiffHtml({ html }: { html: string }) {
-  const { t } = useI18n();
   const attachHtml = (host: HTMLDivElement | null) => {
     if (host === null) return;
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
@@ -155,7 +156,7 @@ function previewTerminalFont(family: string, size: number): { family?: string; s
 }
 
 export function TerminalFontPreview({ family, size }: { family: string; size: number }) {
-  const { t } = useI18n();
+  const gt = useGT();
   const mountRef = useRef<HTMLDivElement>(null);
   const [surface, setSurface] = useState<GhosttyTerminalSurface | null>(null);
   const [initialFont] = useState(() => previewTerminalFont(family, size));
@@ -217,6 +218,8 @@ export function TerminalFontPreview({ family, size }: { family: string; size: nu
       theme: terminalThemeFromApp(mount),
       font: initialFont,
       onData: echo,
+      onBinary: noop,
+      onReply: noop,
       onResize: noop,
       onSelectionChange: noop,
       beforeKey: (event) => event.key !== "Tab",
@@ -243,7 +246,7 @@ export function TerminalFontPreview({ family, size }: { family: string; size: nu
     <div
       ref={mountSurface}
       className="relative mt-1 mb-2 h-52 overflow-hidden rounded-lg border border-border"
-      aria-label={t("settings.typography.terminalPreviewAria")}
+      aria-label={gt("Terminal font preview")}
     />
   );
 }

@@ -1,9 +1,9 @@
-import { translateCurrent } from "~/i18n/messages";
-import { findErrorTraceId } from "@t3tools/client-runtime/errors";
+import { findErrorTraceId, thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { msg } from "gt-react";
 import { useState } from "react";
 
 import {
@@ -11,6 +11,7 @@ import {
   unlinkManagedRelayT3ChatCommand,
   useManagedRelayT3ChatLink,
 } from "../../cloud/managedRelayState";
+import { m } from "../../i18n/messages";
 import { readLocalApi } from "../../localApi";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { toastManager } from "../ui/toast";
@@ -20,11 +21,11 @@ function reportFailure(title: string, cause: unknown) {
   toastManager.add({
     type: "error",
     title,
-    description: cause instanceof Error ? cause.message : translateCurrent("theme.tryAgain"),
+    description: thrownErrorMessage(cause, m) ?? m(msg("Try again.")),
     data: traceId
       ? {
           secondaryActionProps: {
-            children: translateCurrent("common.copyTraceId"),
+            children: m(msg("Copy trace ID")),
             onClick: () => void navigator.clipboard?.writeText(traceId),
           },
         }
@@ -54,7 +55,7 @@ export function useT3ChatLink() {
         ?.shell.openExternal(result.value)
         .catch(() => undefined);
     } else if (!isAtomCommandInterrupted(result)) {
-      reportFailure("Could not start linking", squashAtomCommandFailure(result));
+      reportFailure(m(msg("Could not start linking")), squashAtomCommandFailure(result));
     }
     setPending(null);
   };
@@ -68,7 +69,7 @@ export function useT3ChatLink() {
       setLinkUrl(null);
       linkState.refresh();
     } else if (!isAtomCommandInterrupted(result)) {
-      reportFailure("Could not unlink T3 Chat", squashAtomCommandFailure(result));
+      reportFailure(m(msg("Could not unlink T3 Chat")), squashAtomCommandFailure(result));
     }
     setPending(null);
   };

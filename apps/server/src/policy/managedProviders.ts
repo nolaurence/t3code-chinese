@@ -22,6 +22,7 @@ import { grokClient } from "@t3tools/provider-grok/client";
 import { kiroClient } from "@t3tools/provider-kiro/client";
 import { museClient } from "@t3tools/provider-muse/client";
 import { openCodeClient } from "@t3tools/provider-opencode/client";
+import { piClient } from "@t3tools/provider-pi/client";
 import type { ProviderClientDefinition } from "@t3tools/provider-core/client";
 
 interface KnownDriver {
@@ -48,6 +49,7 @@ const PACKAGED_CLIENTS: ReadonlyArray<ProviderClientDefinition> = [
   kiroClient,
   museClient,
   openCodeClient,
+  piClient,
   acpRegistryClient,
 ];
 
@@ -165,6 +167,23 @@ export const providerHostEnvironment = (
     if (LAUNCH_OVERRIDE_VARIABLES.some((override) => override === name.toUpperCase())) {
       delete next[name];
     }
+  }
+  // Drivers keep this object, so PATH reads through to the host for a refresh after launch to reach them.
+  const pathKeys = Object.keys(next).filter((name) => name.toUpperCase() === "PATH");
+  if (pathKeys.length > 0) {
+    for (const name of pathKeys) delete next[name];
+    Object.defineProperty(next, "PATH", {
+      enumerable: true,
+      configurable: true,
+      get: () => environment.PATH ?? environment.Path ?? environment.path,
+      set: (value) =>
+        Object.defineProperty(next, "PATH", {
+          value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        }),
+    });
   }
   return next;
 };

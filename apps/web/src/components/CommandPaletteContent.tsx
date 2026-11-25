@@ -1,15 +1,17 @@
+import { T } from "gt-react";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { type ComponentProps, type ReactNode, type RefObject } from "react";
 
 import { Command, CommandFooter, CommandInput, CommandPanel } from "./ui/command";
 import { Kbd, KbdGroup } from "./ui/kbd";
 
-import { createTranslator, readLocalePreference, useI18n, type MessageKey, type TranslateValues } from "~/i18n";
-
-function t(key: MessageKey, values?: TranslateValues): string {
-  return createTranslator(readLocalePreference())(key, values);
-}
-
+import {
+  createTranslator,
+  readLocalePreference,
+  useI18n,
+  type MessageKey,
+  type TranslateValues,
+} from "~/i18n";
 
 /**
  * A view replacing another inside an open dialog mounts with focus on the body,
@@ -60,7 +62,7 @@ type CommandPaletteContentProps = Omit<ComponentProps<typeof Command>, "children
 
 export function CommandPaletteContent({
   children,
-  escapeLabel = t("common.close"),
+  escapeLabel,
   footerActionLabel,
   footerTrailing,
   inputAccessory,
@@ -100,7 +102,7 @@ export function CommandPaletteContent({
           {children}
         </CommandPanel>
         <CommandFooter className="max-sm:flex-col max-sm:items-start">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
             <KbdGroup>
               <Kbd>
                 <ArrowUpIcon />
@@ -108,7 +110,9 @@ export function CommandPaletteContent({
               <Kbd>
                 <ArrowDownIcon />
               </Kbd>
-              <span>{t("commandPalette.navigate")}</span>
+              <span>
+                <T>Navigate</T>
+              </span>
             </KbdGroup>
             {footerActionLabel !== undefined ? (
               <KbdGroup>
@@ -119,12 +123,14 @@ export function CommandPaletteContent({
             {showBackHint ? (
               <KbdGroup>
                 <Kbd>Backspace</Kbd>
-                <span>{t("common.back")}</span>
+                <span>
+                  <T>Back</T>
+                </span>
               </KbdGroup>
             ) : null}
             <KbdGroup>
               <Kbd>Esc</Kbd>
-              <span>{escapeLabel ?? t("common.close")}</span>
+              <span>{escapeLabel ?? <T>Close</T>}</span>
             </KbdGroup>
           </div>
           {footerTrailing}

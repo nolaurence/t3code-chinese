@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { I18nProvider, useI18n } from "./I18nProvider";
+import { I18nProvider, useI18n } from "./ForkI18nProvider.fixture";
 
 function CancelLabel() {
   const { t } = useI18n();

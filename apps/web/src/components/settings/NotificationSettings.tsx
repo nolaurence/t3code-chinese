@@ -1,26 +1,22 @@
 import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import { useGT, useMessages } from "gt-react";
 import { useState } from "react";
 
 import {
   hasDesktopNotifications,
   hasNotificationSound,
+  NOTIFICATION_MODE_LABELS,
   unlockNotificationAudio,
 } from "../../threadNotifications";
-import { useI18n } from "../../i18n";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingsRow } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 
-
 export function NotificationSettings() {
-  const { t } = useI18n();
-  const modeLabels = {
-    off: t("settings.notifications.off"),
-    notifications: t("settings.notifications.notificationsOnly"),
-    sound: t("settings.notifications.soundOnly"),
-    "notifications-and-sound": t("settings.notifications.withSound"),
-  } as const;
+  const searchableSetting = useSearchableSetting();
+  const gt = useGT();
+  const m = useMessages();
   const mode = useScopedSettings((settings) => settings.notificationMode);
   const updateSettings = useUpdateScopedSettings();
   const [permissionMessage, setPermissionMessage] = useState<string | null>(null);
@@ -28,10 +24,12 @@ export function NotificationSettings() {
 
   return (
     <SettingsRow
-      {...searchableSetting("thread-notifications", t)}
+      {...searchableSetting("thread-notifications")}
       description={
         permissionMessage ??
-        t("settings.notifications.description")
+        gt(
+          "System alerts when a thread finishes, fails, or needs input or approval. Applies to this device while T3 Code is open.",
+        )
       }
       control={
         <Select
@@ -50,7 +48,9 @@ export function NotificationSettings() {
             if (hasDesktopNotifications(value)) {
               if (typeof Notification === "undefined" || !window.isSecureContext) {
                 setPermissionMessage(
-                  t("settings.notifications.needHttps"),
+                  gt(
+                    "Notifications need a supported browser over HTTPS, or the desktop app. Sound only is still available.",
+                  ),
                 );
                 return;
               }
@@ -59,13 +59,17 @@ export function NotificationSettings() {
               setRequesting(false);
               if (permission._tag === "Failure") {
                 setPermissionMessage(
-                  t("settings.notifications.unavailable"),
+                  gt(
+                    "Notifications are unavailable in this browser. Sound only is still available.",
+                  ),
                 );
                 return;
               }
               if (permission.value !== "granted") {
                 setPermissionMessage(
-                  t("settings.notifications.allowPermission"),
+                  gt(
+                    "Allow notifications in your browser or system settings, then choose this option again. Sound only is still available.",
+                  ),
                 );
                 return;
               }
@@ -73,13 +77,17 @@ export function NotificationSettings() {
             updateSettings({ notificationMode: value });
           }}
         >
-          <SelectTrigger size="sm" className="w-full sm:w-56" aria-label={t("settings.notifications.aria")}>
-            <SelectValue>{modeLabels[mode]}</SelectValue>
+          <SelectTrigger
+            size="sm"
+            className="w-full sm:w-56"
+            aria-label={gt("Thread notifications")}
+          >
+            <SelectValue>{m(NOTIFICATION_MODE_LABELS[mode])}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
-            {Object.entries(modeLabels).map(([value, label]) => (
+            {Object.entries(NOTIFICATION_MODE_LABELS).map(([value, label]) => (
               <SelectItem key={value} hideIndicator value={value}>
-                {label}
+                {m(label)}
               </SelectItem>
             ))}
           </SelectPopup>

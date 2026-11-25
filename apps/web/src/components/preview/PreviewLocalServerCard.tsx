@@ -1,7 +1,8 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
-import { DiscoveryListRow } from "../ui/discovery-list";
+import { msg, useMessages } from "gt-react";
 
-import { useI18n } from "~/i18n";
+import type { MessageResolver } from "../../i18n/messages";
+import { DiscoveryListRow } from "../ui/discovery-list";
 
 import { PreviewFaviconIcon } from "./PreviewFaviconIcon";
 import type { PreviewableServer } from "./useDiscoveredLocalServers";
@@ -13,8 +14,8 @@ interface Props {
 }
 
 export function PreviewLocalServerCard({ threadRef, server, onOpen }: Props) {
-  const { t } = useI18n();
-  const subtitle = server.processName ?? t("preview.server.listening");
+  const m = useMessages();
+  const subtitle = describeServer(server, m);
   return (
     <DiscoveryListRow
       onClick={onOpen}
@@ -23,4 +24,9 @@ export function PreviewLocalServerCard({ threadRef, server, onOpen }: Props) {
       description={`${server.host}:${server.port}`}
     />
   );
+}
+
+function describeServer(server: PreviewableServer, resolve: MessageResolver): string {
+  if (server.processName) return server.processName;
+  return resolve(msg("Listening", { $context: "a local server is listening on a port" }));
 }
