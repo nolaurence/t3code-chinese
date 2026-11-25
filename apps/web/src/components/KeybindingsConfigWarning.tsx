@@ -1,10 +1,12 @@
-import { translateCurrent } from "~/i18n/messages";
+import { m } from "../i18n/messages";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   AuthOrchestrationOperateScope,
   type EditorId,
   type EnvironmentId,
 } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { T, useGT, Var } from "gt-react";
 
 import { useOpenInPreferredEditor } from "../editorPreferences";
 import { useEnvironmentScope } from "../state/session";
@@ -22,6 +24,7 @@ export function KeybindingsConfigWarning({
   configPath: string | null;
   availableEditors: readonly EditorId[];
 }) {
+  const gt = useGT();
   const canOpenEditor = useEnvironmentScope(environmentId, AuthOrchestrationOperateScope);
   const openInEditor = useOpenInPreferredEditor(environmentId, availableEditors);
 
@@ -41,16 +44,15 @@ export function KeybindingsConfigWarning({
             toastManager.add(
               stackedThreadToast({
                 type: "error",
-                title: translateCurrent("root.keybindings.openFailed"),
-                description:
-                  error instanceof Error
-                    ? error.message
-                    : translateCurrent("root.keybindings.openUnknown"),
+                title: gt("Unable to open keybindings file"),
+                description: thrownErrorMessage(error, m) ?? gt("Unknown error opening file."),
               }),
             );
           }}
         >
-          Open keybindings.json
+          <T>
+            Open <Var>keybindings.json</Var>
+          </T>
         </Button>
       </span>
     </>

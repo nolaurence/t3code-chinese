@@ -1,4 +1,5 @@
-import { translateCurrent } from "~/i18n";
+import { msg } from "gt-react";
+import { m } from "../i18n/messages";
 import {
   type EnvironmentThreadShell,
   type PendingSubagentRequest,
@@ -37,7 +38,6 @@ import { resolveSidebarThreadStatus, type SidebarThreadStatus } from "./Sidebar.
 import {
   createThreadNotificationGate,
   isSnoozedForNotification,
-  threadNotificationTitleKey,
   type ThreadNotificationKind,
   type ThreadNotificationObservation,
 } from "./ThreadNotificationCoordinator.logic";
@@ -144,7 +144,18 @@ export function startThreadNotifications(
       return;
     const { notificationMode: mode, inAppNotificationsEnabled } = getClientSettings();
     const active = activeThread();
-    const title = translateCurrent(threadNotificationTitleKey(kind, status));
+    const title =
+      kind === "completion"
+        ? m(msg("Thread completed"))
+        : status === "approval"
+          ? m(msg("Approval needed"))
+          : status === "limited"
+            ? m(msg("Usage limit reached"))
+            : status === "failed"
+              ? m(msg("Thread failed"))
+              : status === "request"
+                ? m(msg("Guest request"))
+                : m(msg("Input needed"));
     if (hasNotificationSound(mode)) {
       void playNotificationSound(kind, () =>
         hasNotificationSound(getClientSettings().notificationMode),
@@ -178,7 +189,7 @@ export function startThreadNotifications(
             ),
         },
         actionProps: {
-          children: translateCurrent("settings.details.threadNotificationCoordinator.openThread"),
+          children: m(msg("Open thread")),
           onClick: () => {
             toastManager.close(toastId);
             void router.navigate({

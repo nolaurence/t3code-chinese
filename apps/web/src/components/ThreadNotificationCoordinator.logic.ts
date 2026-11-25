@@ -3,26 +3,7 @@ import {
   type ThreadSnoozeShell,
 } from "@t3tools/client-runtime/state/thread-settled";
 
-import type { MessageKey } from "../i18n/messages";
-import type { SidebarThreadStatus } from "./Sidebar.logic";
-
 export type ThreadNotificationKind = "input" | "completion";
-
-const attentionTitles: Partial<Record<SidebarThreadStatus, MessageKey>> = {
-  approval: "notifications.thread.approval",
-  limited: "notifications.thread.limit",
-  failed: "notifications.thread.failed",
-  request: "notifications.thread.guest",
-};
-
-export function threadNotificationTitleKey(
-  kind: ThreadNotificationKind,
-  status: SidebarThreadStatus,
-): MessageKey {
-  return kind === "completion"
-    ? "notifications.thread.completed"
-    : (attentionTitles[status] ?? "notifications.thread.input");
-}
 
 export interface ThreadNotificationObservation {
   /** Status and request key, or status and run without a request, while the thread needs attention. */

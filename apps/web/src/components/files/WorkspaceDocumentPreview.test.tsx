@@ -8,6 +8,8 @@ import * as XLSX from "xlsx";
 
 import { parseWorkbookImages, WorkspaceDocumentPreview } from "./WorkspaceDocumentPreview";
 
+vi.mock("~/components/ui/spinner", () => ({ Spinner: () => null }));
+
 vi.mock("~/assets/assetUrls", () => ({
   useAssetUrlState: (_environmentId: EnvironmentId, resource: AssetResource) => {
     // Model the server's missing-thread response for an unsent draft. Resources

@@ -1,6 +1,6 @@
 import type { MidsceneSettings } from "@t3tools/contracts";
 
-import { useI18n } from "../../i18n/I18nProvider";
+import { useI18n } from "../../i18n/useForkI18n";
 import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
 import { DraftInput } from "../ui/draft-input";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
@@ -59,7 +59,7 @@ export function MidsceneSettingsSection() {
         resetAction={
           midscene.modelApiKeyRedacted || midscene.modelApiKey.length > 0 ? (
             <SettingResetButton
-              label={t("settings.midscene.apiKey.title")}
+              ariaLabel={t("settings.midscene.apiKey.title")}
               onClick={() => updateMidscene(updateMidsceneApiKey(midscene, ""))}
             />
           ) : null

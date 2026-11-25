@@ -5,9 +5,7 @@ import {
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/reactivity";
-import { assert, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-
-import type { Translate } from "./i18n";
+import { assert, beforeEach, expect, it, vi } from "vite-plus/test";
 
 const state = vi.hoisted(() => ({
   allowed: new Set<string>(),
@@ -29,18 +27,10 @@ vi.mock("./hooks/useLocalStorage", () => ({
   useLocalStorage: vi.fn(),
 }));
 
-import {
-  localizedPreferredEditorErrorMessage,
-  PreferredEditorEnvironmentRequiredError,
-  PreferredEditorUnavailableError,
-  useOpenInPreferredEditor,
-} from "./editorPreferences";
+import { useOpenInPreferredEditor } from "./editorPreferences";
 
 const primary = EnvironmentId.make("primary");
 const secondary = EnvironmentId.make("secondary");
-
-const mappedTranslate = ((key, values) =>
-  `${key}:${values?.targetPath ?? ""}:${values?.environmentId ?? ""}`) as Translate;
 
 beforeEach(() => {
   state.allowed.clear();
@@ -78,35 +68,6 @@ it("checks revocation and regrant when a retained editor callback is invoked", a
   expect(state.setPreference).toHaveBeenCalledTimes(1);
 });
 
-describe("localizedPreferredEditorErrorMessage", () => {
-  it("maps a missing environment without translating the target path", () => {
-    const error = new PreferredEditorEnvironmentRequiredError({
-      targetPath: "/workspace/README.md",
-    });
-
-    expect(localizedPreferredEditorErrorMessage(error, mappedTranslate)).toBe(
-      "editorPreferences.environmentRequired:/workspace/README.md:",
-    );
-    expect(error.message).toBe(
-      "Cannot open /workspace/README.md because no environment is selected.",
-    );
-  });
-
-  it("maps an unavailable editor without translating path or environment ID", () => {
-    const error = new PreferredEditorUnavailableError({
-      environmentId: EnvironmentId.make("env-local"),
-      targetPath: "/workspace/src/index.ts",
-      availableEditorIds: [],
-    });
-
-    expect(localizedPreferredEditorErrorMessage(error, mappedTranslate)).toBe(
-      "editorPreferences.editorUnavailable:/workspace/src/index.ts:env-local",
-    );
-    expect(error.message).toBe(
-      "No available editor can open /workspace/src/index.ts in environment env-local.",
-    );
-  });
-});
 it.each(["read", "write"] as const)(
   "opens an available editor when its preference %s fails",
   async (operation) => {

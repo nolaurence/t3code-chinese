@@ -106,21 +106,19 @@ describe("theme files", () => {
     }
   });
 
-  it("keeps stock dark controls in the DSH surface hierarchy", () => {
-    expect(
-      Object.fromEntries(
-        Object.entries(getStandardThemeColors("dark")).map(([key, value]) => [key, asHex(value)]),
-      ),
-    ).toMatchObject({
-      canvas: "#151517",
-      surface: "#232324",
-      surfaceRaised: "#2c2c2e",
-      surfaceOverlay: "#2c2c2e",
-      toolbarControl: "#2c2c2e",
-      secondary: "#353638",
-      muted: "#1b1b1c",
-      accentSurface: "#353638",
+  it("derives an imported palette from top-level canvas and accent like a published theme", () => {
+    const theme = parseThemeFile({
+      version: THEME_FILE_VERSION,
+      name: "Teal",
+      appearance: "dark",
+      canvas: "#0b1a1e",
+      accent: "#f08a2c",
+      colors: { sidebar: "#0f2126" },
     });
+
+    expect(theme.colors.canvas).toBe(canonical("#0b1a1e"));
+    expect(theme.colors.accent).toBe(canonical("#f08a2c"));
+    expect(theme.colors.sidebar).toBe(canonical("#0f2126"));
   });
 
   it("round-trips custom search colours and fills them in for older theme files", () => {

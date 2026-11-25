@@ -1,4 +1,3 @@
-import { translateCurrent } from "~/i18n/messages";
 import {
   type AtomCommandResult,
   isAtomCommandInterrupted,
@@ -10,6 +9,9 @@ import type {
   PullRequestRef,
 } from "@t3tools/contracts";
 
+import { msg } from "gt-react";
+
+import { m } from "~/i18n/messages";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import {
   pullRequestEnvironment,
@@ -245,10 +247,7 @@ const filesViewedStore = createFilesViewedStore({
     ),
   refresh: (target) => appAtomRegistry.refresh(filesViewedAtom(target)),
   reportFailure: () =>
-    toastManager.add({
-      type: "error",
-      title: translateCurrent("toast.feedback.couldNotUpdateViewedFiles"),
-    }),
+    toastManager.add({ type: "error", title: m(msg("Could not update viewed files")) }),
 });
 
 export function filesViewedScope(target: FilesViewedTarget): FilesViewedScopeHandle {

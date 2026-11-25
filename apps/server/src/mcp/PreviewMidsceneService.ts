@@ -71,8 +71,6 @@ class PreviewMidsceneStageFailure extends Schema.TaggedError<PreviewMidsceneStag
 ) {}
 
 const isPreviewAutomationError = Schema.is(PreviewAutomationError);
-const isPreviewMidsceneBrokerFailure = Schema.is(PreviewMidsceneBrokerFailure);
-const isPreviewMidsceneStageFailure = Schema.is(PreviewMidsceneStageFailure);
 const isPreviewMidsceneResultTooLargeError = Schema.is(PreviewMidsceneResultTooLargeError);
 const UnknownFromJsonString = Schema.fromJsonString(Schema.Unknown);
 const encodeUnknownJson = Schema.encodeUnknownSync(UnknownFromJsonString);
@@ -141,7 +139,7 @@ const findPreviewAutomationError = (
   depth = 0,
 ): PreviewAutomationErrorType | undefined => {
   if (depth > 8) return undefined;
-  if (isPreviewMidsceneBrokerFailure(value)) return value.error;
+  if (Schema.is(PreviewMidsceneBrokerFailure)(value)) return value.error;
   if (isPreviewAutomationError(value)) return value;
   if (typeof value !== "object" || value === null || seen.has(value)) return undefined;
   seen.add(value);
@@ -381,7 +379,7 @@ export const makeWithEnvironment = Effect.fn("PreviewMidsceneService.makeWithEnv
           Effect.catch((cause): Effect.Effect<never, PreviewMidsceneError> => {
             const brokerError = findPreviewAutomationError(cause);
             if (brokerError) return Effect.fail(brokerError);
-            const failure = isPreviewMidsceneStageFailure(cause) ? cause : undefined;
+            const failure = Schema.is(PreviewMidsceneStageFailure)(cause) ? cause : undefined;
             return Effect.fail(
               new PreviewMidsceneExecutionError({
                 operation,

@@ -5,7 +5,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import PullRequestFilesViewed from "./Migrations/053_PullRequestFilesViewed.ts";
 import AutoSettleDisabledAt from "./Migrations/054_ProjectionThreadsAutoSettleDisabledAt.ts";
 import RepairBooleanSettledOverride from "./Migrations/077_RepairBooleanSettledOverride.ts";
-import ForkCompatibility from "./Migrations/077_ForkUpstreamProjectionCompatibility.ts";
+import ForkCompatibility from "./forkProjectionCompatibility.ts";
 
 // Older fork builds used 53 for compatibility and 55 for viewed files, before V2 reserved 55.
 export const reconcileForkMigrations = Effect.fn("reconcileForkMigrations")(function* () {

@@ -1,23 +1,11 @@
-import { useI18n } from "../../i18n";
+import { useMessages } from "gt-react";
+
 import { WizardSteps } from "../ui/wizard";
 import {
   ADD_PROVIDER_WIZARD_STEPS,
   resolveWizardNavigation,
   type WizardNavigation,
 } from "./AddProviderInstanceDialog.logic";
-
-function localizeWizardStep(step: string, t: ReturnType<typeof useI18n>["t"]): string {
-  switch (step) {
-    case "Provider":
-      return t("providers.driver");
-    case "Identity":
-      return t("providers.identity");
-    case "Config":
-      return t("providers.config");
-    default:
-      return step;
-  }
-}
 
 interface AddProviderInstanceWizardStepsProps {
   readonly currentStep: number;
@@ -43,10 +31,10 @@ export function AddProviderInstanceWizardSteps({
   onNavigation,
   disabled = false,
 }: AddProviderInstanceWizardStepsProps) {
-  const { t } = useI18n();
+  const m = useMessages();
   return (
     <WizardSteps
-      steps={steps.map((step) => localizeWizardStep(step, t))}
+      steps={steps.map((step) => m(step))}
       currentStep={currentStep}
       summaries={summaries}
       isStepDisabled={() => disabled}

@@ -208,8 +208,6 @@ it.effect("registers every migration file", () =>
     const path = yield* Path.Path;
     const dir = path.join(import.meta.dirname, "Migrations");
     const files = (yield* fs.readDirectory(dir)).flatMap((name) => {
-      // Runs through reconcileForkMigrations instead of the ordered manifest.
-      if (name === "077_ForkUpstreamProjectionCompatibility.ts") return [];
       const match = /^(\d+)_(\w+)\.ts$/.exec(name);
       return match ? [[Number(match[1]), match[2]] as const] : [];
     });

@@ -21,8 +21,9 @@ import {
 } from "@t3tools/shared/backgroundActivitySettings";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
+import { msg } from "gt-react";
 
-import type { Translate } from "../../i18n";
+import { m, type MessageResolver } from "../../i18n/messages";
 
 export function isProjectGroupingEnabled(mode: SidebarProjectGroupingMode): boolean {
   return mode !== "separate";
@@ -92,24 +93,24 @@ type TypographySettings = Pick<
 
 export function getChangedTypographySettingLabels(
   settings: TypographySettings,
-  t?: Translate,
+  resolve: MessageResolver = m,
 ): string[] {
   return [
     ...(settings.fontFamilySans !== DEFAULT_UNIFIED_SETTINGS.fontFamilySans ||
     settings.fontSizeInterface !== DEFAULT_UNIFIED_SETTINGS.fontSizeInterface
-      ? [t?.("settings.typography.interfaceFont") ?? "Interface font"]
+      ? [resolve(msg("Interface font"))]
       : []),
     ...(settings.fontFamilyComposer !== DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer ||
     settings.fontSizePrompt !== DEFAULT_UNIFIED_SETTINGS.fontSizePrompt
-      ? [t?.("settings.typography.promptFont") ?? "Prompt font"]
+      ? [resolve(msg("Prompt font"))]
       : []),
     ...(settings.fontFamilyCode !== DEFAULT_UNIFIED_SETTINGS.fontFamilyCode ||
     settings.fontSizeCode !== DEFAULT_UNIFIED_SETTINGS.fontSizeCode
-      ? [t?.("settings.typography.codeFont") ?? "Code font"]
+      ? [resolve(msg("Code font"))]
       : []),
     ...(settings.fontFamilyTerminal !== DEFAULT_UNIFIED_SETTINGS.fontFamilyTerminal ||
     settings.fontSizeTerminal !== DEFAULT_UNIFIED_SETTINGS.fontSizeTerminal
-      ? [t?.("settings.typography.terminalFont") ?? "Terminal font"]
+      ? [resolve(msg("Terminal font"))]
       : []),
   ];
 }
@@ -143,7 +144,7 @@ function isSamePreviewViewport(
 
 export function getChangedBrowserSettingLabels(
   settings: BrowserDefaultSettings,
-  t?: Translate,
+  resolve: MessageResolver = m,
 ): string[] {
   return [
     ...(isSamePreviewViewport(
@@ -151,37 +152,31 @@ export function getChangedBrowserSettingLabels(
       DEFAULT_UNIFIED_SETTINGS.browserDefaultViewport,
     )
       ? []
-      : [t?.("settings.restore.browserViewport") ?? "Browser viewport"]),
+      : [resolve(msg("Browser viewport"))]),
     ...(settings.browserDefaultZoomFactor !== DEFAULT_UNIFIED_SETTINGS.browserDefaultZoomFactor
-      ? [t?.("settings.restore.browserZoom") ?? "Browser zoom"]
+      ? [resolve(msg("Browser zoom"))]
       : []),
     ...(settings.browserDefaultAppearance !== DEFAULT_UNIFIED_SETTINGS.browserDefaultAppearance
-      ? [t?.("settings.restore.browserAppearance") ?? "Browser appearance"]
+      ? [resolve(msg("Browser appearance"))]
       : []),
     ...(settings.browserRecordingFrameRate !== DEFAULT_UNIFIED_SETTINGS.browserRecordingFrameRate
-      ? [t?.("settings.restore.recordingFrameRate") ?? "Recording frame rate"]
+      ? [resolve(msg("Recording frame rate"))]
       : []),
-    ...(settings.browserRecordingShowKeyPresses !==
-    DEFAULT_UNIFIED_SETTINGS.browserRecordingShowKeyPresses
-      ? [t?.("settings.restore.recordingKeyPresses") ?? "Recording key presses"]
-      : []),
-    ...(settings.browserRecordingShowMousePresses !==
-    DEFAULT_UNIFIED_SETTINGS.browserRecordingShowMousePresses
-      ? [t?.("settings.restore.recordingMousePresses") ?? "Recording mouse presses"]
-      : []),
+    ...(settings.browserRecordingShowKeyPresses ? [resolve(msg("Recording key presses"))] : []),
+    ...(settings.browserRecordingShowMousePresses ? [resolve(msg("Recording mouse presses"))] : []),
     ...(settings.browserLinkTarget !== DEFAULT_UNIFIED_SETTINGS.browserLinkTarget
-      ? [t?.("settings.restore.openLinksIn") ?? "Open links in"]
+      ? [resolve(msg("Open links in"))]
       : []),
     ...(settings.browserSearchEngine !== DEFAULT_UNIFIED_SETTINGS.browserSearchEngine ||
     settings.browserCustomSearchUrl !== DEFAULT_UNIFIED_SETTINGS.browserCustomSearchUrl
-      ? ["Search engine"]
+      ? [resolve(msg("Search engine"))]
       : []),
     ...(settings.browserAutoShowFloatingPreview !==
     DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview
-      ? [t?.("settings.restore.floatingPreview") ?? "Floating preview"]
+      ? [resolve(msg("Floating preview"))]
       : []),
     ...(settings.pullRequestLinksOpenInApp !== DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp
-      ? ["Open pull requests in T3 Code"]
+      ? [resolve(msg("Open pull requests in T3 Code"))]
       : []),
   ];
 }

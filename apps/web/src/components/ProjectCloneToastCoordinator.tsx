@@ -1,4 +1,4 @@
-import { useI18n, translateCurrent } from "~/i18n";
+import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useParams } from "@tanstack/react-router";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
@@ -8,13 +8,15 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import {
   projectCloneDisplayName,
-  projectCloneProgressSummary,
   type EnvironmentId,
   type ProjectCloneSnapshot,
   type ProjectId,
 } from "@t3tools/contracts";
+import { projectCloneProgressSummary } from "@t3tools/client-runtime/contract-labels";
 import { useEffect, useRef } from "react";
+import { msg } from "gt-react";
 
+import { m } from "../i18n/messages";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useRemoveClonedProject } from "../hooks/useRemoveClonedProject";
 import { useEnvironments } from "../state/environments";
@@ -60,15 +62,13 @@ async function runCloneAction(
       stackedThreadToast({
         type: "error",
         title,
-        description:
-          error instanceof Error ? error.message : translateCurrent("common.errorGeneric"),
+        description: thrownErrorMessage(error, m) ?? m(msg("An error occurred.")),
       }),
     );
   }
 }
 
 function EnvironmentCloneToasts({ environmentId }: { environmentId: EnvironmentId }) {
-  const { t } = useI18n();
   const clones = useEnvironmentProjectClones(environmentId);
   const handleNewThread = useNewThreadHandler();
   const { draftId: routeDraftId } = useParams({ strict: false });
@@ -123,13 +123,13 @@ function EnvironmentCloneToasts({ environmentId }: { environmentId: EnvironmentI
       if (clone.phase === "running") {
         const options = stackedThreadToast({
           type: "loading",
-          title: t("notifications.clone.cloning", { name }),
-          description: projectCloneProgressSummary(clone),
+          title: m(msg("Cloning {name}", { name })),
+          description: projectCloneProgressSummary(clone, m),
           timeout: 0,
           actionProps: {
-            children: t("common.cancel"),
+            children: m(msg("Cancel")),
             onClick: () => {
-              void runCloneAction(t("notifications.clone.cancelFailed"), () =>
+              void runCloneAction(m(msg("Failed to cancel clone")), () =>
                 cancelClone({ environmentId, input: { projectId: clone.projectId } }),
               );
             },
@@ -149,11 +149,11 @@ function EnvironmentCloneToasts({ environmentId }: { environmentId: EnvironmentI
       if (clone.phase === "done") {
         const options = stackedThreadToast({
           type: "success",
-          title: t("notifications.clone.done", { name }),
+          title: m(msg("Cloned {name}", { name })),
           description: clone.destinationPath,
           timeout: 8_000,
           actionProps: {
-            children: t("settings.details.projectCloneToastCoordinator.openProject"),
+            children: m(msg("Open project")),
             onClick: () => {
               closeToast();
               openProject(clone.projectId);
@@ -175,16 +175,16 @@ function EnvironmentCloneToasts({ environmentId }: { environmentId: EnvironmentI
       const options = stackedThreadToast({
         type: cancelled ? "info" : "error",
         title: cancelled
-          ? t("notifications.clone.cancelled", { name })
-          : t("notifications.clone.failed", { name }),
+          ? m(msg("Cancelled cloning {name}", { name }))
+          : m(msg("Failed to clone {name}", { name })),
         description: cancelled
           ? clone.destinationPath
-          : (clone.error ?? t("settings.details.projectCloneToastCoordinator.theCloneFailed")),
+          : (clone.error ?? m(msg("The clone failed."))),
         timeout: 0,
         actionProps: {
-          children: t("providerUpdate.action.retry"),
+          children: m(msg("Retry")),
           onClick: () => {
-            void runCloneAction(t("notifications.clone.retryFailed"), () =>
+            void runCloneAction(m(msg("Failed to retry clone")), () =>
               retryClone({ environmentId, input: { projectId: clone.projectId } }),
             );
           },
@@ -192,7 +192,7 @@ function EnvironmentCloneToasts({ environmentId }: { environmentId: EnvironmentI
         data: {
           ...(cancelled ? { hideCopyButton: true } : {}),
           secondaryActionProps: {
-            children: t("projectSettings.removeProject"),
+            children: m(msg("Remove project")),
             onClick: () => {
               void removeClonedProject({ environmentId, projectId: clone.projectId });
             },
@@ -221,7 +221,6 @@ function EnvironmentCloneToasts({ environmentId }: { environmentId: EnvironmentI
     openProject,
     removeClonedProject,
     retryClone,
-    t,
   ]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- closes every tracked clone toast in toastManager when the coordinator unmounts

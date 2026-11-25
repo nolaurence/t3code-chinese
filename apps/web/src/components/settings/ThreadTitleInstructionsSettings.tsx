@@ -1,10 +1,9 @@
+import { useGT } from "gt-react";
 import { useRef } from "react";
-
-import { useI18n } from "../../i18n";
 import { Textarea } from "../ui/textarea";
 import { SettingsRow, SettingResetButton } from "./settingsLayout";
 import { useSettingsScope } from "./SettingsScopeContext";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import {
   useScopedSettings,
   useScopedSettingsMixed,
@@ -12,7 +11,8 @@ import {
 } from "./useScopedSettings";
 
 export function ThreadTitleInstructionsSettings() {
-  const { t } = useI18n();
+  const gt = useGT();
+  const searchableSetting = useSearchableSetting();
   const settings = useScopedSettings();
   const { targets } = useSettingsScope();
   const scopeKey = targets.map((target) => `${target.environmentId}:${target.projectId}`).join(",");
@@ -24,12 +24,12 @@ export function ThreadTitleInstructionsSettings() {
     <SettingsRow
       serverScoped
       settingKeys={["threadTitleInstructions"]}
-      {...searchableSetting("thread-title-instructions", t)}
-      description={t("settings.titleInstructions.description")}
+      {...searchableSetting("thread-title-instructions")}
+      description={gt("Appended to the prompt for new and regenerated thread titles.")}
       resetAction={
         mixed || settings.threadTitleInstructions !== "" ? (
           <SettingResetButton
-            label={t("settings.search.threadTitleInstructions")}
+            ariaLabel={gt("Reset thread title instructions to default")}
             onClick={() => updateSettings({ threadTitleInstructions: "" })}
           />
         ) : null
@@ -38,14 +38,16 @@ export function ThreadTitleInstructionsSettings() {
       <div className="mt-3 max-w-2xl pb-3.5">
         <Textarea
           key={`${scopeKey}:${mixed}:${settings.threadTitleInstructions}`}
-          aria-label={t("settings.search.threadTitleInstructions")}
+          aria-label={gt("Thread title instructions")}
           onChange={() => {
             edited.current = true;
           }}
           rows={4}
           defaultValue={mixed ? "" : settings.threadTitleInstructions}
           placeholder={
-            mixed ? t("settings.titleInstructions.mixed") : t("settings.titleInstructions.example")
+            mixed
+              ? gt("Mixed. Enter instructions to apply to all selected targets.")
+              : gt("Keep titles to a few words. Lead with the main subject.")
           }
           onBlur={(event) => {
             const value = event.target.value.trim();

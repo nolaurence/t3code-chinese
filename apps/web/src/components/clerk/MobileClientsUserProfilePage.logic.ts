@@ -1,5 +1,7 @@
 import type { RelayClientDeviceRecord } from "@t3tools/contracts/relay";
-import type { Translate } from "../../i18n";
+import { msg } from "gt-react";
+
+import { m, type MessageResolver } from "~/i18n/messages";
 
 const mobileClientUpdatedAtFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -7,10 +9,10 @@ const mobileClientUpdatedAtFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 const NOTIFICATION_PREFERENCES = [
-  ["notifyOnApproval", "approvals"],
-  ["notifyOnInput", "input requests"],
-  ["notifyOnCompletion", "completions"],
-  ["notifyOnFailure", "failures"],
+  ["notifyOnApproval", msg("approvals")],
+  ["notifyOnInput", msg("input requests")],
+  ["notifyOnCompletion", msg("completions")],
+  ["notifyOnFailure", msg("failures")],
 ] as const satisfies ReadonlyArray<
   readonly [keyof RelayClientDeviceRecord["notifications"], string]
 >;
@@ -25,40 +27,29 @@ export function mobileClientPlatformLabel(device: RelayClientDeviceRecord): stri
   return `${platform}${device.appVersion ? ` · T3 Code ${device.appVersion}` : ""}`;
 }
 
+/** Components pass `useMessages()` so the detail follows a language switch. */
 export function mobileClientNotificationDetail(
   device: RelayClientDeviceRecord,
-  t?: Translate,
+  resolve: MessageResolver = m,
 ): string {
   if (!device.notifications.enabled) {
-    return t?.("auth.pushDisabled") ?? "Push notifications are disabled on this device.";
+    return resolve(msg("Push notifications are disabled on this device."));
   }
 
-  const enabledPreferences = NOTIFICATION_PREFERENCES.flatMap(([preference, fallback]) =>
-    device.notifications[preference]
-      ? [
-          t?.(
-            preference === "notifyOnApproval"
-              ? "auth.alertType.approvals"
-              : preference === "notifyOnInput"
-                ? "auth.alertType.inputRequests"
-                : preference === "notifyOnCompletion"
-                  ? "auth.alertType.completions"
-                  : "auth.alertType.failures",
-          ) ?? fallback,
-        ]
-      : [],
+  const enabledPreferences = NOTIFICATION_PREFERENCES.flatMap(([preference, label]) =>
+    device.notifications[preference] ? [resolve(label)] : [],
   );
   return enabledPreferences.length > 0
-    ? (t?.("auth.alertsEnabled", { types: enabledPreferences.join(", ") }) ??
-        `Alerts enabled for ${enabledPreferences.join(", ")}.`)
-    : (t?.("auth.pushNoAlertTypes") ??
-        "Push notifications are enabled, but no alert types are selected.");
+    ? resolve(msg("Alerts enabled for {alerts}.", { alerts: enabledPreferences.join(", ") }))
+    : resolve(msg("Push notifications are enabled, but no alert types are selected."));
 }
 
-export function mobileClientUpdatedAtLabel(updatedAt: string, t?: Translate): string {
+export function mobileClientUpdatedAtLabel(
+  updatedAt: string,
+  resolve: MessageResolver = m,
+): string {
   const date = new Date(updatedAt);
   return Number.isNaN(date.getTime())
-    ? (t?.("auth.updateTimeUnavailable") ?? "Update time unavailable")
-    : (t?.("auth.updatedAt", { date: mobileClientUpdatedAtFormatter.format(date) }) ??
-        `Updated ${mobileClientUpdatedAtFormatter.format(date)}`);
+    ? resolve(msg("Update time unavailable"))
+    : resolve(msg("Updated {date}", { date: mobileClientUpdatedAtFormatter.format(date) }));
 }

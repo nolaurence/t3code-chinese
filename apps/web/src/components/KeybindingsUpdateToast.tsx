@@ -1,4 +1,6 @@
-import { translateCurrent } from "~/i18n";
+import { msg } from "gt-react";
+
+import { m } from "../i18n/messages";
 import { appAtomRegistry, subscribeAtomChanges } from "../rpc/atomRegistry";
 import { primaryEnvironmentIdAtom } from "../state/primaryEnvironment";
 import { primaryServerConfigAtom, primaryServerConfigEventAtom } from "../state/server";
@@ -18,7 +20,7 @@ export function startKeybindingsUpdateToasts(): () => void {
     toastManager.add(
       stackedThreadToast({
         type: "warning",
-        title: translateCurrent("root.keybindings.invalid"),
+        title: m(msg("Invalid keybindings configuration")),
         description: (
           <KeybindingsConfigWarning
             message={decision.message}

@@ -1,4 +1,5 @@
 import { EnvironmentId } from "@t3tools/contracts";
+import { T, useGT } from "gt-react";
 import { LayersIcon } from "lucide-react";
 
 import { Button } from "../ui/button";
@@ -7,10 +8,9 @@ import { useSettingsScope } from "./SettingsScopeContext";
 import { SettingsScopeNotice } from "./SettingsScopeNotice";
 import { SettingsPageContainer } from "./settingsLayout";
 import { ALL_ENVIRONMENTS_VALUE, selectEnvironmentAxis } from "./settingsScopeAxis";
-import { useI18n } from "../../i18n";
 
 export function ProjectsSettings() {
-  const { t } = useI18n();
+  const gt = useGT();
   const { search: value, scope, selectScope } = useSettingsScope();
   const unavailable =
     scope.kind === "unavailable" ? (
@@ -24,7 +24,7 @@ export function ProjectsSettings() {
               onClick={() => selectScope(selectEnvironmentAxis(value, ALL_ENVIRONMENTS_VALUE))}
             >
               <LayersIcon />
-              {t("settings.details.projects.showAllEnvironments")}
+              <T>Show all environments</T>
             </Button>
           ) : null}
         </div>
@@ -49,7 +49,7 @@ export function ProjectsSettings() {
         unavailable
       ) : (
         <SettingsScopeNotice target="project">
-          {t("settings.scope.chooseProject")}
+          {gt("Choose a project to manage its name, icon, checkouts and actions.")}
         </SettingsScopeNotice>
       )}
     </div>

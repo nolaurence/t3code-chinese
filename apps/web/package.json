@@ -1,6 +1,6 @@
 {
   "name": "@t3tools/web",
-  "version": "0.1.10-chinese",
+  "version": "0.1.11-safe",
   "private": true,
   "type": "module",
   "scripts": {

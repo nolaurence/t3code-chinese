@@ -7,7 +7,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 import { runMigrations } from "./Migrations.ts";
-import ForkCompatibility from "./Migrations/077_ForkUpstreamProjectionCompatibility.ts";
+import ForkCompatibility from "./forkProjectionCompatibility.ts";
 import AutoSettleDisabledAt from "./Migrations/054_ProjectionThreadsAutoSettleDisabledAt.ts";
 import ViewedFiles from "./Migrations/053_PullRequestFilesViewed.ts";
 import * as PullRequestFilesViewed from "./PullRequestFilesViewed.ts";

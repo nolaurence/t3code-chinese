@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import { memo } from "react";
 import { cn } from "~/lib/utils";
 import { useI18n } from "~/i18n";
@@ -26,18 +27,12 @@ export const DiffStatLabel = memo(function DiffStatLabel(props: {
   className?: string;
   layout?: "aligned" | "inline";
 }) {
-  const { t } = useI18n();
   const { additions, deletions, className, layout = "aligned" } = props;
-  const additionsLabel = t(additions === 1 ? "chat.diff.addition" : "chat.diff.additions", {
-    count: additions,
-  });
-  const deletionsLabel = t(deletions === 1 ? "chat.diff.deletion" : "chat.diff.deletions", {
-    count: deletions,
-  });
+  const gt = useGT();
   return (
     <span
       role="group"
-      aria-label={t("chat.diff.summary", { additions: additionsLabel, deletions: deletionsLabel })}
+      aria-label={gt("{additions} additions, {deletions} deletions", { additions, deletions })}
       className={cn(
         layout === "inline"
           ? "inline-flex items-center gap-1 tabular-nums align-middle"

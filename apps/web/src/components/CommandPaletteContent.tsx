@@ -1,3 +1,4 @@
+import { T } from "gt-react";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { type ComponentProps, type ReactNode, type RefObject } from "react";
 
@@ -11,10 +12,6 @@ import {
   type MessageKey,
   type TranslateValues,
 } from "~/i18n";
-
-function t(key: MessageKey, values?: TranslateValues): string {
-  return createTranslator(readLocalePreference())(key, values);
-}
 
 /**
  * A view replacing another inside an open dialog mounts with focus on the body,
@@ -65,7 +62,7 @@ type CommandPaletteContentProps = Omit<ComponentProps<typeof Command>, "children
 
 export function CommandPaletteContent({
   children,
-  escapeLabel = t("common.close"),
+  escapeLabel,
   footerActionLabel,
   footerTrailing,
   inputAccessory,
@@ -113,7 +110,9 @@ export function CommandPaletteContent({
               <Kbd>
                 <ArrowDownIcon />
               </Kbd>
-              <span>{t("commandPalette.navigate")}</span>
+              <span>
+                <T>Navigate</T>
+              </span>
             </KbdGroup>
             {footerActionLabel !== undefined ? (
               <KbdGroup>
@@ -124,12 +123,14 @@ export function CommandPaletteContent({
             {showBackHint ? (
               <KbdGroup>
                 <Kbd>Backspace</Kbd>
-                <span>{t("common.back")}</span>
+                <span>
+                  <T>Back</T>
+                </span>
               </KbdGroup>
             ) : null}
             <KbdGroup>
               <Kbd>Esc</Kbd>
-              <span>{escapeLabel ?? t("common.close")}</span>
+              <span>{escapeLabel ?? <T>Close</T>}</span>
             </KbdGroup>
           </div>
           {footerTrailing}
